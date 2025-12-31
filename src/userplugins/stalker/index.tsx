@@ -7,14 +7,79 @@
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
 import { Logger } from "@utils/Logger";
-import definePlugin, { OptionType } from "@utils/types";
+import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import { Menu } from "@webpack/common";
 import { UserContextProps } from "plugins/biggerStreamPreview";
 
 import * as status from "./status";
 import * as voice from "./voice";
 
+const Native = VencordNative.pluginHelpers.Stalker as PluginNative<typeof import("./index.native")>;
+
+// Verifica che il modulo nativo sia disponibile
+if (!Native) {
+    console.warn("Stalker native module not available");
+}
+
+export interface StalkerLogEntry {
+    timestamp: string;
+    userId: string;
+    username: string;
+    action: string;
+    details: string;
+}
+
 export const logger = new Logger("Stalker");
+
+let cachedLogs: StalkerLogEntry[] | null = null;
+
+async function getLogsFromFile(): Promise<StalkerLogEntry[]> {
+    try {
+        if (Native && Native.readStalkerLog) {
+            const fileContents = await Native.readStalkerLog();
+            if (fileContents) {
+                const logs = JSON.parse(fileContents);
+                return Array.isArray(logs) ? logs : [];
+            }
+        }
+    } catch (error) {
+        logger.error("Failed to read stalker logs from file:", error);
+    }
+    
+    return [];
+}
+
+export async function logStalkerEvent(entry: StalkerLogEntry) {
+    try {
+        // Controlla se il logging è abilitato nelle impostazioni
+        if (!settings.store.enableLogging) {
+            return;
+        }
+        
+        if (Native && Native.writeStalkerLog) {
+            // Ottieni i log esistenti dal file o dalla cache
+            let logs: StalkerLogEntry[];
+            
+            if (cachedLogs) {
+                logs = cachedLogs;
+            } else {
+                logs = await getLogsFromFile();
+                cachedLogs = logs;
+            }
+            
+            // Aggiungi il nuovo evento
+            logs.push(entry);
+            
+            // Aggiorna la cache
+            cachedLogs = logs;
+            
+            // Scrivi il file JSON aggiornato
+            await Native.writeStalkerLog(JSON.stringify(logs, null, 2));
+        }
+    } catch (error) {
+        logger.error("Failed to write stalker log:", error);
+    }
+}
 export let targets: string[] = [];
 
 const parseTargets = (parse: string): string[] => {
@@ -69,6 +134,12 @@ export const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         default: true,
         description: "Send a notification when a user logs onto Discord or leaves invisible, regardless of the 4 above options."
+    },
+
+    enableLogging: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        description: "Enable logging of stalker events to a local file."
     },
 
     targets: {

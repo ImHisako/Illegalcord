@@ -7,7 +7,7 @@
 import { showNotification } from "@api/Notifications";
 import { ChannelStore, NavigationRouter, PresenceStore, UserStore } from "@webpack/common";
 
-import { settings, targets } from ".";
+import { logStalkerEvent, settings, targets } from ".";
 
 let lastStatuses: Statuses | undefined;
 
@@ -57,6 +57,15 @@ export const statusChange = () => {
                     onClick: () => {
                         NavigationRouter.transitionTo(`/channels/@me/${ChannelStore.getDMFromUserId(user.id)}`);
                     },
+                });
+                
+                // Registra l'evento di stalking
+                logStalkerEvent({
+                    timestamp: new Date().toISOString(),
+                    userId: user.id,
+                    username: user.username,
+                    action: "status_change",
+                    details: `Status changed from ${lastStatus} to ${status}`
                 });
             }
         }

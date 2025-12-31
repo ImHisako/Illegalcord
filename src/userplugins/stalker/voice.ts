@@ -8,7 +8,7 @@ import { showNotification } from "@api/Notifications";
 import { findByPropsLazy, findStoreLazy } from "@webpack";
 import { ChannelStore, GenericStore, GuildStore, UserStore } from "@webpack/common";
 
-import { targets } from ".";
+import { logStalkerEvent, targets } from ".";
 
 const { selectVoiceChannel } = findByPropsLazy("selectVoiceChannel", "selectChannel");
 
@@ -61,6 +61,15 @@ export const voiceStateChange = () => {
                 onClick: () => {
                     selectVoiceChannel(voiceState.channelId);
                 },
+            });
+            
+            // Registra l'evento di stalking
+            logStalkerEvent({
+                timestamp: new Date().toISOString(),
+                userId: user.id,
+                username: user.username,
+                action: "voice_join",
+                details: `Joined voice channel: ${getChannelName(voiceState.channelId)}`
             });
         }
     }
