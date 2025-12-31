@@ -8,7 +8,7 @@ import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/Co
 import { definePluginSettings } from "@api/Settings";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
-import { Menu } from "@webpack/common";
+import { ChannelStore, FluxDispatcher, GuildStore, Menu, UserStore } from "@webpack/common";
 import { UserContextProps } from "plugins/biggerStreamPreview";
 
 import * as status from "./status";
@@ -25,8 +25,11 @@ export interface StalkerLogEntry {
     timestamp: string;
     userId: string;
     username: string;
-    action: string;
+    action: "status_change" | "voice_join" | "message_send" | "avatar_change";
     details: string;
+    channelName?: string;
+    guildName?: string;
+    avatarUrl?: string;
 }
 
 export const logger = new Logger("Stalker");
@@ -142,6 +145,18 @@ export const settings = definePluginSettings({
         description: "Enable logging of stalker events to a local file."
     },
 
+    logMessages: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        description: "Log when a user sends a message in any channel."
+    },
+
+    logAvatarChanges: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        description: "Log when a user changes their profile picture."
+    },
+
     targets: {
         type: OptionType.STRING,
         placeholder: "1234,5678",
@@ -196,6 +211,80 @@ export default definePlugin({
     stop() {
         status.deinit();
         voice.deinit();
+    },
+
+    flux: {
+        MESSAGE_CREATE({ message }: { message: any }) {
+            if (!settings.store.logMessages) return;
+            
+            const isStalking = targets.includes(message.author.id);
+            if (isStalking) {
+                const channel = ChannelStore.getChannel(message.channel_id);
+                const guild = channel.guild_id ? GuildStore.getGuild(channel.guild_id) : null;
+                
+                logStalkerEvent({
+                    timestamp: new Date().toISOString(),
+                    userId: message.author.id,
+                    username: message.author.username,
+                    action: "message_send",
+                    details: `Sent message: ${message.content.substring(0, 100)}${message.content.length > 100 ? "..." : ""}`,
+                    channelName: channel.name,
+                    guildName: guild?.name
+                });
+            }
+        },
+        
+        USER_UPDATE({ user }: { user: any }) {
+            if (!settings.store.logAvatarChanges) return;
+            
+            const isStalking = targets.includes(user.id);
+            if (isStalking) {
+                logStalkerEvent({
+                    timestamp: new Date().toISOString(),
+                    userId: user.id,
+                    username: user.username,
+                    action: "avatar_change",
+                    details: "User avatar updated",
+                    avatarUrl: user.avatar
+                });
+            }
+        },
+        
+        USER_PROFILE_UPDATE({ user, profile }: { user: any, profile: any }) {
+            if (!settings.store.logAvatarChanges) return;
+            
+            const isStalking = targets.includes(user.id);
+            if (isStalking) {
+                logStalkerEvent({
+                    timestamp: new Date().toISOString(),
+                    userId: user.id,
+                    username: user.username,
+                    action: "avatar_change",
+                    details: "User profile updated",
+                    avatarUrl: user.avatar
+                });
+            }
+        },
+        
+        USER_PROFILE_FETCH_SUCCESS({ user, profile }: { user: any, profile: any }) {
+            if (!settings.store.logAvatarChanges) return;
+            
+            const isStalking = targets.includes(user.id);
+            if (isStalking) {
+                // Controlla se l'avatar è cambiato confrontando con l'utente corrente
+                const currentUser = UserStore.getUser(user.id);
+                if (currentUser && currentUser.avatar !== user.avatar) {
+                    logStalkerEvent({
+                        timestamp: new Date().toISOString(),
+                        userId: user.id,
+                        username: user.username,
+                        action: "avatar_change",
+                        details: "User profile fetched with avatar change",
+                        avatarUrl: user.avatar
+                    });
+                }
+            }
+        }
     },
 
     settings,
