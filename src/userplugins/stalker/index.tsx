@@ -25,11 +25,10 @@ export interface StalkerLogEntry {
     timestamp: string;
     userId: string;
     username: string;
-    action: "status_change" | "voice_join" | "message_send" | "avatar_change";
+    action: "status_change" | "voice_join" | "voice_leave" | "message_send";
     details: string;
     channelName?: string;
     guildName?: string;
-    avatarUrl?: string;
 }
 
 export const logger = new Logger("Stalker");
@@ -151,11 +150,7 @@ export const settings = definePluginSettings({
         description: "Log when a user sends a message in any channel."
     },
 
-    logAvatarChanges: {
-        type: OptionType.BOOLEAN,
-        default: false,
-        description: "Log when a user changes their profile picture."
-    },
+
 
     targets: {
         type: OptionType.STRING,
@@ -234,57 +229,7 @@ export default definePlugin({
             }
         },
         
-        USER_UPDATE({ user }: { user: any }) {
-            if (!settings.store.logAvatarChanges) return;
-            
-            const isStalking = targets.includes(user.id);
-            if (isStalking) {
-                logStalkerEvent({
-                    timestamp: new Date().toISOString(),
-                    userId: user.id,
-                    username: user.username,
-                    action: "avatar_change",
-                    details: "User avatar updated",
-                    avatarUrl: user.avatar
-                });
-            }
-        },
-        
-        USER_PROFILE_UPDATE({ user, profile }: { user: any, profile: any }) {
-            if (!settings.store.logAvatarChanges) return;
-            
-            const isStalking = targets.includes(user.id);
-            if (isStalking) {
-                logStalkerEvent({
-                    timestamp: new Date().toISOString(),
-                    userId: user.id,
-                    username: user.username,
-                    action: "avatar_change",
-                    details: "User profile updated",
-                    avatarUrl: user.avatar
-                });
-            }
-        },
-        
-        USER_PROFILE_FETCH_SUCCESS({ user, profile }: { user: any, profile: any }) {
-            if (!settings.store.logAvatarChanges) return;
-            
-            const isStalking = targets.includes(user.id);
-            if (isStalking) {
-                // Controlla se l'avatar è cambiato confrontando con l'utente corrente
-                const currentUser = UserStore.getUser(user.id);
-                if (currentUser && currentUser.avatar !== user.avatar) {
-                    logStalkerEvent({
-                        timestamp: new Date().toISOString(),
-                        userId: user.id,
-                        username: user.username,
-                        action: "avatar_change",
-                        details: "User profile fetched with avatar change",
-                        avatarUrl: user.avatar
-                    });
-                }
-            }
-        }
+
     },
 
     settings,
