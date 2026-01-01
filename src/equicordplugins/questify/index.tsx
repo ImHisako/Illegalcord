@@ -7,6 +7,7 @@
 import "./styles.css";
 
 import { showNotification } from "@api/Notifications";
+import { plugins } from "@api/PluginManager";
 import { addServerListElement, removeServerListElement, ServerListRenderPosition } from "@api/ServerList";
 import { migratePluginToSettings } from "@api/Settings";
 import { ErrorBoundary, openPluginModal } from "@components/index";
@@ -87,7 +88,7 @@ export function QuestButton(): JSX.Element {
         if (todo === "open-quests") {
             NavigationRouter.transitionTo(questPath);
         } else if (todo === "plugin-settings") {
-            openPluginModal(Vencord.Plugins.plugins.Questify);
+            openPluginModal(plugins.Questify);
         } else if (todo === "context-menu") {
             ContextMenuApi.openContextMenu(event, () => (
                 <Menu.Menu
@@ -1099,7 +1100,7 @@ function getQuestAcceptedButtonProps(quest: Quest, text: string, disabled: boole
 }
 
 // Drop support for QuestCompleter and migrate to Questify settings.
-migratePluginToSettings("Questify", "QuestCompleter", "completeVideoQuestsInBackground", "completeGameQuestsInBackground", "completeAchievementQuestsInBackground");
+migratePluginToSettings(true, "Questify", "QuestCompleter", "completeVideoQuestsInBackground", "completeGameQuestsInBackground", "completeAchievementQuestsInBackground");
 
 export default definePlugin({
     name: "Questify",
