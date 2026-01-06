@@ -73,7 +73,7 @@ Note: Firefox extension zip requires Firefox for developers
 
 ## Credits
 
-Thank you to [thororen1234](https://github.com/thororen1234) For Creating [Equicord](https://github.com/Equicord) & [Vendicated](https://github.com/Vendicated) for creating [Vencord](https://github.com/Vendicated/Vencord) & [Suncord](https://github.com/verticalsync/Suncord) by [verticalsync](https://github.com/verticalsync) for helping when needed.
+Thank you to [thororen1234](https://github.com/thororen1234) For Creating [Equicord](https://github.com/Equicord) & [Vendicated](https://github.com/Vendicated) for creating [Vencord](https://github.com/Vendicated/Vencord) & [Suncord](https://github.com/verticalsync/Suncord) by [verticalsync](https://github.com/verticalsync) 
 
 ## Disclaimer
 
