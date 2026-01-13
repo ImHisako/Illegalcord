@@ -16,127 +16,289 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import "./fixDiscordBadgePadding.css";
+
+import { _getBadges, BadgePosition, BadgeUserArgs, ProfileBadge } from "@api/Badges";
 import ErrorBoundary from "@components/ErrorBoundary";
-import globalBadges from "@equicordplugins/globalBadges";
-import BadgeAPIPlugin from "@plugins/_api/badges";
-import { ComponentType, HTMLProps } from "react";
+import { openContributorModal } from "@components/settings/tabs";
+import { Devs } from "@utils/constants";
+import { copyWithToast } from "@utils/discord";
+import { Logger } from "@utils/Logger";
+import { shouldShowContributorBadge, shouldShowEquicordContributorBadge } from "@utils/misc";
+import definePlugin from "@utils/types";
+import { ContextMenuApi, Menu, Toasts, UserStore } from "@webpack/common";
 
-import { isPluginEnabled } from "./PluginManager";
+import Plugins, { PluginMeta } from "~plugins";
 
-export const enum BadgePosition {
-    START,
-    END
-}
+import { EquicordDonorModal, VencordDonorModal } from "./modals";
 
-export interface ProfileBadge {
-    /** The tooltip to show on hover. Required for image badges */
-    description?: string;
-    /** Custom component for the badge (tooltip not included) */
-    component?: ComponentType<ProfileBadge & BadgeUserArgs>;
-    /** The custom image to use */
-    iconSrc?: string;
-    link?: string;
-    /** Action to perform when you click the badge */
-    onClick?(event: React.MouseEvent, props: ProfileBadge & BadgeUserArgs): void;
-    /** Action to perform when you right click the badge */
-    onContextMenu?(event: React.MouseEvent, props: BadgeUserArgs & BadgeUserArgs): void;
-    /** Should the user display this badge? */
-    shouldShow?(userInfo: BadgeUserArgs): boolean;
-    /** Optional props (e.g. style) for the badge, ignored for component badges */
-    props?: HTMLProps<HTMLImageElement>;
-    /** Insert at start or end? */
-    position?: BadgePosition;
-    /** The badge name to display, Discord uses this. Required for component badges */
-    key?: string;
+const CONTRIBUTOR_BADGE = "https://cdn.discordapp.com/emojis/1092089799109775453.png?size=64";
+const EQUICORD_CONTRIBUTOR_BADGE = "https://equicord.org/assets/favicon.png";
+const USERPLUGIN_CONTRIBUTOR_BADGE = "https://equicord.org/assets/icons/misc/userplugin.png";
+const ILLEGALCORD_BADGES_URL = "https://raw.githubusercontent.com/ImHisako/ImHisako/refs/heads/main/Images/badges.json";
 
-    /**
-     * Allows dynamically returning multiple badges.
-     * Must not call hooks
-     */
-    getBadges?(userInfo: BadgeUserArgs): ProfileBadge[];
-}
+const ContributorBadge: ProfileBadge = {
+    description: "Vencord Contributor",
+    iconSrc: CONTRIBUTOR_BADGE,
+    position: BadgePosition.START,
+    shouldShow: ({ userId }) => shouldShowContributorBadge(userId),
+    onClick: (_, { userId }) => openContributorModal(UserStore.getUser(userId))
+};
 
-const Badges = new Set<ProfileBadge>();
-
-/**
- * Register a new badge with the Badges API
- * @param badge The badge to register
- */
-export function addProfileBadge(badge: ProfileBadge) {
-    badge.component &&= ErrorBoundary.wrap(badge.component, { noop: true });
-    Badges.add(badge);
-}
-
-/**
- * Unregister a badge from the Badges API
- * @param badge The badge to remove
- */
-export function removeProfileBadge(badge: ProfileBadge) {
-    return Badges.delete(badge);
-}
-
-/**
- * Inject badges into the profile badges array.
- * You probably don't need to use this.
- */
-export function _getBadges(args: BadgeUserArgs) {
-    const badges = [] as ProfileBadge[];
-    for (const badge of Badges) {
-        if (badge.shouldShow && !badge.shouldShow(args)) {
-            continue;
+const EquicordContributorBadge: ProfileBadge = {
+    description: "Equicord Contributor",
+    iconSrc: EQUICORD_CONTRIBUTOR_BADGE,
+    position: BadgePosition.START,
+    shouldShow: ({ userId }) => shouldShowEquicordContributorBadge(userId),
+    onClick: (_, { userId }) => openContributorModal(UserStore.getUser(userId)),
+    props: {
+        style: {
+            borderRadius: "50%",
+            transform: "scale(0.9)"
         }
+    },
+};
 
-        const b = badge.getBadges
-            ? badge.getBadges(args).map(badge => ({
-                ...args,
-                ...badge,
-                component: badge.component && ErrorBoundary.wrap(badge.component, { noop: true })
-            }))
-            : [{ ...args, ...badge }];
-
-        if (badge.position === BadgePosition.START) {
-            badges.unshift(...b);
-        } else {
-            badges.push(...b);
+const UserPluginContributorBadge: ProfileBadge = {
+    description: "User Plugin Contributor",
+    iconSrc: USERPLUGIN_CONTRIBUTOR_BADGE,
+    position: BadgePosition.START,
+    shouldShow: ({ userId }) => {
+        if (!IS_DEV) return false;
+        const allPlugins = Object.values(Plugins);
+        return allPlugins.some(p => {
+            const pluginMeta = PluginMeta[p.name];
+            return pluginMeta?.userPlugin && p.authors.some(a => a.id.toString() === userId);
+        });
+    },
+    onClick: (_, { userId }) => openContributorModal(UserStore.getUser(userId)),
+    props: {
+        style: {
+            borderRadius: "50%",
+            transform: "scale(0.9)"
         }
-    }
+    },
+};
 
-    const donorBadges = BadgeAPIPlugin.getDonorBadges(args.userId);
-    const equicordDonorBadges = BadgeAPIPlugin.getEquicordDonorBadges(args.userId);
-    const GlobalBadges = isPluginEnabled(globalBadges.name) ? globalBadges.getGlobalBadges(args.userId) : false;
+let DonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
+let EquicordDonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
+let IllegalcordBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
 
-    // do globalbadges first so it shows before the contrib badges but after donor badges
-    if (GlobalBadges) {
-        badges.unshift(
-            ...GlobalBadges.map(badge => ({
-                ...args,
-                ...badge,
-            }))
-        );
-    }
+async function loadBadges(url: string, noCache = false) {
+    const init = {} as RequestInit;
+    if (noCache) init.cache = "no-cache";
 
-    if (donorBadges) {
-        badges.unshift(
-            ...donorBadges.map(badge => ({
-                ...args,
-                ...badge,
-            }))
-        );
-    }
-
-    if (equicordDonorBadges) {
-        badges.unshift(
-            ...equicordDonorBadges.map(badge => ({
-                ...args,
-                ...badge,
-            }))
-        );
-    }
-
-    return badges;
+    return await fetch(url, init).then(r => r.json());
 }
 
-export interface BadgeUserArgs {
-    userId: string;
-    guildId: string;
+async function loadAllBadges(noCache = false) {
+    const vencordBadges = await loadBadges("https://badges.vencord.dev/badges.json", noCache);
+    const equicordBadges = await loadBadges("https://equicord.org/badges.json", noCache);
+    const illegalcordBadges = await loadIllegalcordBadges(noCache);
+
+    DonorBadges = vencordBadges;
+    EquicordDonorBadges = equicordBadges;
+    IllegalcordBadges = illegalcordBadges;
 }
+
+let intervalId: any;
+
+async function loadIllegalcordBadges(noCache = false) {
+    try {
+        const init = {} as RequestInit;
+        if (noCache) init.cache = "no-cache";
+        
+        const response = await fetch(ILLEGALCORD_BADGES_URL, init);
+        return await response.json();
+    } catch (error) {
+        new Logger("BadgeAPI").error("Failed to load Illegalcord badges:", error);
+        return {};
+    }
+}
+
+export function getIllegalcordBadges(userId: string) {
+    return IllegalcordBadges[userId]?.map(badge => ({
+        iconSrc: badge.badge,
+        description: badge.tooltip,
+        position: BadgePosition.START,
+        props: {
+            style: {
+                borderRadius: "50%",
+                transform: "scale(0.9)"
+            }
+        },
+        onContextMenu(event, badge) {
+            ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={badge} />);
+        },
+        onClick() {
+            Toasts.show({
+                message: "Illegalcord Badge Clicked!",
+                type: Toasts.Type.MESSAGE
+            });
+        },
+    } satisfies ProfileBadge));
+}
+
+export function BadgeContextMenu({ badge }: { badge: ProfileBadge & BadgeUserArgs; }) {
+    return (
+        <Menu.Menu
+            navId="vc-badge-context"
+            onClose={ContextMenuApi.closeContextMenu}
+            aria-label="Badge Options"
+        >
+            {badge.description && (
+                <Menu.MenuItem
+                    id="vc-badge-copy-name"
+                    label="Copy Badge Name"
+                    action={() => copyWithToast(badge.description!)}
+                />
+            )}
+            {badge.iconSrc && (
+                <Menu.MenuItem
+                    id="vc-badge-copy-link"
+                    label="Copy Badge Image Link"
+                    action={() => copyWithToast(badge.iconSrc!)}
+                />
+            )}
+        </Menu.Menu>
+    );
+}
+
+export default definePlugin({
+    name: "BadgeAPI",
+    description: "API to add badges to users",
+    authors: [Devs.Megu, Devs.Ven, Devs.TheSun],
+    required: true,
+    patches: [
+        {
+            find: "#{intl::PROFILE_USER_BADGES}",
+            replacement: [
+                {
+                    match: /alt:" ","aria-hidden":!0,src:.{0,50}(\i).iconSrc/,
+                    replace: "...$1.props,$&"
+                },
+                {
+                    match: /(?<=forceOpen:.{0,40}?\i\((\i)\.id\).{0,100}?)children:/,
+                    replace: "children:$1.component?$self.renderBadgeComponent({...$1}) :"
+                },
+                // handle onClick and onContextMenu
+                {
+                    match: /href:(\i)\.link/,
+                    replace: "...$self.getBadgeMouseEventHandlers($1),$&"
+                }
+            ]
+        },
+        {
+            find: "getLegacyUsername(){",
+            replacement: {
+                match: /getBadges\(\)\{.{0,100}?return\[/,
+                replace: "$&...$self.getBadges(this),"
+            }
+        }
+    ],
+
+    // for access from the console or other plugins
+    get DonorBadges() {
+        return DonorBadges;
+    },
+
+    get EquicordDonorBadges() {
+        return EquicordDonorBadges;
+    },
+
+    get IllegalcordBadges() {
+        return IllegalcordBadges;
+    },
+
+    toolboxActions: {
+        async "Refetch Badges"() {
+            await loadAllBadges(true);
+            Toasts.show({
+                id: Toasts.genId(),
+                message: "Successfully refetched badges!",
+                type: Toasts.Type.SUCCESS
+            });
+        }
+    },
+
+    userProfileBadges: [ContributorBadge, EquicordContributorBadge, UserPluginContributorBadge],
+
+    async start() {
+        await loadAllBadges();
+        clearInterval(intervalId);
+        intervalId = setInterval(loadAllBadges, 1000 * 60 * 30); // 30 minutes
+    },
+
+    async stop() {
+        clearInterval(intervalId);
+    },
+
+    getBadges(profile: { userId: string; guildId: string; }) {
+        if (!profile) return [];
+
+        try {
+            return _getBadges(profile);
+        } catch (e) {
+            new Logger("BadgeAPI#getBadges").error(e);
+            return [];
+        }
+    },
+
+    renderBadgeComponent: ErrorBoundary.wrap((badge: ProfileBadge & BadgeUserArgs) => {
+        const Component = badge.component!;
+        return <Component {...badge} />;
+    }, { noop: true }),
+
+    getBadgeMouseEventHandlers(badge: ProfileBadge & BadgeUserArgs) {
+        const handlers = {} as Record<string, (e: React.MouseEvent) => void>;
+
+        if (!badge) return handlers; // sanity check
+
+        const { onClick, onContextMenu } = badge;
+
+        if (onClick) handlers.onClick = e => onClick(e, badge);
+        if (onContextMenu) handlers.onContextMenu = e => onContextMenu(e, badge);
+
+        return handlers;
+    },
+
+    getDonorBadges(userId: string) {
+        return DonorBadges[userId]?.map(badge => ({
+            iconSrc: badge.badge,
+            description: badge.tooltip,
+            position: BadgePosition.START,
+            props: {
+                style: {
+                    borderRadius: "50%",
+                    transform: "scale(0.9)" // The image is a bit too big compared to default badges
+                }
+            },
+            onContextMenu(event, badge) {
+                ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={badge} />);
+            },
+            onClick() {
+                return VencordDonorModal();
+            },
+        } satisfies ProfileBadge));
+    },
+
+    getEquicordDonorBadges(userId: string) {
+        return EquicordDonorBadges[userId]?.map(badge => ({
+            iconSrc: badge.badge,
+            description: badge.tooltip,
+            position: BadgePosition.START,
+            props: {
+                style: {
+                    borderRadius: "50%",
+                    transform: "scale(0.9)" // The image is a bit too big compared to default badges
+                }
+            },
+            onContextMenu(event, badge) {
+                ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={badge} />);
+            },
+            onClick() {
+                return EquicordDonorModal();
+            },
+        } satisfies ProfileBadge));
+    }
+});
