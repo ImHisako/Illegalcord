@@ -107,7 +107,7 @@ async function loadIllegalcordBadges(noCache = false) {
     try {
         const init = {} as RequestInit;
         if (noCache) init.cache = "no-cache";
-        
+
         const response = await fetch(ILLEGALCORD_BADGES_URL, init);
         return await response.json();
     } catch (error) {
@@ -132,6 +132,7 @@ export function getIllegalcordBadges(userId: string) {
         },
         onClick() {
             Toasts.show({
+                id: Toasts.genId(),
                 message: "Illegalcord Badge Clicked!",
                 type: Toasts.Type.MESSAGE
             });
@@ -208,6 +209,10 @@ export default definePlugin({
 
     get IllegalcordBadges() {
         return IllegalcordBadges;
+    },
+
+    getIllegalcordBadges(userId: string) {
+        return getIllegalcordBadges(userId);
     },
 
     toolboxActions: {
