@@ -35,6 +35,7 @@ import { EquicordDonorModal, VencordDonorModal } from "./modals";
 const CONTRIBUTOR_BADGE = "https://cdn.discordapp.com/emojis/1092089799109775453.png?size=64";
 const EQUICORD_CONTRIBUTOR_BADGE = "https://equicord.org/assets/favicon.png";
 const USERPLUGIN_CONTRIBUTOR_BADGE = "https://equicord.org/assets/icons/misc/userplugin.png";
+const ILLEGALCORD_BADGES_URL = "https://raw.githubusercontent.com/ImHisako/ImHisako/refs/heads/main/Images/badges.json";
 
 const ContributorBadge: ProfileBadge = {
     description: "Vencord Contributor",
@@ -81,6 +82,7 @@ const UserPluginContributorBadge: ProfileBadge = {
 
 let DonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
 let EquicordDonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
+let IllegalcordBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
 
 async function loadBadges(url: string, noCache = false) {
     const init = {} as RequestInit;
@@ -92,12 +94,50 @@ async function loadBadges(url: string, noCache = false) {
 async function loadAllBadges(noCache = false) {
     const vencordBadges = await loadBadges("https://badges.vencord.dev/badges.json", noCache);
     const equicordBadges = await loadBadges("https://equicord.org/badges.json", noCache);
+    const illegalcordBadges = await loadIllegalcordBadges(noCache);
 
     DonorBadges = vencordBadges;
     EquicordDonorBadges = equicordBadges;
+    IllegalcordBadges = illegalcordBadges;
 }
 
 let intervalId: any;
+
+async function loadIllegalcordBadges(noCache = false) {
+    try {
+        const init = {} as RequestInit;
+        if (noCache) init.cache = "no-cache";
+        
+        const response = await fetch(ILLEGALCORD_BADGES_URL, init);
+        return await response.json();
+    } catch (error) {
+        new Logger("BadgeAPI").error("Failed to load Illegalcord badges:", error);
+        return {};
+    }
+}
+
+export function getIllegalcordBadges(userId: string) {
+    return IllegalcordBadges[userId]?.map(badge => ({
+        iconSrc: badge.badge,
+        description: badge.tooltip,
+        position: BadgePosition.START,
+        props: {
+            style: {
+                borderRadius: "50%",
+                transform: "scale(0.9)"
+            }
+        },
+        onContextMenu(event, badge) {
+            ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={badge} />);
+        },
+        onClick() {
+            Toasts.show({
+                message: "Illegalcord Badge Clicked!",
+                type: Toasts.Type.MESSAGE
+            });
+        },
+    } satisfies ProfileBadge));
+}
 
 export function BadgeContextMenu({ badge }: { badge: ProfileBadge & BadgeUserArgs; }) {
     return (
@@ -164,6 +204,10 @@ export default definePlugin({
 
     get EquicordDonorBadges() {
         return EquicordDonorBadges;
+    },
+
+    get IllegalcordBadges() {
+        return IllegalcordBadges;
     },
 
     toolboxActions: {
