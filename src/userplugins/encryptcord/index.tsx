@@ -243,6 +243,12 @@ export default definePlugin({
             if (message.state === "SENDING") return;
             if (message.author.id === UserStore.getCurrentUser().id) return;
             if (!message.content) return;
+            
+            // Only process messages with ENCRYPTCORD prefix
+            if (!message.content.startsWith('[ENCRYPTCORD]')) return;
+            
+            // Remove the prefix for processing
+            const actualContent = message.content.replace('[ENCRYPTCORD] ', '').replace('[ENCRYPTCORD]', '');
             const encryptcordGroupMembers = await DataStore.get(
                 "encryptcordGroupMembers"
             );
@@ -251,7 +257,7 @@ export default definePlugin({
                     key => key === message.author.id
                 )
             ) {
-                const messageContent = message.content.toLowerCase().trim();
+                const messageContent = actualContent.toLowerCase().trim();
                 const firstLine = messageContent.split('\n')[0]?.trim();
                 
                 console.log("Encryptcord: Received message:", { firstLine, channelId, authorId: message.author.id });
@@ -299,7 +305,7 @@ export default definePlugin({
                     if (!sender) return;
                     
                     // Extract public key from code block
-                    const keyMatch = message.content.match(/```([\s\S]*?)```/);
+                    const keyMatch = actualContent.match(/```([\s\S]*?)```/);
                     if (!keyMatch) return;
                     
                     const userKey = keyMatch[1].trim();
@@ -321,7 +327,7 @@ export default definePlugin({
             );
             if (!sender) return;
             const groupChannel = await DataStore.get("encryptcordChannelId");
-            switch (message.content.toLowerCase()) {
+            switch (actualContent.toLowerCase()) {
                 case "leaving":
                     handleLeaving(
                         sender.id,
@@ -414,6 +420,8 @@ async function sendTempMessage(
     const channelId = dm
         ? await ChannelActionCreators.getOrEnsurePrivateChannel(recipientId)
         : recipientId;
+    
+    // Send persistent message instead of temporary
     if (attachment && attachment !== "") {
         const upload = await new CloudUpload(
             {
@@ -429,10 +437,10 @@ async function sendTempMessage(
             0
         );
         upload.on("complete", async () => {
-            const messageId = await RestAPI.post({
+            await RestAPI.post({
                 url: `/channels/${channelId}/messages`,
                 body: {
-                    content,
+                    content: `[ENCRYPTCORD] ${content}`,
                     attachments: [
                         {
                             id: "0",
@@ -442,34 +450,23 @@ async function sendTempMessage(
                     ],
                     nonce: SnowflakeUtils.fromTimestamp(Date.now()),
                 },
-            }).then(response => response.body.id);
-
-            // Wait longer for other clients to receive the message
-            await sleep(3000);
-            try {
-                MessageActions.deleteMessage(channelId, messageId);
-            } catch (e) {
-                // Message might already be deleted
-            }
+            });
+            
+            console.log(`Encryptcord: Sent persistent message with attachment to ${recipientId}`);
         });
         await upload.upload();
         return;
     }
 
-    const messageId = await RestAPI.post({
+    await RestAPI.post({
         url: `/channels/${channelId}/messages`,
         body: {
-            content,
+            content: `[ENCRYPTCORD] ${content}`,
             nonce: SnowflakeUtils.fromTimestamp(Date.now()),
         },
-    }).then(response => response.body.id);
-
-    await sleep(3000);
-    try {
-        MessageActions.deleteMessage(channelId, messageId);
-    } catch (e) {
-        // Message might already be deleted
-    }
+    });
+    
+    console.log(`Encryptcord: Sent persistent message to ${recipientId}`);
 }
 
 // Handle leaving group
