@@ -144,7 +144,12 @@ export default definePlugin({
 
             // Debug logging for all messages
             if (settings.store.enableLogging) {
-                console.log("Encryptcord: Processing message from", message.author?.username || "Unknown", "Content:", message.content.substring(0, 50) + (message.content.length > 50 ? "..." : ""));
+                console.log("Encryptcord: Processing message");
+                console.log("  Author:", message.author);
+                console.log("  Content:", message.content);
+                console.log("  Content length:", message.content?.length);
+                console.log("  Starts with encrypted marker:", message.content?.startsWith("🔒ENCRYPTED:"));
+                console.log("  Ends with end marker:", message.content?.endsWith(":ENDLOCK"));
             }
 
             // Check if message is encrypted
@@ -181,8 +186,9 @@ export default definePlugin({
                     }
                                 
                     // Show decrypted message as bot message (Clyde)
+                    const authorName = message.author?.username || message.author?.discriminator || "Unknown User";
                     sendBotMessage(channelId, {
-                        content: `🔐 **Decrypted message from ${message.author.username}**: ${decryptedMessage}`
+                        content: `🔐 **Decrypted message from ${authorName}**: ${decryptedMessage}`
                     });
                                 
                     if (settings.store.enableLogging) {
@@ -192,8 +198,9 @@ export default definePlugin({
                     console.error("Decryption error:", error);
                     
                     // Show error message
+                    const authorName = message.author?.username || message.author?.discriminator || "Unknown User";
                     sendBotMessage(channelId, {
-                        content: `🔒 Decryption error for message from ${message.author.username}. Details: ${(error as Error).message}`
+                        content: `🔒 Decryption error for message from ${authorName}. Details: ${(error as Error).message}`
                     });
                 }
                 
