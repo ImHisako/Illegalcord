@@ -134,11 +134,9 @@ export default definePlugin({
             if (message.state === "SENDING") return;
             if (!message.content) return;
 
-            console.log("Encryptcord: Ricevuto messaggio", message.content.substring(0, 50));
-            
             // Controlla se il messaggio è crittato
             if (message.content.startsWith("🔒ENCRYPTED:") && message.content.endsWith(":ENDLOCK")) {
-                console.log("Encryptcord: Trovato messaggio crittato da", message.author.username);
+                console.log("Encryptcord: Ricevuto messaggio crittato da", message.author.username);
                 
                 // Ottieni la password dalle impostazioni
                 const password = settings.store.encryptionPassword;
@@ -170,11 +168,14 @@ export default definePlugin({
                     
                     // Mostra un messaggio di errore
                     sendBotMessage(channelId, {
-                        content: `🔒 Errore decrittazione messaggio da ${message.author.username}`
+                        content: `🔒 Errore decrittazione messaggio da ${message.author.username}. Dettagli: ${(error as Error).message}`
                     });
                 }
                 
                 // Previene la visualizzazione del messaggio crittato originale
+                return;
+            } else {
+                // Non loggare messaggi non crittati
                 return;
             }
         },
