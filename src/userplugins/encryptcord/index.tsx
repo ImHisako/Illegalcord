@@ -134,12 +134,17 @@ export default definePlugin({
             if (message.state === "SENDING") return;
             if (!message.content) return;
 
+            console.log("Encryptcord: Ricevuto messaggio", message.content.substring(0, 50));
+            
             // Controlla se il messaggio è crittato
             if (message.content.startsWith("🔒ENCRYPTED:") && message.content.endsWith(":ENDLOCK")) {
+                console.log("Encryptcord: Trovato messaggio crittato da", message.author.username);
+                
                 // Ottieni la password dalle impostazioni
                 const password = settings.store.encryptionPassword;
                 
                 if (!password) {
+                    console.log("Encryptcord: Nessuna password impostata");
                     // Se non c'è password, mostra un messaggio informativo
                     const warningMsg = {
                         ...message,
@@ -157,13 +162,19 @@ export default definePlugin({
                     // Estrae il messaggio crittato
                     const encryptedPart = message.content.substring(11, message.content.length - 8);
                     
+                    console.log("Encryptcord: Tentativo di decrittazione...");
+                    
                     // Decodifica il messaggio
                     const decryptedMessage = await decryptAES(encryptedPart, password);
+                    
+                    console.log("Encryptcord: Messaggio decrittato con successo", decryptedMessage);
                     
                     // Mostra il messaggio decrittato come messaggio di bot (Clyde)
                     sendBotMessage(channelId, {
                         content: `🔐 **Messaggio decrittato da ${message.author.username}**: ${decryptedMessage}`
                     });
+                    
+                    console.log("Encryptcord: Inviato messaggio di bot con contenuto decrittato");
                 } catch (error) {
                     console.error("Errore decrittazione:", error);
                     
