@@ -11,6 +11,7 @@ import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
 import { Devs } from "@utils/constants";
 import definePlugin, { IconComponent, OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
+import { ApplicationCommandOptionType } from "@types";
 
 interface IMessageCreate {
     type: "MESSAGE_CREATE";
@@ -191,6 +192,78 @@ export default definePlugin({
     chatBarButton: {
         render: EncryptionToggleButton
     },
+    commands: [
+        {
+            name: "securecord-enable",
+            description: "Enable Securecord encryption",
+            inputType: 1,
+            options: [],
+            execute: async (args, ctx) => {
+                settings.store.enableEncryption = true;
+                sendBotMessage(ctx.channel.id, {
+                    content: "🔐 Securecord encryption has been **enabled**!"
+                });
+            }
+        },
+        {
+            name: "securecord-disable",
+            description: "Disable Securecord encryption",
+            inputType: 1,
+            options: [],
+            execute: async (args, ctx) => {
+                settings.store.enableEncryption = false;
+                sendBotMessage(ctx.channel.id, {
+                    content: "🔓 Securecord encryption has been **disabled**!"
+                });
+            }
+        },
+        {
+            name: "securecord-status",
+            description: "Check Securecord encryption status",
+            inputType: 1,
+            options: [],
+            execute: async (args, ctx) => {
+                const isEnabled = settings.store.enableEncryption;
+                const hasPassword = !!settings.store.encryptionPassword;
+                
+                sendBotMessage(ctx.channel.id, {
+                    content: `🔐 **Securecord Status**
+
+Encryption: ${isEnabled ? "**ENABLED** ✅" : "**DISABLED** ❌"}
+Password set: ${hasPassword ? "**YES** ✅" : "**NO** ❌"}
+
+Use `/securecord-enable` or `/securecord-disable` to toggle encryption.`
+                });
+            }
+        },
+        {
+            name: "securecord-password",
+            description: "Set or update the encryption password",
+            inputType: 1,
+            options: [
+                {
+                    name: "password",
+                    description: "The encryption password to use",
+                    type: ApplicationCommandOptionType.STRING,
+                    required: true
+                }
+            ],
+            execute: async (args, ctx) => {
+                const password = args[0].value;
+                if (!password || password.length < 1) {
+                    sendBotMessage(ctx.channel.id, {
+                        content: "❌ Please provide a valid password."
+                    });
+                    return;
+                }
+                
+                settings.store.encryptionPassword = password;
+                sendBotMessage(ctx.channel.id, {
+                    content: "✅ Encryption password has been updated successfully!"
+                });
+            }
+        }
+    ],
 
     flux: {
         async MESSAGE_CREATE({ optimistic, type, message, channelId }: IMessageCreate) {
