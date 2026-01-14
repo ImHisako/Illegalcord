@@ -142,10 +142,15 @@ export default definePlugin({
             if (message.state === "SENDING") return;
             if (!message.content) return;
 
+            // Debug logging for all messages
+            if (settings.store.enableLogging) {
+                console.log("Encryptcord: Processing message from", message.author?.username || "Unknown", "Content:", message.content.substring(0, 50) + (message.content.length > 50 ? "..." : ""));
+            }
+
             // Check if message is encrypted
             if (message.content.startsWith("🔒ENCRYPTED:") && message.content.endsWith(":ENDLOCK")) {
                 if (settings.store.enableLogging) {
-                    console.log("Encryptcord: Received encrypted message from", message.author.username);
+                    console.log("Encryptcord: Detected encrypted message from", message.author?.username || "Unknown");
                 }
                             
                 // Get password from settings
@@ -248,15 +253,16 @@ export default definePlugin({
                     name: "action",
                     description: "Enable or disable encryption",
                     type: ApplicationCommandOptionType.STRING,
-                    required: true,
+                    required: false,
                     choices: [
                         { name: "Enable", value: "enable" },
-                        { name: "Disable", value: "disable" }
+                        { name: "Disable", value: "disable" },
+                        { name: "Status", value: "status" }
                     ]
                 }
             ],
             execute: async (args, ctx) => {
-                const action = findOption(args, "action", "");
+                const action = findOption(args, "action", "status");
                 
                 if (action === "enable") {
                     settings.store.enableEncryption = true;
@@ -268,9 +274,15 @@ export default definePlugin({
                     sendBotMessage(ctx.channel.id, {
                         content: "🔓 Encryptcord encryption **disabled**!"
                     });
+                } else if (action === "status") {
+                    const status = settings.store.enableEncryption ? "enabled" : "disabled";
+                    const hasPassword = !!settings.store.encryptionPassword;
+                    sendBotMessage(ctx.channel.id, {
+                        content: `📊 **Encryptcord Status**:\n• Encryption: **${status}**\n• Password set: **${hasPassword ? "Yes" : "No"}**\n• Logging: **${settings.store.enableLogging ? "Enabled" : "Disabled"}**`
+                    });
                 } else {
                     sendBotMessage(ctx.channel.id, {
-                        content: "❌ Invalid action. Use 'enable' or 'disable'."
+                        content: "❌ Invalid action. Use 'enable', 'disable', or 'status'."
                     });
                 }
             }
