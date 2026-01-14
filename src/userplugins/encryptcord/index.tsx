@@ -150,7 +150,9 @@ export default definePlugin({
                     // Estrae il messaggio crittato
                     const encryptedPart = message.content.substring(11, message.content.length - 8);
                     
-                    console.log("Encryptcord: Tentativo di decrittazione...");
+                    console.log("Encryptcord: Parte crittata estratta:", encryptedPart);
+                    console.log("Encryptcord: Lunghezza parte crittata:", encryptedPart.length);
+                    console.log("Encryptcord: Password utilizzata:", password);
                     
                     // Decodifica il messaggio
                     const decryptedMessage = await decryptAES(encryptedPart, password);
