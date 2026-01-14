@@ -249,7 +249,8 @@ export default definePlugin({
         async MESSAGE_CREATE({ optimistic, type, message, channelId }: IMessageCreate) {
             if (optimistic || type !== "MESSAGE_CREATE") return;
             if (message.state === "SENDING") return;
-            if (message.author.id === UserStore.getCurrentUser().id) return;
+            // Process messages from self for immediate decryption display
+            const isFromCurrentUser = message.author.id === UserStore.getCurrentUser().id;
             if (!message.content) return;
 
             // Controlla se il messaggio è crittato
@@ -265,6 +266,9 @@ export default definePlugin({
                         // Decodifica il messaggio
                         const decryptedMessage = await decryptAES(encryptedPart, groupPassword);
                         
+                        // Determina se è un messaggio dell'utente corrente
+                        const isFromCurrentUser = message.author.id === UserStore.getCurrentUser().id;
+                        
                         // Mostra il messaggio decrittato come messaggio ricevuto
                         const decryptedMsg = {
                             ...message,
@@ -276,6 +280,18 @@ export default definePlugin({
                         
                         // Sostituisci il messaggio crittato con quello decrittato
                         await MessageActions.receiveMessage(channelId, decryptedMsg);
+                        
+                        // Se è un messaggio dell'utente corrente, cancella il messaggio crittato originale
+                        if (isFromCurrentUser) {
+                            // Cerchiamo di cancellare il messaggio originale crittato
+                            setTimeout(() => {
+                                try {
+                                    MessageActions.deleteMessage(channelId, message.id);
+                                } catch (e) {
+                                    // Potrebbe fallire se il messaggio è già stato cancellato
+                                }
+                            }, 100);
+                        }
                     } else {
                         // Se non c'è la password, mostra comunque il messaggio originale
                         // ma con una nota che non è stato possibile decrittare
