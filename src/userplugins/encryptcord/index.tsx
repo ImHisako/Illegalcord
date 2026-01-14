@@ -7,10 +7,10 @@
 import { definePluginSettings } from "@api/Settings";
 import { sendBotMessage } from "@api/Commands";
 import { addMessagePreSendListener, removeMessagePreSendListener, MessageSendListener } from "@api/MessageEvents";
+import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
 import { Devs } from "@utils/constants";
-import definePlugin, { OptionType } from "@utils/types";
+import definePlugin, { IconComponent, OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
-import { FluxDispatcher, MessageActions } from "@webpack/common";
 
 interface IMessageCreate {
     type: "MESSAGE_CREATE";
@@ -20,13 +20,13 @@ interface IMessageCreate {
     message: Message;
 }
 
-// Funzioni di crittografia AES-256
+// AES-256 encryption functions
 const encryptAES = async (text: string, password: string): Promise<string> => {
     const encoder = new TextEncoder();
     const data = encoder.encode(text);
     const salt = crypto.getRandomValues(new Uint8Array(16));
-    
-    // Deriva la chiave usando PBKDF2
+
+    // Derive key using PBKDF2
     const keyMaterial = await crypto.subtle.importKey(
         "raw",
         encoder.encode(password),
@@ -34,7 +34,7 @@ const encryptAES = async (text: string, password: string): Promise<string> => {
         false,
         ["deriveKey"]
     );
-    
+
     const key = await crypto.subtle.deriveKey(
         {
             name: "PBKDF2",
@@ -47,30 +47,30 @@ const encryptAES = async (text: string, password: string): Promise<string> => {
         false,
         ["encrypt"]
     );
-    
+
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const encrypted = await crypto.subtle.encrypt(
         { name: "AES-GCM", iv: iv },
         key,
         data
     );
-    
-    // Combina salt, IV e dati crittografati
+
+    // Combine salt, IV and encrypted data
     const result = new Uint8Array(salt.length + iv.length + encrypted.byteLength);
     result.set(salt, 0);
     result.set(iv, salt.length);
     result.set(new Uint8Array(encrypted), salt.length + iv.length);
-    
+
     return btoa(String.fromCharCode(...result));
 };
 
 const decryptAES = async (encrypted: string, password: string): Promise<string> => {
     try {
-        const data = new Uint8Array(atob(encrypted).split('').map(c => c.charCodeAt(0)));
+        const data = new Uint8Array(atob(encrypted).split("").map(c => c.charCodeAt(0)));
         const salt = data.slice(0, 16);
         const iv = data.slice(16, 28);
         const encryptedData = data.slice(28);
-        
+
         const encoder = new TextEncoder();
         const keyMaterial = await crypto.subtle.importKey(
             "raw",
@@ -79,7 +79,7 @@ const decryptAES = async (encrypted: string, password: string): Promise<string> 
             false,
             ["deriveKey"]
         );
-        
+
         const key = await crypto.subtle.deriveKey(
             {
                 name: "PBKDF2",
@@ -92,13 +92,13 @@ const decryptAES = async (encrypted: string, password: string): Promise<string> 
             false,
             ["decrypt"]
         );
-        
+
         const decrypted = await crypto.subtle.decrypt(
             { name: "AES-GCM", iv: iv },
             key,
             encryptedData
         );
-        
+
         const decoder = new TextDecoder();
         return decoder.decode(decrypted);
     } catch (error) {
@@ -107,112 +107,171 @@ const decryptAES = async (encrypted: string, password: string): Promise<string> 
     }
 };
 
-// Definizione delle impostazioni del plugin
+// SVG icons for the button
+const EncryptionEnabledIcon: IconComponent = ({ height = 20, width = 20, className }) => {
+    return (
+        <svg
+            width={width}
+            height={height}
+            viewBox="0 0 24 24"
+            className={className}
+        >
+            <path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM8.9 6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2H8.9V6z" />
+        </svg>
+    );
+};
+
+const EncryptionDisabledIcon: IconComponent = ({ height = 20, width = 20, className }) => {
+    return (
+        <svg
+            width={width}
+            height={height}
+            viewBox="0 0 24 24"
+            className={className}
+        >
+            <path fill="currentColor" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+        </svg>
+    );
+};
+
+// Chatbar button
+const EncryptionToggleButton: ChatBarButtonFactory = ({ channel, type }) => {
+    const { enableEncryption } = settings.use(["enableEncryption"]);
+
+    const validChat = ["normal", "sidebar"].some(x => type.analyticsName === x);
+
+    if (!validChat) return null;
+
+    return (
+        <ChatBarButton
+            tooltip={enableEncryption ? "Disable Encryption" : "Enable Encryption"}
+            onClick={() => {
+                const newValue = !enableEncryption;
+                settings.store.enableEncryption = newValue;
+
+                // Show confirmation
+                sendBotMessage(
+                    channel?.id ?? "",
+                    {
+                        content: `🔐 Encryption ${newValue ? "enabled" : "disabled"}!`
+                    }
+                );
+            }}
+        >
+            {enableEncryption ? <EncryptionEnabledIcon /> : <EncryptionDisabledIcon />}
+        </ChatBarButton>
+    );
+};
+
+// Plugin settings definition
 const settings = definePluginSettings({
     encryptionPassword: {
         type: OptionType.STRING,
-        description: "Password per la crittografia AES-256 (condivisa con gli altri utenti)",
+        description: "AES-256 encryption password (shared with other users)",
         default: "",
-        placeholder: "Inserisci la password condivisa..."
+        placeholder: "Enter shared password..."
     },
     enableEncryption: {
         type: OptionType.BOOLEAN,
-        description: "Attiva/disattiva la crittografia dei messaggi",
+        description: "Enable/disable message encryption",
         default: false
     },
     enableLogging: {
         type: OptionType.BOOLEAN,
-        description: "Attiva/disattiva i log nella console (per debug)",
+        description: "Enable/disable console logs (for debugging)",
         default: true
     }
 });
 
 export default definePlugin({
     name: "Securecord",
-    description: "Crittografia AES-256 end-to-end per Discord. Condividi la stessa password con gli altri utenti per comunicare in modo sicuro.",
+    description: "AES-256 end-to-end encryption for Discord. Share the same password with other users to communicate securely.",
     authors: [Devs.Irritably],
     settings,
-    
+    chatBarButton: {
+        render: EncryptionToggleButton
+    },
+
     flux: {
         async MESSAGE_CREATE({ optimistic, type, message, channelId }: IMessageCreate) {
             if (optimistic || type !== "MESSAGE_CREATE") return;
             if (message.state === "SENDING") return;
             if (!message.content) return;
 
-            // Controlla se il messaggio è crittato
+            // Check if message is encrypted
             if (message.content.startsWith("🔒ENCRYPTED:") && message.content.endsWith(":ENDLOCK")) {
                 if (settings.store.enableLogging) {
-                    console.log("Securecord: Ricevuto messaggio crittato da", message.author.username);
+                    console.log("Securecord: Received encrypted message from", message.author.username);
                 }
-                            
-                // Ottieni la password dalle impostazioni
+
+                // Get password from settings
                 const password = settings.store.encryptionPassword;
-                            
+
                 if (!password) {
                     if (settings.store.enableLogging) {
-                        console.log("Securecord: Nessuna password impostata");
+                        console.log("Securecord: No password set");
                     }
                     return;
                 }
-                
+
                 try {
-                    // Estrae il messaggio crittato (rimuovendo i caratteri extra)
+                    // Extract encrypted message (removing extra characters)
                     const encryptedPart = message.content.substring(12, message.content.length - 8);
-                                
+
                     if (settings.store.enableLogging) {
-                        console.log("Securecord: Parte crittata estratta:", encryptedPart);
-                        console.log("Securecord: Lunghezza parte crittata:", encryptedPart.length);
-                        console.log("Securecord: Password utilizzata:", password);
+                        console.log("Securecord: Extracted encrypted part:", encryptedPart);
+                        console.log("Securecord: Encrypted part length:", encryptedPart.length);
+                        console.log("Securecord: Password used:", password);
                     }
-                                
-                    // Decodifica il messaggio
+
+                    // Decode message
                     const decryptedMessage = await decryptAES(encryptedPart, password);
-                                
+
                     if (settings.store.enableLogging) {
-                        console.log("Securecord: Messaggio decrittato con successo", decryptedMessage);
+                        console.log("Securecord: Successfully decrypted message", decryptedMessage);
                     }
-                                
-                    // Mostra il messaggio decrittato come messaggio di bot (Clyde)
+
+                    // Show decrypted message as bot message (Clyde)
                     sendBotMessage(channelId, {
-                        content: `🔐 **Messaggio decrittato da ${message.author.username}**: ${decryptedMessage}`
+                        content: `🔐 **Decrypted message from ${message.author.username}**: ${decryptedMessage}`
                     });
-                                
+
                     if (settings.store.enableLogging) {
-                        console.log("Securecord: Inviato messaggio di bot con contenuto decrittato");
+                        console.log("Securecord: Sent bot message with decrypted content");
                     }
                 } catch (error) {
-                    console.error("Errore decrittazione:", error);
-                    
-                    // Mostra un messaggio di errore
+                    console.error("Decryption error:", error);
+
+                    // Show error message
                     sendBotMessage(channelId, {
-                        content: `🔒 Errore decrittazione messaggio da ${message.author.username}. Dettagli: ${(error as Error).message}`
+                        content: `🔒 Decryption error for message from ${message.author.username}. Details: ${(error as Error).message}`
                     });
                 }
-                
-                // Previene la visualizzazione del messaggio crittato originale
+
+                // Prevent display of original encrypted message
                 return;
             } else {
-                // Non loggare messaggi non crittati
+                // Don't log non-encrypted messages
                 return;
             }
         },
     },
 
     start() {
-        // Aggiungi il listener per crittare i messaggi prima dell'invio
+        // Add listener to encrypt messages before sending
         const listener: MessageSendListener = async (_, message) => {
             if (settings.store.enableEncryption && settings.store.encryptionPassword) {
-                // Critta il messaggio solo se non è già crittato
+                // Encrypt message only if not already encrypted
                 if (!message.content.startsWith("🔒ENCRYPTED:") && !message.content.endsWith(":ENDLOCK")) {
                     try {
                         const encryptedMessage = await encryptAES(message.content, settings.store.encryptionPassword);
-                        // Sostituisci il contenuto del messaggio con quello crittato
+                        // Replace message content with encrypted version
                         message.content = `🔒ENCRYPTED:${encryptedMessage}:ENDLOCK`;
                     } catch (error) {
-                        console.error("Errore crittazione messaggio:", error);
-                        // Se la crittazione fallisce, mostra un messaggio di errore
-                        sendBotMessage(message.channel_id ?? "", {
-                            content: "❌ Errore crittazione messaggio. Verifica la password."
+                        console.error("Message encryption error:", error);
+                        // If encryption fails, show error message
+                        sendBotMessage(message.channelId ?? "", {
+                            content: "❌ Message encryption error. Check password."
                         });
                     }
                 }
@@ -220,18 +279,18 @@ export default definePlugin({
         };
 
         addMessagePreSendListener(listener);
-        // Salviamo il listener per poterlo rimuovere dopo
+        // Save listener to remove it later
         (this as any)._listener = listener;
-        
-        console.log("Securecord: Plugin caricato correttamente");
+
+        console.log("Securecord: Plugin loaded successfully");
     },
 
     stop() {
-        // Rimuovi il listener quando il plugin viene fermato
+        // Remove listener when plugin is stopped
         if ((this as any)._listener) {
             removeMessagePreSendListener((this as any)._listener);
         }
-        
-        console.log("Securecord: Plugin arrestato");
+
+        console.log("Securecord: Plugin stopped");
     }
 });
