@@ -147,8 +147,8 @@ export default definePlugin({
                 }
 
                 try {
-                    // Estrae il messaggio crittato
-                    const encryptedPart = message.content.substring(11, message.content.length - 8);
+                    // Estrae il messaggio crittato (rimuovendo i caratteri extra)
+                    const encryptedPart = message.content.substring(12, message.content.length - 8);
                     
                     console.log("Encryptcord: Parte crittata estratta:", encryptedPart);
                     console.log("Encryptcord: Lunghezza parte crittata:", encryptedPart.length);
