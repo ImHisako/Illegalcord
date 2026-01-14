@@ -6,7 +6,7 @@
 
 import { definePluginSettings } from "@api/Settings";
 import { sendBotMessage } from "@api/Commands";
-import { MessageUpdater } from "@api/MessageUpdater";
+import { addMessagePreSendListener, removeMessagePreSendListener, MessageSendListener } from "@api/MessageEvents";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
@@ -179,11 +179,40 @@ export default definePlugin({
         },
     },
 
-    async start() {
+    start() {
+        // Aggiungi il listener per crittare i messaggi prima dell'invio
+        const listener: MessageSendListener = async (_, message) => {
+            if (settings.store.enableEncryption && settings.store.encryptionPassword) {
+                // Critta il messaggio solo se non è già crittato
+                if (!message.content.startsWith("🔒ENCRYPTED:") && !message.content.endsWith(":ENDLOCK")) {
+                    try {
+                        const encryptedMessage = await encryptAES(message.content, settings.store.encryptionPassword);
+                        // Sostituisci il contenuto del messaggio con quello crittato
+                        message.content = `🔒ENCRYPTED:${encryptedMessage}:ENDLOCK`;
+                    } catch (error) {
+                        console.error("Errore crittazione messaggio:", error);
+                        // Se la crittazione fallisce, mostra un messaggio di errore
+                        sendBotMessage(message.channel_id ?? "", {
+                            content: "❌ Errore crittazione messaggio. Verifica la password."
+                        });
+                    }
+                }
+            }
+        };
+
+        addMessagePreSendListener(listener);
+        // Salviamo il listener per poterlo rimuovere dopo
+        (this as any)._listener = listener;
+        
         console.log("Encryptcord: Plugin caricato correttamente");
     },
 
-    async stop() {
+    stop() {
+        // Rimuovi il listener quando il plugin viene fermato
+        if ((this as any)._listener) {
+            removeMessagePreSendListener((this as any)._listener);
+        }
+        
         console.log("Encryptcord: Plugin arrestato");
     }
 });
