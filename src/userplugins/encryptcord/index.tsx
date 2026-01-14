@@ -252,7 +252,11 @@ export default definePlugin({
                 )
             ) {
                 const messageContent = message.content.toLowerCase().trim();
-                if (messageContent.startsWith("groupdata")) {
+                const firstLine = messageContent.split('\n')[0]?.trim();
+                
+                console.log("Encryptcord: Received message:", { firstLine, channelId, authorId: message.author.id });
+                
+                if (firstLine === "groupdata") {
                     try {
                         const response = await fetch(
                             message.attachments[0].url
@@ -262,19 +266,33 @@ export default definePlugin({
                     } catch (error) {
                         console.error("Error handling group data:", error);
                     }
-                } else if (messageContent.startsWith("join")) {
+                } else if (firstLine === "join") {
+                    console.log("Encryptcord: Processing join request");
+                    
                     if (
                         encryptcordGroupMembers[
                             UserStore.getCurrentUser().id
                         ]?.child
-                    )
+                    ) {
+                        console.log("Encryptcord: Already has child, ignoring join");
                         return;
-                    if (!(await DataStore.get("encryptcordGroup"))) return;
-                    if (
-                        (await DataStore.get("encryptcordChannelId")) !==
-                        message.channel_id
-                    )
+                    }
+                    
+                    const hasGroup = await DataStore.get("encryptcordGroup");
+                    console.log("Encryptcord: Has group:", hasGroup);
+                    
+                    if (!hasGroup) {
+                        console.log("Encryptcord: No group found, ignoring join");
                         return;
+                    }
+                    
+                    const groupChannel = await DataStore.get("encryptcordChannelId");
+                    console.log("Encryptcord: Group channel:", groupChannel, "Message channel:", message.channel_id);
+                    
+                    if (groupChannel !== message.channel_id) {
+                        console.log("Encryptcord: Channel mismatch, ignoring join");
+                        return;
+                    }
                     const sender = await UserUtils.getUser(
                         message.author.id
                     ).catch(() => null);
