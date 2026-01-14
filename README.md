@@ -18,7 +18,8 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - BetterScreenshare
 - EnableStereo
 - BiggerFileUpload
-- Stalker : (https://github.com/Reycko/EquicordPlugins/tree/main/stalker)
+- Stalker : (https://github.com/Reycko/EquicordPlugins/tree/main/stalker) With a modded version by me
+- Encryptcord : https://github.com/Inbestigator/encryptcord
 
 ## Installing Illegalcord
 
