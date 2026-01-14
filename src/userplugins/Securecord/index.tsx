@@ -9,9 +9,8 @@ import { sendBotMessage } from "@api/Commands";
 import { addMessagePreSendListener, removeMessagePreSendListener, MessageSendListener } from "@api/MessageEvents";
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
 import { Devs } from "@utils/constants";
-import definePlugin, { IconComponent, OptionType } from "@utils/types";
+import definePlugin, { IconComponent, OptionType, ApplicationCommandOptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
-import { ApplicationCommandOptionType } from "@types";
 
 interface IMessageCreate {
     type: "MESSAGE_CREATE";
