@@ -251,40 +251,45 @@ export default definePlugin({
                     key => key === message.author.id
                 )
             ) {
-                switch (message.content.toLowerCase().split("```")[0]) {
-                    case "groupdata":
+                const messageContent = message.content.toLowerCase().trim();
+                if (messageContent.startsWith("groupdata")) {
+                    try {
                         const response = await fetch(
                             message.attachments[0].url
                         );
                         const groupdata = await response.json();
                         await handleGroupData(groupdata);
-                        break;
-                    case "join":
-                        if (
-                            encryptcordGroupMembers[
-                                UserStore.getCurrentUser().id
-                            ].child
-                        )
-                            return;
-                        if (!(await DataStore.get("encryptcordGroup"))) return;
-                        if (
-                            (await DataStore.get("encryptcordChannelId")) !==
-                            message.channel_id
-                        )
-                            return;
-                        const sender = await UserUtils.getUser(
-                            message.author.id
-                        ).catch(() => null);
-                        if (!sender) return;
-                        const userKey = message.content.split("```")[1];
-                        await handleJoin(
-                            sender.id,
-                            userKey,
-                            encryptcordGroupMembers
-                        );
-                        break;
-                    default:
-                        break;
+                    } catch (error) {
+                        console.error("Error handling group data:", error);
+                    }
+                } else if (messageContent.startsWith("join")) {
+                    if (
+                        encryptcordGroupMembers[
+                            UserStore.getCurrentUser().id
+                        ]?.child
+                    )
+                        return;
+                    if (!(await DataStore.get("encryptcordGroup"))) return;
+                    if (
+                        (await DataStore.get("encryptcordChannelId")) !==
+                        message.channel_id
+                    )
+                        return;
+                    const sender = await UserUtils.getUser(
+                        message.author.id
+                    ).catch(() => null);
+                    if (!sender) return;
+                    
+                    // Extract public key from code block
+                    const keyMatch = message.content.match(/```([\s\S]*?)```/);
+                    if (!keyMatch) return;
+                    
+                    const userKey = keyMatch[1].trim();
+                    await handleJoin(
+                        sender.id,
+                        userKey,
+                        encryptcordGroupMembers
+                    );
                 }
                 return;
             }
@@ -307,9 +312,17 @@ export default definePlugin({
                     );
                     break;
                 case "message":
-                    const msgResponse = await fetch(message.attachments[0].url);
-                    const messagedata = await msgResponse.json();
-                    await handleMessage(messagedata, sender.id, groupChannel);
+                    try {
+                        const msgResponse = await fetch(message.attachments[0].url);
+                        const messagedata = await msgResponse.json();
+                        await handleMessage(messagedata, sender.id, groupChannel);
+                    } catch (error) {
+                        console.error("Error handling encrypted message:", error);
+                        // Send error notification
+                        sendBotMessage(groupChannel, {
+                            content: `❌ Failed to decrypt message from <@${sender.id}>. They might have left the group or there was an encryption error.`
+                        });
+                    }
                     break;
                 case "groupdata":
                     const response = await fetch(message.attachments[0].url);
@@ -413,8 +426,13 @@ async function sendTempMessage(
                 },
             }).then(response => response.body.id);
 
-            await sleep(500);
-            MessageActions.deleteMessage(channelId, messageId);
+            // Wait longer for other clients to receive the message
+            await sleep(3000);
+            try {
+                MessageActions.deleteMessage(channelId, messageId);
+            } catch (e) {
+                // Message might already be deleted
+            }
         });
         await upload.upload();
         return;
@@ -428,8 +446,12 @@ async function sendTempMessage(
         },
     }).then(response => response.body.id);
 
-    await sleep(500);
-    MessageActions.deleteMessage(channelId, messageId);
+    await sleep(3000);
+    try {
+        MessageActions.deleteMessage(channelId, messageId);
+    } catch (e) {
+        // Message might already be deleted
+    }
 }
 
 // Handle leaving group
