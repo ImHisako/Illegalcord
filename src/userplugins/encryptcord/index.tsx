@@ -119,13 +119,18 @@ const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Attiva/disattiva la crittografia dei messaggi",
         default: false
+    },
+    enableLogging: {
+        type: OptionType.BOOLEAN,
+        description: "Attiva/disattiva i log nella console (per debug)",
+        default: true
     }
 });
 
 export default definePlugin({
-    name: "EncryptcordSecure",
+    name: "Securecord",
     description: "Crittografia AES-256 end-to-end per Discord. Condividi la stessa password con gli altri utenti per comunicare in modo sicuro.",
-    authors: [Devs.Inbestigator],
+    authors: [Devs.Irritably],
     settings,
     
     flux: {
@@ -136,35 +141,45 @@ export default definePlugin({
 
             // Controlla se il messaggio è crittato
             if (message.content.startsWith("🔒ENCRYPTED:") && message.content.endsWith(":ENDLOCK")) {
-                console.log("Encryptcord: Ricevuto messaggio crittato da", message.author.username);
-                
+                if (settings.store.enableLogging) {
+                    console.log("Securecord: Ricevuto messaggio crittato da", message.author.username);
+                }
+                            
                 // Ottieni la password dalle impostazioni
                 const password = settings.store.encryptionPassword;
-                
+                            
                 if (!password) {
-                    console.log("Encryptcord: Nessuna password impostata");
+                    if (settings.store.enableLogging) {
+                        console.log("Securecord: Nessuna password impostata");
+                    }
                     return;
                 }
-
+                
                 try {
                     // Estrae il messaggio crittato (rimuovendo i caratteri extra)
                     const encryptedPart = message.content.substring(12, message.content.length - 8);
-                    
-                    console.log("Encryptcord: Parte crittata estratta:", encryptedPart);
-                    console.log("Encryptcord: Lunghezza parte crittata:", encryptedPart.length);
-                    console.log("Encryptcord: Password utilizzata:", password);
-                    
+                                
+                    if (settings.store.enableLogging) {
+                        console.log("Securecord: Parte crittata estratta:", encryptedPart);
+                        console.log("Securecord: Lunghezza parte crittata:", encryptedPart.length);
+                        console.log("Securecord: Password utilizzata:", password);
+                    }
+                                
                     // Decodifica il messaggio
                     const decryptedMessage = await decryptAES(encryptedPart, password);
-                    
-                    console.log("Encryptcord: Messaggio decrittato con successo", decryptedMessage);
-                    
+                                
+                    if (settings.store.enableLogging) {
+                        console.log("Securecord: Messaggio decrittato con successo", decryptedMessage);
+                    }
+                                
                     // Mostra il messaggio decrittato come messaggio di bot (Clyde)
                     sendBotMessage(channelId, {
                         content: `🔐 **Messaggio decrittato da ${message.author.username}**: ${decryptedMessage}`
                     });
-                    
-                    console.log("Encryptcord: Inviato messaggio di bot con contenuto decrittato");
+                                
+                    if (settings.store.enableLogging) {
+                        console.log("Securecord: Inviato messaggio di bot con contenuto decrittato");
+                    }
                 } catch (error) {
                     console.error("Errore decrittazione:", error);
                     
@@ -208,7 +223,7 @@ export default definePlugin({
         // Salviamo il listener per poterlo rimuovere dopo
         (this as any)._listener = listener;
         
-        console.log("Encryptcord: Plugin caricato correttamente");
+        console.log("Securecord: Plugin caricato correttamente");
     },
 
     stop() {
@@ -217,6 +232,6 @@ export default definePlugin({
             removeMessagePreSendListener((this as any)._listener);
         }
         
-        console.log("Encryptcord: Plugin arrestato");
+        console.log("Securecord: Plugin arrestato");
     }
 });
