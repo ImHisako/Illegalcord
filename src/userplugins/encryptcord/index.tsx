@@ -123,7 +123,7 @@ const settings = definePluginSettings({
 });
 
 export default definePlugin({
-    name: "Encryptcord",
+    name: "EncryptcordSecure",
     description: "Crittografia AES-256 end-to-end per Discord. Condividi la stessa password con gli altri utenti per comunicare in modo sicuro.",
     authors: [Devs.Inbestigator],
     settings,
@@ -145,16 +145,6 @@ export default definePlugin({
                 
                 if (!password) {
                     console.log("Encryptcord: Nessuna password impostata");
-                    // Se non c'è password, mostra un messaggio informativo
-                    const warningMsg = {
-                        ...message,
-                        content: `🔒 Messaggio crittato da ${message.author.username} (password non impostata)`,
-                        author: message.author,
-                        type: message.type,
-                        flags: message.flags,
-                    };
-                    
-                    await MessageActions.receiveMessage(channelId, warningMsg);
                     return;
                 }
 
