@@ -91,11 +91,12 @@ const ChatBarIcon: ChatBarButtonFactory = ({ isMainChat }) => {
                         );
                         const encryptedMessageString = JSON.stringify(encryptedMessage);
                         
-                        // Send persistent encrypted message
+                        // Send persistent encrypted message via DM
                         await sendPersistentMessage(
                             groupMember.id,
                             encryptedMessageString,
-                            "[ENCRYPTED]"
+                            "[ENCRYPTED]",
+                            true
                         );
                     }
                 );
@@ -144,11 +145,12 @@ const ChatBarIcon: ChatBarButtonFactory = ({ isMainChat }) => {
                 // Join or create group
                 setButtonDisabled(true);
                 
-                // Send join message
+                // Send join message to channel
                 await sendPersistentMessage(
                     currentChannelId,
                     await DataStore.get("encryptcordPublicKey"),
-                    "JOIN"
+                    "JOIN",
+                    false
                 );
                 
                 sendBotMessage(currentChannelId, {
@@ -342,19 +344,27 @@ export default definePlugin({
 
 // Simplified message sending function
 async function sendPersistentMessage(
-    channelId: string,
+    recipientId: string,
     content: string,
-    prefix: string
+    prefix: string,
+    isDM: boolean = true
 ) {
+    let targetChannelId = recipientId;
+    
+    if (isDM) {
+        // Create/get DM channel
+        targetChannelId = await ChannelActionCreators.getOrEnsurePrivateChannel(recipientId);
+    }
+    
     await RestAPI.post({
-        url: `/channels/${channelId}/messages`,
+        url: `/channels/${targetChannelId}/messages`,
         body: {
             content: `${prefix} ${content}`,
             nonce: SnowflakeUtils.fromTimestamp(Date.now()),
         },
     });
     
-    console.log(`Encryptcord: Sent ${prefix} message to ${channelId}`);
+    console.log(`Encryptcord: Sent ${prefix} message to ${isDM ? 'DM' : 'channel'} ${targetChannelId}`);
 }
 
 // Handle leaving group
@@ -365,7 +375,7 @@ async function leave(channelId: string) {
     const dmPromises = Object.keys(encryptcordGroupMembers).map(async memberId => {
         const groupMember = await UserUtils.getUser(memberId).catch(() => null);
         if (!groupMember) return;
-        await sendPersistentMessage(groupMember.id, "LEAVE", "[SYSTEM]");
+        await sendPersistentMessage(groupMember.id, "LEAVE", "[SYSTEM]", true);
     });
 
     await Promise.all(dmPromises);
