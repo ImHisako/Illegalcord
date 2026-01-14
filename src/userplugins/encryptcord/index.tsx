@@ -120,10 +120,15 @@ const ChatBarIcon: ChatBarButtonFactory = ({ isMainChat }) => {
                     : "Send Encrypted Messages"
             }
             onClick={async () => {
+                const hasGroup = await DataStore.get("encryptcordGroup");
+                const currentChannelId = getCurrentChannel()?.id ?? "";
+                const groupChannelId = await DataStore.get("encryptcordChannelId");
+                
+                console.log("Encryptcord: Button click - hasGroup:", hasGroup, "currentChannel:", currentChannelId, "groupChannel:", groupChannelId);
+                
                 if (
-                    (await DataStore.get("encryptcordGroup")) === false ||
-                    (await DataStore.get("encryptcordChannelId")) !==
-                    (getCurrentChannel()?.id ?? "")
+                    hasGroup === false ||
+                    groupChannelId !== currentChannelId
                 ) {
                     setButtonDisabled(true);
                     await sendTempMessage(
@@ -139,21 +144,27 @@ const ChatBarIcon: ChatBarButtonFactory = ({ isMainChat }) => {
                             }:R>\n> [Tip] You can do \`/encryptcord leave\` to leave a group`,
                     });
                     await sleep(5000);
+                    
+                    const hasGroupAfterWait = await DataStore.get("encryptcordGroup");
+                    const groupChannelAfterWait = await DataStore.get("encryptcordChannelId");
+                    const currentChannelAfterWait = getCurrentChannel()?.id ?? "";
+                    
+                    console.log("Encryptcord: After wait - hasGroup:", hasGroupAfterWait, "groupChannel:", groupChannelAfterWait, "currentChannel:", currentChannelAfterWait);
+                    
                     if (
-                        (await DataStore.get("encryptcordGroup")) === true &&
-                        (await DataStore.get("encryptcordChannelId")) !==
-                        (getCurrentChannel()?.id ?? "")
+                        hasGroupAfterWait === true &&
+                        groupChannelAfterWait !== currentChannelAfterWait
                     ) {
-                        sendBotMessage(getCurrentChannel()?.id ?? "", {
+                        sendBotMessage(currentChannelAfterWait, {
                             content: "*Leaving current group...*",
                         });
-                        await leave(
-                            (await DataStore.get("encryptcordChannelId")) ?? ""
-                        );
+                        await leave(groupChannelAfterWait);
                     } else if (
-                        (await DataStore.get("encryptcordGroup")) === true
+                        hasGroupAfterWait === true
                     ) {
+                        console.log("Encryptcord: Already in group, enabling encryption mode");
                         setButtonDisabled(false);
+                        setEnabled(true);
                         return;
                     }
                     await startGroup(getCurrentChannel()?.id ?? "");
@@ -252,17 +263,65 @@ export default definePlugin({
             const encryptcordGroupMembers = await DataStore.get(
                 "encryptcordGroupMembers"
             );
+            
+            const messageContent = actualContent.toLowerCase().trim();
+            const firstLine = messageContent.split('\n')[0]?.trim();
+            
+            console.log("Encryptcord: Received message:", { firstLine, channelId, authorId: message.author.id, isMember: Object.keys(encryptcordGroupMembers).includes(message.author.id) });
+            
+            // Handle join messages from non-members (new users wanting to join)
+            if (firstLine === "join" && !Object.keys(encryptcordGroupMembers).includes(message.author.id)) {
+                console.log("Encryptcord: Processing NEW user join request");
+                
+                if (
+                    encryptcordGroupMembers[
+                        UserStore.getCurrentUser().id
+                    ]?.child
+                ) {
+                    console.log("Encryptcord: Already has child, ignoring join");
+                    return;
+                }
+                
+                const hasGroup = await DataStore.get("encryptcordGroup");
+                console.log("Encryptcord: Has group:", hasGroup);
+                
+                if (!hasGroup) {
+                    console.log("Encryptcord: No group found, ignoring join");
+                    return;
+                }
+                
+                const groupChannel = await DataStore.get("encryptcordChannelId");
+                console.log("Encryptcord: Group channel:", groupChannel, "Message channel:", message.channel_id);
+                
+                if (groupChannel !== message.channel_id) {
+                    console.log("Encryptcord: Channel mismatch, ignoring join");
+                    return;
+                }
+                
+                const sender = await UserUtils.getUser(
+                    message.author.id
+                ).catch(() => null);
+                if (!sender) return;
+                
+                // Extract public key from code block
+                const keyMatch = actualContent.match(/```([\s\S]*?)```/);
+                if (!keyMatch) return;
+                
+                const userKey = keyMatch[1].trim();
+                await handleJoin(
+                    sender.id,
+                    userKey,
+                    encryptcordGroupMembers
+                );
+                return;
+            }
+            
+            // Handle messages from existing group members
             if (
-                !Object.keys(encryptcordGroupMembers).some(
+                Object.keys(encryptcordGroupMembers).some(
                     key => key === message.author.id
                 )
             ) {
-                const messageContent = actualContent.toLowerCase().trim();
-                const firstLine = messageContent.split('\n')[0]?.trim();
-                
-                console.log("Encryptcord: Received message:", { firstLine, channelId, authorId: message.author.id });
-                
-                if (firstLine === "groupdata") {
                     try {
                         const response = await fetch(
                             message.attachments[0].url
@@ -272,48 +331,6 @@ export default definePlugin({
                     } catch (error) {
                         console.error("Error handling group data:", error);
                     }
-                } else if (firstLine === "join") {
-                    console.log("Encryptcord: Processing join request");
-                    
-                    if (
-                        encryptcordGroupMembers[
-                            UserStore.getCurrentUser().id
-                        ]?.child
-                    ) {
-                        console.log("Encryptcord: Already has child, ignoring join");
-                        return;
-                    }
-                    
-                    const hasGroup = await DataStore.get("encryptcordGroup");
-                    console.log("Encryptcord: Has group:", hasGroup);
-                    
-                    if (!hasGroup) {
-                        console.log("Encryptcord: No group found, ignoring join");
-                        return;
-                    }
-                    
-                    const groupChannel = await DataStore.get("encryptcordChannelId");
-                    console.log("Encryptcord: Group channel:", groupChannel, "Message channel:", message.channel_id);
-                    
-                    if (groupChannel !== message.channel_id) {
-                        console.log("Encryptcord: Channel mismatch, ignoring join");
-                        return;
-                    }
-                    const sender = await UserUtils.getUser(
-                        message.author.id
-                    ).catch(() => null);
-                    if (!sender) return;
-                    
-                    // Extract public key from code block
-                    const keyMatch = actualContent.match(/```([\s\S]*?)```/);
-                    if (!keyMatch) return;
-                    
-                    const userKey = keyMatch[1].trim();
-                    await handleJoin(
-                        sender.id,
-                        userKey,
-                        encryptcordGroupMembers
-                    );
                 }
                 return;
             }
