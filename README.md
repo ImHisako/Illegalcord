@@ -19,7 +19,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - EnableStereo
 - BiggerFileUpload
 - Stalker : (https://github.com/Reycko/EquicordPlugins/tree/main/stalker) With a modded version by me
-- Encryptcord : https://github.com/Inbestigator/encryptcord
+- Securecord (AES 256 on messages)
 
 ## Installing Illegalcord
 
