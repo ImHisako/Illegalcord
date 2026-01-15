@@ -342,15 +342,15 @@ const settings = definePluginSettings({
 });
 
 export default definePlugin({
-    name: "Securecord Opossum",
+    name: "SecurecordOpossum",
     description: "Enhanced AES-256 end-to-end encryption for Discord with BetterOpossum improvements. Share the same password with other users to communicate securely.",
-    authors: [Devs.Ven, { name: "irritably", id: 928787166916640838n }],
+    authors: [{ name: "irritably", id: 928787166916640838n }],
     settings,
 
     start() {
         // Register commands for enabling/disabling encryption
         registerCommand({
-            name: "securecord",
+            name: "securecord Opossum",
             description: "Manage Securecord Opossum encryption",
             inputType: ApplicationCommandInputType.BUILT_IN_TEXT,
             options: [
@@ -500,4 +500,5 @@ export default definePlugin({
             }
         },
     }
+
 });
