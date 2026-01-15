@@ -5,10 +5,11 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
+import { sendBotMessage } from "@api/Commands";
 import { addMessagePreSendListener, removeMessagePreSendListener, MessageSendListener } from "@api/MessageEvents";
-import { ApplicationCommandInputType, findOption, registerCommand, sendBotMessage, unregisterCommand } from "@api/Commands";
+import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
 import { Devs } from "@utils/constants";
-import definePlugin, { OptionType } from "@utils/types";
+import definePlugin, { IconComponent, OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
 
 interface IMessageCreate {
@@ -321,6 +322,68 @@ class BetterOpossumCipher {
 // Global cipher instance
 const cipher = new BetterOpossumCipher();
 
+// SVG icons for the button
+type IconProps = {
+    height?: number;
+    width?: number;
+    className?: string;
+};
+
+const EncryptionEnabledIcon: IconComponent = ({ height = 20, width = 20, className }: IconProps) => {
+    return (
+        <svg
+            width={width}
+            height={height}
+            viewBox="0 0 24 24"
+            className={className}
+        >
+            <path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM8.9 6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2H8.9V6z" />
+        </svg>
+    );
+};
+
+const EncryptionDisabledIcon: IconComponent = ({ height = 20, width = 20, className }: IconProps) => {
+    return (
+        <svg
+            width={width}
+            height={height}
+            viewBox="0 0 24 24"
+            className={className}
+        >
+            <path fill="currentColor" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+        </svg>
+    );
+};
+
+// Chatbar button
+const EncryptionToggleButton: ChatBarButtonFactory = ({ channel, type }) => {
+    const { enabled } = settings.use(["enabled"]);
+
+    const validChat = ["normal", "sidebar"].some(x => type.analyticsName === x);
+
+    if (!validChat) return null;
+
+    return (
+        <ChatBarButton
+            tooltip={enabled ? "Disable Encryption" : "Enable Encryption"}
+            onClick={() => {
+                const newValue = !enabled;
+                settings.store.enabled = newValue;
+
+                // Show confirmation
+                sendBotMessage(
+                    channel?.id ?? "",
+                    {
+                        content: `🔐 Encryption ${newValue ? "enabled" : "disabled"}!`
+                    }
+                );
+            }}
+        >
+            {enabled ? <EncryptionEnabledIcon /> : <EncryptionDisabledIcon />}
+        </ChatBarButton>
+    );
+};
+
 // Plugin settings definition
 const settings = definePluginSettings({
     encryptionPassword: {
@@ -346,56 +409,11 @@ export default definePlugin({
     description: "Enhanced AES-256 end-to-end encryption for Discord with BetterOpossum improvements. Share the same password with other users to communicate securely.",
     authors: [{ name: "irritably", id: 928787166916640838n }],
     settings,
+    chatBarButton: {
+        render: EncryptionToggleButton
+    },
 
     start() {
-        // Register commands for enabling/disabling encryption
-        registerCommand({
-            name: "securecord Opossum",
-            description: "Manage Securecord Opossum encryption",
-            inputType: ApplicationCommandInputType.BUILT_IN_TEXT,
-            options: [
-                {
-                    name: "action",
-                    description: "Enable or disable encryption",
-                    type: ApplicationCommandInputType.BUILT_IN_TEXT,
-                    required: true,
-                    choices: [
-                        { name: "enable", value: "enable" },
-                        { name: "disable", value: "disable" }
-                    ]
-                }
-            ],
-            execute: async (args, ctx) => {
-                const action = findOption(args, "action", "");
-                
-                if (action === "enable") {
-                    if (!settings.store.encryptionPassword) {
-                        sendBotMessage(ctx.channel.id, {
-                            content: "❌ Please set an encryption password in plugin settings first!"
-                        });
-                        return;
-                    }
-                    
-                    settings.store.enabled = true;
-                    sendBotMessage(ctx.channel.id, {
-                        content: "🔐 Securecord Opossum encryption enabled!"
-                    });
-                    
-                    if (settings.store.enableLogging) {
-                        console.log("Securecord Opossum: Encryption enabled");
-                    }
-                } else if (action === "disable") {
-                    settings.store.enabled = false;
-                    sendBotMessage(ctx.channel.id, {
-                        content: "🔓 Securecord Opossum encryption disabled!"
-                    });
-                    
-                    if (settings.store.enableLogging) {
-                        console.log("Securecord Opossum: Encryption disabled");
-                    }
-                }
-            }
-        });
 
         // Add listener to encrypt messages before sending
         const listener: MessageSendListener = async (_, message) => {
@@ -429,9 +447,6 @@ export default definePlugin({
         if ((this as any)._listener) {
             removeMessagePreSendListener((this as any)._listener);
         }
-        
-        // Unregister commands
-        unregisterCommand("securecord");
 
         console.log("Securecord Opossum: Plugin stopped");
     },
