@@ -357,18 +357,39 @@ const EncryptionDisabledIcon: IconComponent = ({ height = 20, width = 20, classN
 
 // Chatbar button
 const EncryptionToggleButton: ChatBarButtonFactory = ({ channel, type }) => {
-    const { enabled } = settings.use(["enabled"]);
+    const { pluginActivated, encryptionEnabled } = settings.use(["pluginActivated", "encryptionEnabled"]);
 
     const validChat = ["normal", "sidebar"].some(x => type.analyticsName === x);
 
     if (!validChat) return null;
 
+    // Only show button when plugin is activated
+    if (!pluginActivated) {
+        return (
+            <ChatBarButton
+                tooltip="Activate Securecord Opossum Plugin"
+                onClick={() => {
+                    settings.store.pluginActivated = true;
+                    // Show confirmation
+                    sendBotMessage(
+                        channel?.id ?? "",
+                        {
+                            content: "🔐 Securecord Opossum plugin activated! Click again to toggle encryption."
+                        }
+                    );
+                }}
+            >
+                <EncryptionDisabledIcon />
+            </ChatBarButton>
+        );
+    }
+
     return (
         <ChatBarButton
-            tooltip={enabled ? "Disable Encryption" : "Enable Encryption"}
+            tooltip={encryptionEnabled ? "Disable Encryption" : "Enable Encryption"}
             onClick={() => {
-                const newValue = !enabled;
-                settings.store.enabled = newValue;
+                const newValue = !encryptionEnabled;
+                settings.store.encryptionEnabled = newValue;
 
                 // Show confirmation
                 sendBotMessage(
@@ -379,22 +400,27 @@ const EncryptionToggleButton: ChatBarButtonFactory = ({ channel, type }) => {
                 );
             }}
         >
-            {enabled ? <EncryptionEnabledIcon /> : <EncryptionDisabledIcon />}
+            {encryptionEnabled ? <EncryptionEnabledIcon /> : <EncryptionDisabledIcon />}
         </ChatBarButton>
     );
 };
 
 // Plugin settings definition
 const settings = definePluginSettings({
+    pluginActivated: {
+        type: OptionType.BOOLEAN,
+        description: "Activate/deactivate the Securecord Opossum plugin",
+        default: false
+    },
     encryptionPassword: {
         type: OptionType.STRING,
         description: "AES-256 encryption password (shared with other users)",
         default: "",
         placeholder: "Enter shared password..."
     },
-    enabled: {
+    encryptionEnabled: {
         type: OptionType.BOOLEAN,
-        description: "Enable/disable encryption globally",
+        description: "Enable/disable message encryption",
         default: false
     },
     enableLogging: {
@@ -417,7 +443,7 @@ export default definePlugin({
 
         // Add listener to encrypt messages before sending
         const listener: MessageSendListener = async (_, message) => {
-            if (settings.store.enabled && settings.store.encryptionPassword) {
+            if (settings.store.pluginActivated && settings.store.encryptionEnabled && settings.store.encryptionPassword) {
                 // Encrypt message only if not already encrypted
                 if (!message.content.startsWith("🔒ENCRYPTED:") && !message.content.endsWith(":ENDLOCK")) {
                     try {
