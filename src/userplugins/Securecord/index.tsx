@@ -186,7 +186,7 @@ const settings = definePluginSettings({
 export default definePlugin({
     name: "Securecord",
     description: "AES-256 end-to-end encryption for Discord. Share the same password with other users to communicate securely.",
-    authors: [{ name: "irritably", id: 928787166916640838 }],
+    authors: [{ name: "irritably", id: 928787166916640838n }],
     settings,
     chatBarButton: {
         render: EncryptionToggleButton
@@ -294,6 +294,7 @@ export default definePlugin({
         console.log("Securecord: Plugin stopped");
     }
 });
+
 
 
 
