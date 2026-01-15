@@ -20,6 +20,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - BiggerFileUpload
 - Stalker : (https://github.com/Reycko/EquicordPlugins/tree/main/stalker) With a modded version by me
 - Securecord (AES 256 on messages)
+- Securecord Opossum (Advanced post-quantum symmetric encryption algorithm inspired by AES with 4096 bits of block size, key, and 512 bits of IV https://github.com/ZygoteCode/BetterOpossum)
 
 ## Installing Illegalcord
 
