@@ -24,6 +24,9 @@ export function getPluginTarget(filePath) {
     const pathParts = filePath.split(/[/\\]/);
     if (/^index\.tsx?$/.test(pathParts.at(-1))) pathParts.pop();
 
+    // Handle case where all parts were popped (e.g., filePath was "index.ts" or "index.tsx")
+    if (pathParts.length === 0) return null;
+
     const identifier = pathParts.at(-1).replace(/\.tsx?$/, "");
     const identiferBits = identifier.split(".");
     return identiferBits.length === 1 ? null : identiferBits.at(-1);
