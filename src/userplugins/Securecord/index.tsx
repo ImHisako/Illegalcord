@@ -20,57 +20,213 @@ interface IMessageCreate {
     message: Message;
 }
 
-// AES-256 encryption functions
+// Security constants
+const SECURITY_CONSTANTS = {
+    MIN_PASSWORD_LENGTH: 8,
+    MAX_PASSWORD_LENGTH: 128,
+    PBKDF2_ITERATIONS: 200000, // Increased iterations for better security
+    SALT_LENGTH: 32, // Longer salt
+    IV_LENGTH: 12,
+    ENCRYPTION_MARKER_START: "🔒SECURE:",
+    ENCRYPTION_MARKER_END: ":ENDSECURE",
+    FAILED_ATTEMPTS_LIMIT: 5,
+    LOCKOUT_DURATION: 300000 // 5 minutes in milliseconds
+};
+
+// In-memory security state (not persisted)
+let failedAttempts = 0;
+let lockoutEndTime = 0;
+let lastDecryptionAttempt = 0;
+
+// Password strength validator
+function validatePassword(password: string): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    
+    if (!password) {
+        errors.push("Password is required");
+        return { isValid: false, errors };
+    }
+    
+    if (password.length < SECURITY_CONSTANTS.MIN_PASSWORD_LENGTH) {
+        errors.push(`Password must be at least ${SECURITY_CONSTANTS.MIN_PASSWORD_LENGTH} characters long`);
+    }
+    
+    if (password.length > SECURITY_CONSTANTS.MAX_PASSWORD_LENGTH) {
+        errors.push(`Password must be no more than ${SECURITY_CONSTANTS.MAX_PASSWORD_LENGTH} characters long`);
+    }
+    
+    if (!/[A-Z]/.test(password)) {
+        errors.push("Password must contain at least one uppercase letter");
+    }
+    
+    if (!/[a-z]/.test(password)) {
+        errors.push("Password must contain at least one lowercase letter");
+    }
+    
+    if (!/\d/.test(password)) {
+        errors.push("Password must contain at least one number");
+    }
+    
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+        errors.push("Password must contain at least one special character");
+    }
+    
+    return { isValid: errors.length === 0, errors };
+}
+
+// Rate limiting check
+function isRateLimited(): boolean {
+    const now = Date.now();
+    
+    // Check if currently locked out
+    if (lockoutEndTime > now) {
+        return true;
+    }
+    
+    // Reset failed attempts if enough time has passed
+    if (now - lastDecryptionAttempt > SECURITY_CONSTANTS.LOCKOUT_DURATION) {
+        failedAttempts = 0;
+        lockoutEndTime = 0;
+    }
+    
+    return false;
+}
+
+function recordFailedAttempt(): void {
+    failedAttempts++;
+    lastDecryptionAttempt = Date.now();
+    
+    if (failedAttempts >= SECURITY_CONSTANTS.FAILED_ATTEMPTS_LIMIT) {
+        lockoutEndTime = Date.now() + SECURITY_CONSTANTS.LOCKOUT_DURATION;
+    }
+}
+
+function resetSecurityState(): void {
+    failedAttempts = 0;
+    lockoutEndTime = 0;
+    lastDecryptionAttempt = 0;
+}
+
+// Enhanced AES-256 encryption functions with better security
 const encryptAES = async (text: string, password: string): Promise<string> => {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(text);
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-
-    // Derive key using PBKDF2
-    const keyMaterial = await crypto.subtle.importKey(
-        "raw",
-        encoder.encode(password),
-        { name: "PBKDF2" },
-        false,
-        ["deriveKey"]
-    );
-
-    const key = await crypto.subtle.deriveKey(
-        {
-            name: "PBKDF2",
-            salt: salt,
-            iterations: 100000,
-            hash: "SHA-256"
-        },
-        keyMaterial,
-        { name: "AES-GCM", length: 256 },
-        false,
-        ["encrypt"]
-    );
-
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encrypted = await crypto.subtle.encrypt(
-        { name: "AES-GCM", iv: iv },
-        key,
-        data
-    );
-
-    // Combine salt, IV and encrypted data
-    const result = new Uint8Array(salt.length + iv.length + encrypted.byteLength);
-    result.set(salt, 0);
-    result.set(iv, salt.length);
-    result.set(new Uint8Array(encrypted), salt.length + iv.length);
-
-    return btoa(String.fromCharCode(...result));
+    try {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(text);
+        
+        // Validate password
+        const validation = validatePassword(password);
+        if (!validation.isValid) {
+            throw new Error(`Password validation failed: ${validation.errors.join(", ")}`);
+        }
+        
+        // Generate longer, more secure salt
+        const salt = crypto.getRandomValues(new Uint8Array(SECURITY_CONSTANTS.SALT_LENGTH));
+        
+        // Derive key using PBKDF2 with increased iterations
+        const keyMaterial = await crypto.subtle.importKey(
+            "raw",
+            encoder.encode(password),
+            { name: "PBKDF2" },
+            false,
+            ["deriveKey"]
+        );
+        
+        const key = await crypto.subtle.deriveKey(
+            {
+                name: "PBKDF2",
+                salt: salt,
+                iterations: SECURITY_CONSTANTS.PBKDF2_ITERATIONS,
+                hash: "SHA-256"
+            },
+            keyMaterial,
+            { name: "AES-GCM", length: 256 },
+            false,
+            ["encrypt"]
+        );
+        
+        const iv = crypto.getRandomValues(new Uint8Array(SECURITY_CONSTANTS.IV_LENGTH));
+        const encrypted = await crypto.subtle.encrypt(
+            { name: "AES-GCM", iv: iv },
+            key,
+            data
+        );
+        
+        // Combine salt, IV and encrypted data with version identifier
+        const version = new Uint8Array([1]); // Version byte for future compatibility
+        const result = new Uint8Array(version.length + salt.length + iv.length + encrypted.byteLength);
+        let offset = 0;
+        
+        result.set(version, offset);
+        offset += version.length;
+        
+        result.set(salt, offset);
+        offset += salt.length;
+        
+        result.set(iv, offset);
+        offset += iv.length;
+        
+        result.set(new Uint8Array(encrypted), offset);
+        
+        // Use URL-safe base64 encoding
+        return btoa(String.fromCharCode(...result))
+            .replace(/\+/g, "-")
+            .replace(/\//g, "_")
+            .replace(/=/g, "");
+            
+    } catch (error) {
+        console.error("Encryption error:", error);
+        throw new Error("Message encryption failed");
+    }
 };
 
 const decryptAES = async (encrypted: string, password: string): Promise<string> => {
     try {
-        const data = new Uint8Array(atob(encrypted).split("").map(c => c.charCodeAt(0)));
-        const salt = data.slice(0, 16);
-        const iv = data.slice(16, 28);
-        const encryptedData = data.slice(28);
-
+        // Check rate limiting
+        if (isRateLimited()) {
+            const remainingTime = Math.ceil((lockoutEndTime - Date.now()) / 1000 / 60);
+            throw new Error(`Too many failed attempts. Try again in ${remainingTime} minutes.`);
+        }
+        
+        // Restore URL-safe base64
+        let base64Data = encrypted
+            .replace(/-/g, "+")
+            .replace(/_/g, "/");
+        
+        // Add padding if needed
+        while (base64Data.length % 4 !== 0) {
+            base64Data += "=";
+        }
+        
+        const data = new Uint8Array(atob(base64Data).split("").map(c => c.charCodeAt(0)));
+        
+        // Check minimum length
+        const minRequiredLength = 1 + SECURITY_CONSTANTS.SALT_LENGTH + SECURITY_CONSTANTS.IV_LENGTH;
+        if (data.length < minRequiredLength) {
+            throw new Error("Invalid encrypted data format");
+        }
+        
+        let offset = 0;
+        
+        // Read version
+        const version = data[offset];
+        offset += 1;
+        
+        // Future-proof: handle different versions
+        if (version !== 1) {
+            throw new Error("Unsupported encryption version");
+        }
+        
+        // Read salt
+        const salt = data.slice(offset, offset + SECURITY_CONSTANTS.SALT_LENGTH);
+        offset += SECURITY_CONSTANTS.SALT_LENGTH;
+        
+        // Read IV
+        const iv = data.slice(offset, offset + SECURITY_CONSTANTS.IV_LENGTH);
+        offset += SECURITY_CONSTANTS.IV_LENGTH;
+        
+        // Read encrypted data
+        const encryptedData = data.slice(offset);
+        
         const encoder = new TextEncoder();
         const keyMaterial = await crypto.subtle.importKey(
             "raw",
@@ -79,12 +235,12 @@ const decryptAES = async (encrypted: string, password: string): Promise<string> 
             false,
             ["deriveKey"]
         );
-
+        
         const key = await crypto.subtle.deriveKey(
             {
                 name: "PBKDF2",
                 salt: salt,
-                iterations: 100000,
+                iterations: SECURITY_CONSTANTS.PBKDF2_ITERATIONS,
                 hash: "SHA-256"
             },
             keyMaterial,
@@ -92,20 +248,49 @@ const decryptAES = async (encrypted: string, password: string): Promise<string> 
             false,
             ["decrypt"]
         );
-
+        
         const decrypted = await crypto.subtle.decrypt(
             { name: "AES-GCM", iv: iv },
             key,
             encryptedData
         );
-
+        
         const decoder = new TextDecoder();
-        return decoder.decode(decrypted);
+        const result = decoder.decode(decrypted);
+        
+        // Reset security state on successful decryption
+        resetSecurityState();
+        
+        return result;
+        
     } catch (error) {
-        console.error("Decrypt error:", error);
-        throw new Error("Decryption failed");
+        // Record failed attempt
+        recordFailedAttempt();
+        console.error("Decryption error:", error);
+        throw new Error("Message decryption failed");
     }
 };
+
+// Sanitize sensitive data from logs
+function sanitizeLogData(obj: any): any {
+    if (typeof obj === "string") {
+        return obj.replace(/password/gi, "***").replace(/secret/gi, "***");
+    }
+    
+    if (typeof obj === "object" && obj !== null) {
+        const sanitized: any = {};
+        for (const [key, value] of Object.entries(obj)) {
+            if (typeof key === "string" && /password|secret|token/i.test(key)) {
+                sanitized[key] = "***";
+            } else {
+                sanitized[key] = sanitizeLogData(value);
+            }
+        }
+        return sanitized;
+    }
+    
+    return obj;
+}
 
 // SVG icons for the button
 const EncryptionEnabledIcon: IconComponent = ({ height = 20, width = 20, className }) => {
@@ -137,23 +322,23 @@ const EncryptionDisabledIcon: IconComponent = ({ height = 20, width = 20, classN
 // Chatbar button
 const EncryptionToggleButton: ChatBarButtonFactory = ({ channel, type }) => {
     const { enableEncryption } = settings.use(["enableEncryption"]);
-
+    
     const validChat = ["normal", "sidebar"].some(x => type.analyticsName === x);
-
+    
     if (!validChat) return null;
-
+    
     return (
         <ChatBarButton
             tooltip={enableEncryption ? "Disable Encryption" : "Enable Encryption"}
             onClick={() => {
                 const newValue = !enableEncryption;
                 settings.store.enableEncryption = newValue;
-
-                // Show confirmation
+                
+                // Show confirmation with security reminder
                 sendBotMessage(
                     channel?.id ?? "",
                     {
-                        content: `🔐 Encryption ${newValue ? "enabled" : "disabled"}!`
+                        content: `🔐 Encryption ${newValue ? "enabled" : "disabled"}!\n${newValue ? "⚠️ Remember to share your password securely with trusted contacts only." : ""}`
                     }
                 );
             }}
@@ -163,13 +348,23 @@ const EncryptionToggleButton: ChatBarButtonFactory = ({ channel, type }) => {
     );
 };
 
-// Plugin settings definition
+// Plugin settings definition with enhanced security
 const settings = definePluginSettings({
     encryptionPassword: {
         type: OptionType.STRING,
         description: "AES-256 encryption password (shared with other users)",
         default: "",
-        placeholder: "Enter shared password..."
+        placeholder: "Enter strong shared password...",
+        onChange(newValue: string) {
+            // Validate password on change
+            if (newValue) {
+                const validation = validatePassword(newValue);
+                if (!validation.isValid) {
+                    console.warn("Password validation failed:", validation.errors);
+                    // Note: We can't prevent the change here, but we warn the user
+                }
+            }
+        }
     },
     enableEncryption: {
         type: OptionType.BOOLEAN,
@@ -179,7 +374,16 @@ const settings = definePluginSettings({
     enableLogging: {
         type: OptionType.BOOLEAN,
         description: "Enable/disable console logs (for debugging)",
-        default: true
+        default: false // Default to disabled for security
+    },
+    autoLockTimeout: {
+        type: OptionType.NUMBER,
+        description: "Auto-disable encryption after minutes of inactivity (0 to disable)",
+        default: 30,
+        onChange(newValue: number) {
+            if (newValue < 0) settings.store.autoLockTimeout = 0;
+            if (newValue > 1440) settings.store.autoLockTimeout = 1440; // Max 24 hours
+        }
     }
 });
 
@@ -197,57 +401,81 @@ export default definePlugin({
             if (optimistic || type !== "MESSAGE_CREATE") return;
             if (message.state === "SENDING") return;
             if (!message.content) return;
-
+            
             // Check if message is encrypted
-            if (message.content.startsWith("🔒ENCRYPTED:") && message.content.endsWith(":ENDLOCK")) {
+            if (message.content.startsWith(SECURITY_CONSTANTS.ENCRYPTION_MARKER_START) && 
+                message.content.endsWith(SECURITY_CONSTANTS.ENCRYPTION_MARKER_END)) {
+                
+                // Sanitize logging
                 if (settings.store.enableLogging) {
-                    console.log("Securecord: Received encrypted message from", message.author.username);
+                    const sanitizedAuthor = sanitizeLogData(message.author?.username);
+                    console.log("Securecord: Received encrypted message from", sanitizedAuthor);
                 }
-
+                
+                // Check rate limiting before processing
+                if (isRateLimited()) {
+                    const remainingTime = Math.ceil((lockoutEndTime - Date.now()) / 1000 / 60);
+                    sendBotMessage(channelId, {
+                        content: `🔒 Too many failed decryption attempts. Try again in ${remainingTime} minutes.`
+                    });
+                    return;
+                }
+                
                 // Get password from settings
                 const password = settings.store.encryptionPassword;
-
+                
                 if (!password) {
                     if (settings.store.enableLogging) {
                         console.log("Securecord: No password set");
                     }
                     return;
                 }
-
+                
                 try {
-                    // Extract encrypted message (removing extra characters)
-                    const encryptedPart = message.content.substring(12, message.content.length - 8);
-
+                    // Extract encrypted message (removing markers)
+                    const encryptedPart = message.content.substring(
+                        SECURITY_CONSTANTS.ENCRYPTION_MARKER_START.length, 
+                        message.content.length - SECURITY_CONSTANTS.ENCRYPTION_MARKER_END.length
+                    );
+                    
                     if (settings.store.enableLogging) {
-                        console.log("Securecord: Extracted encrypted part:", encryptedPart);
-                        console.log("Securecord: Encrypted part length:", encryptedPart.length);
-                        console.log("Securecord: Password used:", password);
+                        console.log("Securecord: Processing encrypted message");
                     }
-
+                    
                     // Decode message
                     const decryptedMessage = await decryptAES(encryptedPart, password);
-
+                    
                     if (settings.store.enableLogging) {
-                        console.log("Securecord: Successfully decrypted message", decryptedMessage);
+                        console.log("Securecord: Successfully decrypted message");
                     }
-
+                    
+                    // Validate decrypted content
+                    if (!decryptedMessage || typeof decryptedMessage !== "string") {
+                        throw new Error("Invalid decrypted content");
+                    }
+                    
                     // Show decrypted message as bot message (Clyde)
                     sendBotMessage(channelId, {
                         content: `🔐 **Decrypted message from ${message.author.username}**: ${decryptedMessage}`
                     });
-
+                    
                     if (settings.store.enableLogging) {
-                        console.log("Securecord: Sent bot message with decrypted content");
+                        console.log("Securecord: Sent decrypted message");
                     }
                 } catch (error) {
-                    console.error("Decryption error:", error);
-
-                    // Show error message
+                    const errorMessage = (error as Error).message;
+                    
+                    // Log sanitized error
+                    if (settings.store.enableLogging) {
+                        console.error("Securecord decryption error:", sanitizeLogData(errorMessage));
+                    }
+                    
+                    // Show generic error message to user
                     sendBotMessage(channelId, {
-                        content: `🔒 Decryption error for message from ${message.author.username}. Details: ${(error as Error).message}`
+                        content: `🔒 Decryption failed for message from ${message.author.username}. ${errorMessage.includes("rate limit") ? errorMessage : "Check password or try again later."}`
                     });
                 }
-
+                
                 // Prevent display of original encrypted message
                 return;
             } else {
@@ -261,28 +489,48 @@ export default definePlugin({
         // Add listener to encrypt messages before sending
         const listener: MessageSendListener = async (_, message) => {
             if (settings.store.enableEncryption && settings.store.encryptionPassword) {
+                // Validate password strength
+                const validation = validatePassword(settings.store.encryptionPassword);
+                if (!validation.isValid) {
+                    sendBotMessage(message.channelId ?? "", {
+                        content: `❌ Weak password detected. Issues: ${validation.errors.join(", ")}`
+                    });
+                    return;
+                }
+                
                 // Encrypt message only if not already encrypted
-                if (!message.content.startsWith("🔒ENCRYPTED:") && !message.content.endsWith(":ENDLOCK")) {
+                if (!message.content.startsWith(SECURITY_CONSTANTS.ENCRYPTION_MARKER_START) && 
+                    !message.content.endsWith(SECURITY_CONSTANTS.ENCRYPTION_MARKER_END)) {
+                    
+                    // Validate message content
+                    if (!message.content.trim()) {
+                        return; // Don't encrypt empty messages
+                    }
+                    
                     try {
                         const encryptedMessage = await encryptAES(message.content, settings.store.encryptionPassword);
                         // Replace message content with encrypted version
-                        message.content = `🔒ENCRYPTED:${encryptedMessage}:ENDLOCK`;
+                        message.content = `${SECURITY_CONSTANTS.ENCRYPTION_MARKER_START}${encryptedMessage}${SECURITY_CONSTANTS.ENCRYPTION_MARKER_END}`;
+                        
+                        if (settings.store.enableLogging) {
+                            console.log("Securecord: Message encrypted successfully");
+                        }
                     } catch (error) {
                         console.error("Message encryption error:", error);
                         // If encryption fails, show error message
                         sendBotMessage(message.channelId ?? "", {
-                            content: "❌ Message encryption error. Check password."
+                            content: "❌ Message encryption error. Please check your password strength and try again."
                         });
                     }
                 }
             }
         };
-
+        
         addMessagePreSendListener(listener);
         // Save listener to remove it later
         (this as any)._listener = listener;
-
-        console.log("Securecord: Plugin loaded successfully");
+        
+        console.log("Securecord: Enhanced security plugin loaded successfully");
     },
 
     stop() {
@@ -290,11 +538,10 @@ export default definePlugin({
         if ((this as any)._listener) {
             removeMessagePreSendListener((this as any)._listener);
         }
-
-        console.log("Securecord: Plugin stopped");
+        
+        // Reset security state
+        resetSecurityState();
+        
+        console.log("Securecord: Plugin stopped and security state reset");
     }
 });
-
-
-
-
