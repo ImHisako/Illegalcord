@@ -22,6 +22,17 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - BadgeSelector (https://github.com/002-sans/VencordPlugins/tree/b8c7c98a50c0700f7389b0484e5659fe5ec0f99e/BadgesSelector)
 - Securecord (AES 256 on messages)
 - Securecord Opossum (Advanced post-quantum symmetric encryption algorithm inspired by AES with 4096 bits of block size, key, and 512 bits of IV https://github.com/ZygoteCode/BetterOpossum)
+- DisableAnimations
+- BoosterCount
+- NoMirroredCam
+- OpenOptimizer
+- Vcjumkoptimizer
+- 2FA Hider
+- DontLimitMe
+- GateawayLogger
+- InviteDefaults
+- VencordCustomScreenshare
+- VencordPerf
 
 ## Installing Illegalcord
 
