@@ -117,6 +117,44 @@ export default definePlugin({
       }
     };
 
+    // Domains to exclude from DNS interception (whitelist)
+    const EXCLUDED_DOMAINS = [
+      // OAuth and authentication services
+      "discord.com/api/v9/oauth2",
+      "discord.com/api/oauth2",
+      "discordapp.com/api/oauth2",
+      // Cloud sync services
+      "discord.com/api/v9/users/@me/settings-proto",
+      "discord.com/api/v9/users/@me/applications-role-connection",
+      // Critical API endpoints
+      "discord.com/api/v9/auth",
+      "discord.com/api/v9/verify",
+      // CDN for critical assets
+      "cdn.discordapp.com/attachments",
+      "media.discordapp.net/attachments"
+    ];
+
+    // Check if URL should be excluded from DNS modification
+    function shouldExcludeURL(url) {
+      const urlString = url.toString().toLowerCase();
+      
+      // Check against excluded patterns
+      for (const pattern of EXCLUDED_DOMAINS) {
+        if (urlString.includes(pattern)) {
+          log.verbose(`Excluding URL from DNS modification: ${url.hostname}${url.pathname}`);
+          return true;
+        }
+      }
+      
+      // Exclude OAuth endpoints specifically
+      if (url.pathname.includes("/oauth2/") || url.pathname.includes("/auth/")) {
+        log.verbose(`Excluding OAuth endpoint: ${url.hostname}${url.pathname}`);
+        return true;
+      }
+      
+      return false;
+    }
+
     // Enhanced DNS record lookup with caching
     function getDNSRecord(hostname) {
       // Check cache first
@@ -149,8 +187,10 @@ export default definePlugin({
           // Increment request counter
           this.statistics.totalRequests++;
 
-          // Check if this is a Discord-related hostname
-          if (url.hostname.includes("discord") && !url.hostname.includes("mullvad")) {
+          // Check if this is a Discord-related hostname AND not excluded
+          if (url.hostname.includes("discord") && 
+              !url.hostname.includes("mullvad") && 
+              !shouldExcludeURL(url)) {
             const ip = getDNSRecord.call(this, url.hostname);
 
             if (ip) {
@@ -170,7 +210,11 @@ export default definePlugin({
               log.warn(`No DNS record found for ${url.hostname}`);
             }
           } else {
-            log.verbose(`Skipping non-Discord host: ${url.hostname}`);
+            if (shouldExcludeURL(url)) {
+              log.verbose(`Whitelisted URL skipped: ${url.hostname}${url.pathname}`);
+            } else {
+              log.verbose(`Skipping non-Discord host: ${url.hostname}`);
+            }
           }
 
           // Call original fetch with modified URL
