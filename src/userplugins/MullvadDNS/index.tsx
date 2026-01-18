@@ -9,13 +9,13 @@ import definePlugin from "@utils/types";
 
 // @ts-ignore
 export default definePlugin({
-  name: "MullvadDNSCord",
+  name: "MullvadDNS",
   description: "Force Discord to use Mullvad DNS servers for enhanced privacy",
   authors: [{ name: "Irritably", id: 928787166916640838n }],
 
   start() {
     // Plugin configuration
-    const PLUGIN_NAME = "MullvadDNSCord";
+    const PLUGIN_NAME = "MullvadDNS";
     const VERSION = "1.2.0";
 
     // Mullvad DNS records for Discord services
@@ -98,7 +98,7 @@ export default definePlugin({
     }
 
     // Public API
-    const MullvadDNSCord = {
+    const MullvadDNS = {
       name: PLUGIN_NAME,
       version: VERSION,
       isActive: function() { return isActive; },
@@ -172,18 +172,18 @@ export default definePlugin({
 
     // Auto-start the plugin
     setTimeout(function() {
-      MullvadDNSCord.start();
+      MullvadDNS.start();
     }, 2000);
 
     // Expose API globally
     // @ts-ignore
-    window.MullvadDNSCord = MullvadDNSCord;
+    window.MullvadDNS = MullvadDNS;
 
     log.info(PLUGIN_NAME + " v" + VERSION + " loaded and ready");
   },
 
   stop() {
     // Stop functionality would go here if needed
-    console.log("MullvadDNSCord plugin stopped");
+    console.log("MullvadDNS plugin stopped");
   }
 });
