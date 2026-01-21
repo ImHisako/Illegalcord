@@ -15,7 +15,7 @@ import type { Message } from "@vencord/discord-types";
 import { ApplicationIntegrationType, MessageFlags } from "@vencord/discord-types/enums";
 import { AuthenticationStore, Constants, EditMessageStore, FluxDispatcher, MessageActions, MessageTypeSets, PermissionsBits, PermissionStore, PinActions, RestAPI, showToast, Toasts, WindowStore } from "@webpack/common";
 
-type Modifier = "NONE" | "SHIFT" | "CTRL" | "ALT" | "BACKSPACE";
+type Modifier = "NONE" | "SHIFT" | "CTRL" | "ALT" | "BACKSPACE" | "DELETE";
 type ClickAction = "NONE" | "DELETE" | "COPY_LINK" | "COPY_ID" | "COPY_CONTENT" | "COPY_USER_ID" | "EDIT" | "REPLY" | "REACT" | "OPEN_THREAD" | "OPEN_TAB" | "EDIT_REPLY" | "QUOTE" | "PIN";
 
 const actions: { label: string; value: ClickAction; }[] = [
@@ -65,6 +65,7 @@ const modifiers: { label: string; value: Modifier; }[] = [
 
 const singleClickModifiers: { label: string; value: Modifier; }[] = [
     { label: "Backspace", value: "BACKSPACE" },
+    { label: "Delete", value: "DELETE" },
     ...modifiers
 ];
 
@@ -73,11 +74,13 @@ const keydown = (e: KeyboardEvent) => {
     const mod = modifierFromKey(e);
     if (mod) pressedModifiers.add(mod);
     if (e.key === "Backspace") pressedModifiers.add("BACKSPACE");
+    if (e.key === "Delete") pressedModifiers.add("DELETE");
 };
 const keyup = (e: KeyboardEvent) => {
     const mod = modifierFromKey(e);
     if (mod) pressedModifiers.delete(mod);
     if (e.key === "Backspace") pressedModifiers.delete("BACKSPACE");
+    if (e.key === "Delete") pressedModifiers.delete("DELETE");
 };
 const focusChanged = () => {
     if (!WindowStore.isFocused()) {
@@ -97,6 +100,7 @@ function isModifierPressed(modifier: Modifier): boolean {
 }
 
 let doubleClickTimeout: ReturnType<typeof setTimeout> | null = null;
+let singleClickTimeout: ReturnType<typeof setTimeout> | null = null;
 let pendingDoubleClickAction: (() => void) | null = null;
 
 const settings = definePluginSettings({
@@ -189,11 +193,11 @@ function isMessageReplyable(msg: Message) {
     return MessageTypeSets.REPLYABLE.has(msg.type) && !msg.hasFlag(MessageFlags.EPHEMERAL);
 }
 
-async function toggleReaction(channelId: string, messageId: string, emoji: string, channel: { id: string; }, msg: Message) {
+async function toggleReaction(channelId: string, messageId: string, emoji: string, channel: { id: string; guild_id?: string | null; }, msg: Message) {
     const trimmed = emoji.trim();
     if (!trimmed) return;
 
-    if (!PermissionStore.can(PermissionsBits.ADD_REACTIONS, channel) || !PermissionStore.can(PermissionsBits.READ_MESSAGE_HISTORY, channel)) {
+    if (channel.guild_id && (!PermissionStore.can(PermissionsBits.ADD_REACTIONS, channel) || !PermissionStore.can(PermissionsBits.READ_MESSAGE_HISTORY, channel))) {
         showWarning("Cannot react: Missing permissions");
         return;
     }
@@ -461,10 +465,18 @@ export default definePlugin({
             clearTimeout(doubleClickTimeout);
             doubleClickTimeout = null;
         }
+        if (singleClickTimeout) {
+            clearTimeout(singleClickTimeout);
+            singleClickTimeout = null;
+        }
         pendingDoubleClickAction = null;
     },
 
     onMessageClick(msg, channel, event) {
+        const target = event.target as HTMLElement;
+        if (target.closest('a, button, input, img, [class*="repliedTextPreview"], [class*="threadMessageAccessory"]')) return;
+        if (!target.closest('[class*="message"]')) return;
+
         const myId = AuthenticationStore.getId();
         const isMe = msg.author.id === myId;
         const isDM = channel.isDM();
@@ -486,6 +498,11 @@ export default definePlugin({
         const isDoubleClick = event.detail === 2;
         const isTripleClick = event.detail === 3;
 
+        if (singleClickTimeout) {
+            clearTimeout(singleClickTimeout);
+            singleClickTimeout = null;
+        }
+
         if (isTripleClick) {
             if (doubleClickTimeout) {
                 clearTimeout(doubleClickTimeout);
@@ -499,37 +516,55 @@ export default definePlugin({
             return;
         }
 
-        if (!isDoubleClick) {
-            if (isSingleClick && isModifierPressed(singleClickModifier) && singleClickAction !== "NONE") {
-                executeAction(singleClickAction, msg, channel, event);
-                return;
-            }
-        }
-
-        const executeDoubleClick = () => {
-            if (channel.guild_id && !PermissionStore.can(PermissionsBits.SEND_MESSAGES, channel)) return;
-            if (msg.deleted === true) return;
-            if (doubleClickAction !== "NONE") {
-                executeAction(doubleClickAction, msg, channel, event);
-            }
-        };
-
+        const canDoubleClick = (isModifierPressed(doubleClickModifier) || doubleClickModifier === "NONE") && doubleClickAction !== "NONE";
         const canTripleClick = isModifierPressed(tripleClickModifier) && tripleClickAction !== "NONE";
 
-        if (canTripleClick) {
-            if (doubleClickTimeout) {
-                clearTimeout(doubleClickTimeout);
+        if (isDoubleClick) {
+            if (singleClickTimeout) {
+                clearTimeout(singleClickTimeout);
+                singleClickTimeout = null;
             }
-            pendingDoubleClickAction = executeDoubleClick;
-            doubleClickTimeout = setTimeout(() => {
-                pendingDoubleClickAction?.();
-                pendingDoubleClickAction = null;
-                doubleClickTimeout = null;
-            }, settings.store.clickTimeout);
+
+            const executeDoubleClick = () => {
+                if (channel.guild_id && !PermissionStore.can(PermissionsBits.SEND_MESSAGES, channel)) return;
+                if (msg.deleted === true) return;
+                if (canDoubleClick) {
+                    executeAction(doubleClickAction, msg, channel, event);
+                }
+            };
+
+            if (canTripleClick) {
+                if (doubleClickTimeout) {
+                    clearTimeout(doubleClickTimeout);
+                }
+                pendingDoubleClickAction = executeDoubleClick;
+                doubleClickTimeout = setTimeout(() => {
+                    pendingDoubleClickAction?.();
+                    pendingDoubleClickAction = null;
+                    doubleClickTimeout = null;
+                }, settings.store.clickTimeout);
+            } else {
+                executeDoubleClick();
+            }
             event.preventDefault();
-        } else if (isDoubleClick && (isModifierPressed(doubleClickModifier) || doubleClickModifier === "NONE")) {
-            executeDoubleClick();
-            event.preventDefault();
+            return;
+        }
+
+        if (isSingleClick) {
+            const executeSingleClick = () => {
+                if (isModifierPressed(singleClickModifier) && singleClickAction !== "NONE") {
+                    executeAction(singleClickAction, msg, channel, event);
+                }
+            };
+
+            if (canDoubleClick) {
+                singleClickTimeout = setTimeout(() => {
+                    executeSingleClick();
+                    singleClickTimeout = null;
+                }, settings.store.clickTimeout);
+            } else {
+                executeSingleClick();
+            }
         }
     },
 });

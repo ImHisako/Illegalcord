@@ -63,7 +63,6 @@ const settings = definePluginSettings({
 });
 
 migratePluginSettings("ClipsEnhancements", "TimelessClips");
-migrateSettingsFromPlugin("ClipsEnhancements", "TimelessClips", "clipLength");
 export default definePlugin({
     name: "ClipsEnhancements",
     description: "Add more Clip FPS and duration options, custom clip length, RPC tagging and more",
