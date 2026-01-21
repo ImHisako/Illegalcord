@@ -86,6 +86,17 @@ export default definePlugin({
     messageElementsPool: [] as HTMLElement[],
     renderedMessages: new Map<number, HTMLElement>(),
     optimizationCache: new Map<string, any>(),
+    elementPool: {
+        divs: [] as HTMLElement[],
+        spans: [] as HTMLElement[],
+        containers: [] as HTMLElement[]
+    },
+    virtualScrollState: {
+        visibleRange: { start: 0, end: 0 },
+        totalMessages: 0,
+        containerHeight: 0
+    },
+    intersectionObserver: null as any,
 
     start() {
         console.log("[Hisako's Optimizations] Starting comprehensive performance optimization...");
@@ -225,6 +236,34 @@ export default definePlugin({
             
         } catch (e) {
             console.warn("[Hisako's Optimizations] Failed to optimize resource loading:", e);
+        }
+    },
+
+    setupAnimationOptimization() {
+        if (settings.store.animationReduction <= 0) return;
+        
+        try {
+            // Optimize requestAnimationFrame for reduced animation intensity
+            const originalRAF = window.requestAnimationFrame;
+            const reductionFactor = settings.store.animationReduction / 100;
+            let frameCount = 0;
+            
+            window.requestAnimationFrame = function(callback) {
+                frameCount++;
+                
+                // Skip frames based on reduction setting
+                if (reductionFactor > 0 && frameCount % Math.ceil(1 + reductionFactor * 3) !== 0) {
+                    // Still call the callback but with modified timing
+                    return setTimeout(() => callback(performance.now()), 16 * (1 + reductionFactor));
+                }
+                
+                return originalRAF.call(this, callback);
+            };
+            
+            this.originalMethods.rAF = originalRAF;
+            
+        } catch (e) {
+            console.warn("[Hisako's Optimizations] Failed to optimize animations:", e);
         }
     },
 
