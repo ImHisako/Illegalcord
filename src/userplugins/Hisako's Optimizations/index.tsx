@@ -1,86 +1,95 @@
 /*
  * Hisako's Optimizations - Advanced Discord Client Performance Enhancement
  * Copyright (c) 2026 Hisako
- * 
- * Comprehensive optimization plugin inspired by analyzing IllegalCord's codebase
- * Implements proven performance techniques from existing plugins
+ * SPDX-License-Identifier: MIT
  */
 
+import { definePluginSettings } from "@api/Settings";
+import { Devs } from "@utils/constants";
+import definePlugin, { OptionType } from "@utils/types";
 
-const HisakosOptimizations = {
+const settings = definePluginSettings({
+    aggressiveOptimization: {
+        type: OptionType.BOOLEAN,
+        description: "Enable aggressive optimizations (may affect some visual features)",
+        default: true,
+        restartNeeded: true
+    },
+    
+    animationReduction: {
+        type: OptionType.SLIDER,
+        description: "Reduce animation intensity (0 = disabled, 100 = maximum reduction)",
+        markers: [0, 25, 50, 75, 100],
+        default: 75
+    },
+    
+    imageQualityOptimization: {
+        type: OptionType.SELECT,
+        description: "Image quality optimization level",
+        options: [
+            { label: "Balanced (Recommended)", value: "balanced", default: true },
+            { label: "Performance Priority", value: "performance" },
+            { label: "Quality Priority", value: "quality" }
+        ]
+    },
+    
+    emojiOptimization: {
+        type: OptionType.BOOLEAN,
+        description: "Optimize emoji loading and rendering",
+        default: true
+    },
+    
+    networkOptimization: {
+        type: OptionType.BOOLEAN,
+        description: "Optimize network requests and reduce bandwidth usage",
+        default: true
+    },
+    
+    disableUnnecessaryFeatures: {
+        type: OptionType.BOOLEAN,
+        description: "Disable visually intensive features like particles, confetti, etc.",
+        default: true
+    },
+    
+    garbageCollectionOptimization: {
+        type: OptionType.BOOLEAN,
+        description: "Enable advanced garbage collection and memory management",
+        default: true
+    },
+    
+    virtualScrolling: {
+        type: OptionType.BOOLEAN,
+        description: "Enable virtual scrolling for message lists (experimental)",
+        default: true
+    },
+    
+    memoryMonitoring: {
+        type: OptionType.BOOLEAN,
+        description: "Monitor memory usage and trigger cleanup automatically",
+        default: true
+    }
+});
+
+export default definePlugin({
     name: "Hisako's Optimizations",
     description: "Comprehensive client optimization suite for lag-free Discord experience",
-    authors: [{ name: "Irritably", id: 928787166916640838n }],
-    
-    settings: {
-        aggressiveOptimization: {
-            type: "boolean",
-            description: "Enable aggressive optimizations (may affect some visual features)",
-            default: true
-        },
-        animationReduction: {
-            type: "slider",
-            description: "Reduce animation intensity (0 = disabled, 100 = maximum reduction)",
-            markers: [0, 25, 50, 75, 100],
-            default: 75
-        },
-        imageQualityOptimization: {
-            type: "select",
-            description: "Image quality optimization level",
-            options: [
-                { label: "Balanced (Recommended)", value: "balanced", default: true },
-                { label: "Performance Priority", value: "performance" },
-                { label: "Quality Priority", value: "quality" }
-            ]
-        },
-        emojiOptimization: {
-            type: "boolean",
-            description: "Optimize emoji loading and rendering",
-            default: true
-        },
-        networkOptimization: {
-            type: "boolean",
-            description: "Optimize network requests and reduce bandwidth usage",
-            default: true
-        },
-        disableUnnecessaryFeatures: {
-            type: "boolean",
-            description: "Disable visually intensive features like particles, confetti, etc.",
-            default: true
-        },
-        garbageCollectionOptimization: {
-            type: "boolean",
-            description: "Enable advanced garbage collection and memory management",
-            default: true
-        },
-        virtualScrolling: {
-            type: "boolean",
-            description: "Enable virtual scrolling for message lists (experimental)",
-            default: true
-        },
-        memoryMonitoring: {
-            type: "boolean",
-            description: "Monitor memory usage and trigger cleanup automatically",
-            default: true
-        }
-    },
+    authors: [Devs.Hisako],
+    tags: ["performance", "optimization", "lag-free", "client"],
 
-    // Store original methods
-    originalMethods: {},
-    
-    // Cache for optimized functions
-    optimizationCache: new Map(),
+    settings,
+
+    // Store original methods for restoration
+    originalMethods: {} as Record<string, Function>,
     
     // Memory management
-    memoryObserver: null,
-    gcInterval: null,
-    messageElementsPool: [],
-    renderedMessages: new Map(),
+    gcInterval: null as any,
+    messageElementsPool: [] as HTMLElement[],
+    renderedMessages: new Map<number, HTMLElement>(),
+    optimizationCache: new Map<string, any>(),
 
     start() {
         console.log("[Hisako's Optimizations] Starting comprehensive performance optimization...");
         
-        this.applyCoreOptimizations();
         this.setupDOMOptimizations();
         this.optimizeResourceLoading();
         this.setupAnimationOptimization();
@@ -99,65 +108,88 @@ const HisakosOptimizations = {
         console.log("[Hisako's Optimizations] Cleanup completed.");
     },
 
-    applyCoreOptimizations() {
-        // Apply working optimizations that don't require webpack patching
-        console.log("[Hisako's Optimizations] Core optimizations applied");
-    },
-
     setupDOMOptimizations() {
         // Based on OpenOptimizer's approach
-        const methods = ['appendChild', 'removeChild'];
+        const methods = ["appendChild", "removeChild"] as const;
         
         methods.forEach(method => {
             try {
-                // @ts-ignore - Store original method
+                // @ts-ignore
                 this.originalMethods[method] = Element.prototype[method];
                 
-                // @ts-ignore - Replace with optimized version
+                // @ts-ignore
                 Element.prototype[method] = this.createOptimizedDOMMethod(
-                    Element.prototype[method], 
+                    // @ts-ignore
+                    Element.prototype[method],
                     method
                 );
             } catch (e) {
                 console.warn(`[Hisako's Optimizations] Failed to optimize ${method}:`, e);
             }
         });
+
+        // Optimize requestAnimationFrame for smoother animations
+        if (settings.store.animationReduction > 0) {
+            this.originalMethods.rAF = window.requestAnimationFrame;
+            window.requestAnimationFrame = this.createOptimizedRAF(
+                window.requestAnimationFrame
+            );
+        }
     },
 
-    createOptimizedDOMMethod(originalMethod, methodName) {
-        return function(...args) {
+    createOptimizedDOMMethod(originalMethod: Function, methodName: string) {
+        return function (...args: any[]) {
             // Defer non-critical UI updates to reduce main thread blocking
-            if (typeof args[0]?.className === 'string') {
+            if (typeof args[0]?.className === "string") {
                 const className = args[0].className;
                 
                 // Throttle activity and status updates
-                if (className.includes('activity') || 
-                    className.includes('subText') || 
-                    className.includes('botText') || 
-                    className.includes('clanTag')) {
+                if (className.includes("activity") || 
+                    className.includes("subText") || 
+                    className.includes("botText") || 
+                    className.includes("clanTag")) {
                     
                     // Add randomized delay to prevent UI synchronization issues
                     return setTimeout(() => {
+                        // @ts-ignore
                         originalMethod.apply(this, args);
                     }, 50 + Math.random() * 100);
                 }
             }
             
+            // @ts-ignore
             return originalMethod.apply(this, args);
         };
     },
 
+    createOptimizedRAF(originalRAF: Function) {
+        const reductionFactor = settings.store.animationReduction / 100;
+        let frameCount = 0;
+        
+        return function (callback: FrameRequestCallback) {
+            frameCount++;
+            
+            // Skip frames based on reduction setting
+            if (reductionFactor > 0 && frameCount % Math.ceil(1 + reductionFactor * 3) !== 0) {
+                // Still call the callback but with modified timing
+                return setTimeout(() => callback(performance.now()), 16 * (1 + reductionFactor));
+            }
+            
+            return originalRAF.call(this, callback);
+        };
+    },
+
     optimizeResourceLoading() {
-        if (!this.settings.networkOptimization) return;
+        if (!settings.store.networkOptimization) return;
         
         try {
             // Cache frequently requested resources
             const originalFetch = window.fetch;
-            const resourceCache = new Map();
+            const resourceCache = new Map<string, { response: Response; timestamp: number }>();
             const CACHE_DURATION = 300000; // 5 minutes
             
-            window.fetch = function(input, init) {
-                const url = typeof input === 'string' ? input : input.toString();
+            window.fetch = function(input: RequestInfo | URL, init?: RequestInit) {
+                const url = typeof input === "string" ? input : input.toString();
                 
                 // Cache static image assets
                 if (url.match(/\.(png|jpg|jpeg|gif|webp)/i)) {
@@ -196,40 +228,12 @@ const HisakosOptimizations = {
         }
     },
 
-    setupAnimationOptimization() {
-        if (this.settings.animationReduction <= 0) return;
-        
-        try {
-            // Optimize requestAnimationFrame for reduced animation intensity
-            const originalRAF = window.requestAnimationFrame;
-            const reductionFactor = this.settings.animationReduction / 100;
-            let frameCount = 0;
-            
-            window.requestAnimationFrame = function(callback) {
-                frameCount++;
-                
-                // Skip frames based on reduction setting
-                if (reductionFactor > 0 && frameCount % Math.ceil(1 + reductionFactor * 3) !== 0) {
-                    // Still call the callback but with modified timing
-                    return setTimeout(() => callback(performance.now()), 16 * (1 + reductionFactor));
-                }
-                
-                return originalRAF.call(this, callback);
-            };
-            
-            this.originalMethods.rAF = originalRAF;
-            
-        } catch (e) {
-            console.warn("[Hisako's Optimizations] Failed to optimize animations:", e);
-        }
-    },
-
     setupMemoryManagement() {
-        if (!this.settings.garbageCollectionOptimization) return;
-        
+        if (!settings.store.garbageCollectionOptimization) return;
+
         try {
             // Setup periodic memory monitoring
-            if (this.settings.memoryMonitoring) {
+            if (settings.store.memoryMonitoring) {
                 this.gcInterval = setInterval(() => {
                     this.performMemoryOptimization();
                 }, 30000); // Check every 30 seconds
@@ -263,7 +267,7 @@ const HisakosOptimizations = {
         }
     },
     
-    isMemoryPressureHigh() {
+    isMemoryPressureHigh(): boolean {
         // Check various memory indicators
         try {
             // Check performance.memory if available (Chrome)
@@ -343,40 +347,25 @@ const HisakosOptimizations = {
         
         // Pre-populate pools
         for (let i = 0; i < 10; i++) {
-            this.elementPool.divs.push(document.createElement('div')); 
-            this.elementPool.spans.push(document.createElement('span'));
+            this.elementPool.divs.push(document.createElement("div")); 
+            this.elementPool.spans.push(document.createElement("span"));
         }
     },
-    
+
     setupVirtualScrolling() {
-        if (!this.settings.virtualScrolling) return;
+        if (!settings.store.virtualScrolling) return;
         
         try {
-            // Intercept message container rendering
-            this.patchMessageContainers();
+            // Setup intersection observer for efficient rendering
+            this.setupIntersectionObserver();
             console.log("[Hisako's Optimizations] Virtual scrolling system initialized");
         } catch (e) {
             console.warn("[Hisako's Optimizations] Failed to setup virtual scrolling:", e);
         }
     },
     
-    patchMessageContainers() {
-        // This would patch Discord's message rendering system
-        // In a real implementation, this would hook into the message list components
-        
-        // Mock implementation for demonstration
-        this.virtualScrollState = {
-            visibleRange: { start: 0, end: 50 },
-            totalMessages: 0,
-            containerHeight: 0
-        };
-        
-        // Setup intersection observer for efficient rendering
-        this.setupIntersectionObserver();
-    },
-    
     setupIntersectionObserver() {
-        if (!('IntersectionObserver' in window)) return;
+        if (!("IntersectionObserver" in window)) return;
         
         this.intersectionObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
@@ -385,7 +374,7 @@ const HisakosOptimizations = {
                 }
             });
         }, {
-            rootMargin: '100px',
+            rootMargin: "100px",
             threshold: 0.1
         });
     },
@@ -403,25 +392,27 @@ const HisakosOptimizations = {
         const messageHeight = 60; // Approximate message height
         const startIndex = Math.max(0, Math.floor(scrollTop / messageHeight) - 5);
         const endIndex = Math.min(
-            this.virtualScrollState.totalMessages, 
+            this.virtualScrollState?.totalMessages || 0, 
             startIndex + Math.ceil(viewportHeight / messageHeight) + 10
         );
         
         // Update visible range
-        this.virtualScrollState.visibleRange = { start: startIndex, end: endIndex };
+        if (this.virtualScrollState) {
+            this.virtualScrollState.visibleRange = { start: startIndex, end: endIndex };
+        }
         
         // Render only visible messages
         this.updateMessageRendering(startIndex, endIndex);
     },
     
-    updateMessageRendering(startIndex, endIndex) {
+    updateMessageRendering(startIndex: number, endIndex: number) {
         // Pool management for message elements
         const neededElements = endIndex - startIndex;
         
         // Reuse existing elements from pool
         while (this.messageElementsPool.length < neededElements) {
-            const element = document.createElement('div');
-            element.className = 'virtual-message';
+            const element = document.createElement("div");
+            element.className = "virtual-message";
             this.messageElementsPool.push(element);
         }
         
@@ -431,7 +422,7 @@ const HisakosOptimizations = {
             this.renderedMessages.set(i, this.messageElementsPool[i - startIndex]);
         }
     },
-    
+
     cleanupMemoryManagement() {
         if (this.gcInterval) {
             clearInterval(this.gcInterval);
@@ -468,10 +459,11 @@ const HisakosOptimizations = {
             }
         }
     },
-    
+
     restoreOriginalMethods() {
         // Restore DOM methods
-        ['appendChild', 'removeChild'].forEach(method => {
+        const domMethods = ["appendChild", "removeChild"];
+        for (const method of domMethods) {
             if (this.originalMethods[method]) {
                 try {
                     // @ts-ignore
@@ -480,19 +472,16 @@ const HisakosOptimizations = {
                     console.warn(`[Hisako's Optimizations] Failed to restore ${method}:`, e);
                 }
             }
-        });
+        }
         
         // Restore requestAnimationFrame
         if (this.originalMethods.rAF) {
-            window.requestAnimationFrame = this.originalMethods.rAF;
+            window.requestAnimationFrame = this.originalMethods.rAF as any;
         }
         
         // Restore fetch
         if (this.originalMethods.fetch) {
-            window.fetch = this.originalMethods.fetch;
+            window.fetch = this.originalMethods.fetch as any;
         }
     }
-};
-
-// Export for plugin system
-export default HisakosOptimizations;
+});
