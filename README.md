@@ -34,6 +34,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - InviteDefaults
 - VencordCustomScreenshare
 - VencordPerf
+- Hisako's Optimizations
 
 ## Installing Illegalcord
 
