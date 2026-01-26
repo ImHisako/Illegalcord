@@ -47,21 +47,44 @@ export default definePlugin({
 
     enhanceAudio(thisObj: any) {
         try {
-            this.checkSettings();
-            if (!thisObj.conn?.setTransportOptions) return;
+            console.log("[RipCordStereo] Starting audio enhancement...");
+            
+            // Check voice settings warnings
+            const hasWarnings = this.checkSettings();
+            console.log(`[RipCordStereo] Voice settings warnings: ${hasWarnings}`);
+            
+            if (!thisObj.conn?.setTransportOptions) {
+                console.warn("[RipCordStereo] conn.setTransportOptions not found");
+                return;
+            }
 
             const original = thisObj.conn.setTransportOptions;
+            console.log("[RipCordStereo] Successfully hooked setTransportOptions");
+            
             thisObj.conn.setTransportOptions = function(obj: any) {
+                console.log("[RipCordStereo] Transport options being modified:", obj);
+                
                 if (obj.audioEncoder) {
                     obj.audioEncoder.params = { stereo: settings.store.stereoLevel.toString() };
                     obj.audioEncoder.channels = parseFloat(settings.store.stereoLevel.toString());
+                    console.log(`[RipCordStereo] Set stereo level to: ${settings.store.stereoLevel}`);
                 }
-                if (obj.fec) obj.fec = false;
+                
+                if (obj.fec) {
+                    obj.fec = false;
+                    console.log("[RipCordStereo] Disabled FEC");
+                }
+                
                 const targetBitrate = settings.store.bitrate * 1000;
                 if (obj.encodingVoiceBitRate < targetBitrate) {
+                    const oldValue = obj.encodingVoiceBitRate;
                     obj.encodingVoiceBitRate = targetBitrate;
+                    console.log(`[RipCordStereo] Updated bitrate from ${oldValue} to ${targetBitrate} bps (${settings.store.bitrate} kbps)`);
                 }
-                return original.call(this, obj);
+                
+                const result = original.call(this, obj);
+                console.log("[RipCordStereo] Transport options applied successfully");
+                return result;
             };
 
             if (!this.checkSettings() && settings.store.enableToasts) {
@@ -78,11 +101,19 @@ export default definePlugin({
 
     checkSettings() {
         try {
-            if (!VoiceSettingsStore) return false;
+            console.log("[RipCordStereo] Checking voice settings...");
+            
+            if (!VoiceSettingsStore) {
+                console.warn("[RipCordStereo] VoiceSettingsStore not found");
+                return false;
+            }
+            
             const hasIssues = 
                 VoiceSettingsStore.getNoiseSuppression?.() ||
                 VoiceSettingsStore.getNoiseCancellation?.() ||
                 VoiceSettingsStore.getEchoCancellation?.();
+            
+            console.log(`[RipCordStereo] Voice settings issues detected: ${!!hasIssues}`);
             
             if (hasIssues && settings.store.enableToasts) {
                 showNotification({
@@ -93,11 +124,15 @@ export default definePlugin({
             }
             return hasIssues;
         } catch (err) {
+            console.error("[RipCordStereo] Error checking settings:", err);
             return false;
         }
     },
 
     start() {
+        console.log("[RipCordStereo] Plugin started successfully");
+        console.log(`[RipCordStereo] Current settings - Stereo Level: ${settings.store.stereoLevel}, Bitrate: ${settings.store.bitrate}kbps`);
+        
         if (settings.store.enableToasts) {
             showNotification({
                 title: "RipCordStereoFixed",
@@ -107,5 +142,7 @@ export default definePlugin({
         }
     },
 
-    stop() {}
+    stop() {
+        console.log("[RipCordStereo] Plugin stopped");
+    }
 });
