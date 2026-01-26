@@ -55,7 +55,7 @@ const VoiceModule = findByPropsLazy("updateVideoQuality");
 const VoiceSettingsStore = findByPropsLazy("getEchoCancellation");
 
 export default definePlugin({
-    name: "RipCordStereo",
+    name: "RipCord_Stereo",
     authors: [{ name: "Hahac", id: 1140323729432399882n }],
     description: "Enhanced stereo sound with configurable settings for premium audio quality",
     settings,
@@ -113,13 +113,13 @@ export default definePlugin({
             // Show success notification
             if (!this.checkVoiceSettings() && settings.store.enableToasts) {
                 showNotification({
-                    title: "RipCordStereo",
+                    title: "RipCord_Stereo",
                     body: `Stereo enhanced with ${settings.store.stereoLevel} channels at ${settings.store.bitrate}kbps!`,
                     color: "var(--green-360)"
                 });
             }
         } catch (err) {
-            console.error("[RipCordStereo] Error enhancing audio:", err);
+            console.error("[RipCord_Stereo] Error enhancing audio:", err);
         }
     },
 
@@ -134,7 +134,7 @@ export default definePlugin({
             
             if (hasIssues && settings.store.enableToasts) {
                 showNotification({
-                    title: "RipCordStereo Warning",
+                    title: "RipCord_Stereo Warning",
                     body: "Disable echo cancellation, noise reduction, and noise suppression in Discord voice settings for optimal stereo quality!",
                     color: "var(--yellow-360)"
                 });
@@ -142,7 +142,7 @@ export default definePlugin({
             
             return hasIssues;
         } catch (err) {
-            console.error("[RipCordStereo] Error checking voice settings:", err);
+            console.error("[RipCord_Stereo] Error checking voice settings:", err);
             return false;
         }
     },
@@ -151,7 +151,7 @@ export default definePlugin({
         // Plugin started
         if (settings.store.enableToasts) {
             showNotification({
-                title: "RipCordStereo",
+                title: "RipCord_Stereo",
                 body: "Plugin activated! Premium stereo sound ready.",
                 color: "var(--brand-500)"
             });
