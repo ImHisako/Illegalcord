@@ -66,31 +66,44 @@ export default definePlugin({
 
     patchVoiceSettings(thisObj: any) {
         try {
+            console.log("[StereoSound] Starting voice settings patch...");
+            
             // Check voice settings warnings
-            this.settingsWarning();
+            const hasWarnings = this.settingsWarning();
+            console.log(`[StereoSound] Voice settings warnings: ${hasWarnings}`);
 
-            if (!thisObj.conn?.setTransportOptions) return;
+            if (!thisObj.conn?.setTransportOptions) {
+                console.warn("[StereoSound] conn.setTransportOptions not found");
+                return;
+            }
 
             const originalSetTransportOptions = thisObj.conn.setTransportOptions;
+            console.log("[StereoSound] Successfully hooked setTransportOptions");
             
             thisObj.conn.setTransportOptions = function(obj: any) {
+                console.log("[StereoSound] Transport options being modified:", obj);
+                
                 if (obj.audioEncoder) {
                     // Set stereo channels
                     obj.audioEncoder.params = {
                         stereo: settings.store.stereoChannels.toString()
                     };
                     obj.audioEncoder.channels = settings.store.stereoChannels;
+                    console.log(`[StereoSound] Set stereo channels to: ${settings.store.stereoChannels}`);
                 }
                 
                 // Disable FEC (Forward Error Correction) for better quality
                 if (obj.fec) {
                     obj.fec = false;
+                    console.log("[StereoSound] Disabled FEC");
                 }
                 
                 // Set custom bitrate
                 const bitrateValue = settings.store.bitrate * 1000; // Convert kbps to bps
                 if (obj.encodingVoiceBitRate < bitrateValue) {
+                    const oldValue = obj.encodingVoiceBitRate;
                     obj.encodingVoiceBitRate = bitrateValue;
+                    console.log(`[StereoSound] Updated bitrate from ${oldValue} to ${bitrateValue} bps (${settings.store.bitrate} kbps)`);
                 }
                 
                 // Priority speaker settings
@@ -98,10 +111,14 @@ export default definePlugin({
                     obj.prioritySpeaker = true;
                     if (obj.prioritySpeakerDucking) {
                         obj.prioritySpeakerDucking = 10e9;
+                        console.log("[StereoSound] Set priority speaker ducking to maximum");
                     }
+                    console.log("[StereoSound] Enabled priority speaker");
                 }
                 
-                return originalSetTransportOptions.call(this, obj);
+                const result = originalSetTransportOptions.call(this, obj);
+                console.log("[StereoSound] Transport options applied successfully");
+                return result;
             };
             
             // Show success notification
@@ -142,6 +159,9 @@ export default definePlugin({
     },
 
     start() {
+        console.log("[StereoSound] Plugin started successfully");
+        console.log(`[StereoSound] Current settings - Stereo Channels: ${settings.store.stereoChannels}, Bitrate: ${settings.store.bitrate}kbps`);
+        
         // Plugin started
         if (settings.store.enableToasts) {
             showNotification({
@@ -153,6 +173,7 @@ export default definePlugin({
     },
 
     stop() {
+        console.log("[StereoSound] Plugin stopped");
         // Cleanup if needed
     }
 });
