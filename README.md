@@ -11,30 +11,38 @@ Illegalcord is a fork of [Equicord](https://github.com/Equicord) & [Vencord](htt
 Our included plugins can be found [here](https://equicord.org/plugins).
 
 ### Added Plugins on Illegalcord
+<details>
+<summary>Click to see the plugins added to Illegalcord</summary>
 
-- Nitro Sniper : (https://github.com/neoarz/NitroSniper/tree/main)
-- FakeMuteAndDeafen
-- BetterMic
-- BetterScreenshare
-- EnableStereo
-- BigFileUpload
-- Stalker : (https://github.com/Reycko/EquicordPlugins/tree/main/stalker) With a modded version by me
-- BadgeSelector (https://github.com/002-sans/VencordPlugins/tree/b8c7c98a50c0700f7389b0484e5659fe5ec0f99e/BadgesSelector)
-- Securecord (AES 256 on messages)
-- Securecord Opossum (Advanced post-quantum symmetric encryption algorithm inspired by AES with 4096 bits of block size, key, and 512 bits of IV https://github.com/ZygoteCode/BetterOpossum)
-- Mullvad DNS Over Discord (Privacy & Security)
-- DisableAnimations
-- BoosterCount
-- NoMirroredCam
-- OpenOptimizer
-- Vcjumkoptimizer
-- 2FA Hider
-- DontLimitMe
-- GateawayLogger
-- InviteDefaults
-- VencordCustomScreenshare
-- VencordPerf
-- Hisako's Optimizations
+- **Nitro Sniper**: (https://github.com/neoarz/NitroSniper/tree/main)
+- **FakeMuteAndDeafen**
+- **BetterMic**
+- **BetterScreenshare**
+- **EnableStereo** (Not Working)
+- **BigFileUpload**
+- **Stalker**: (https://github.com/Reycko/EquicordPlugins/tree/main/stalker) With a modded version by me
+- **BadgeSelector** (https://github.com/002-sans/VencordPlugins/tree/b8c7c98a50c0700f7389b0484e5659fe5ec0f99e/BadgesSelector)
+- **Securecord** (AES 256 on messages)
+- **Securecord Opossum** (Advanced post-quantum symmetric encryption algorithm inspired by AES with 4096 bits of block size, key, and 512 bits of IV https://github.com/ZygoteCode/BetterOpossum)
+- **Mullvad DNS Over Discord** (Privacy & Security)
+- **DisableAnimations**
+- **BoosterCount**
+- **NoMirroredCam**
+- **OpenOptimizer**
+- **Vcjumkoptimizer**
+- **2FA Hider**
+- **DontLimitMe**
+- **GateawayLogger**
+- **InviteDefaults**
+- **VencordCustomScreenshare**
+- **VencordPerf**
+- **Hisako's Optimizations**
+- **StereoSound** (Testing)
+- **RipcordStereo** (Testing)
+
+</details>
+
+Illegalcord has his personal badges btw
 
 ## Installing Illegalcord
 
