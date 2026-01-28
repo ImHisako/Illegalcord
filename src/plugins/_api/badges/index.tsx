@@ -259,5 +259,26 @@ export default definePlugin({
                 return EquicordDonorModal();
             },
         } satisfies ProfileBadge));
+    },
+
+    getIllegalcordDonorBadges(userId: string) {
+        return IllegalcordDonorBadges[userId]?.map(badge => ({
+            iconSrc: badge.badge,
+            description: badge.tooltip,
+            position: BadgePosition.START,
+            props: {
+                style: {
+                    borderRadius: "50%",
+                    transform: "scale(0.9)"
+                }
+            },
+            onContextMenu(event, badge) {
+                ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={badge} />);
+            },
+            onClick() {
+                // You can add a modal here if needed
+                return null;
+            },
+        } satisfies ProfileBadge));
     }
 });
