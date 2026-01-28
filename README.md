@@ -5,6 +5,10 @@
 [![Discord](https://img.shields.io/discord/1173279886065029291.svg?color=768AD4&label=Discord&logo=discord&logoColor=white)](https://equicord.org/discord)
 
 Illegalcord is a fork of [Equicord](https://github.com/Equicord) & [Vencord](https://github.com/Vendicated/Vencord), with over 300+ plugins.
+An open‑source client built for those who believe in absolute freedom of development.
+No restrictions, no censorship — every plugin is welcome, every idea can take shape.
+Illegalcord doesn’t enforce arbitrary rules; it puts the community and experimentation at the center.
+If you’re here, it means you want to create without limits — and this is the right place to do it.
 
 ### Included Plugins
 
