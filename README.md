@@ -1,39 +1,55 @@
-# [<img src="./browser/icon.png" width="40" align="left" alt="Equicord">](https://github.com/Equicord/Equicord) Equicord
+# [<img src="./browser/icon.png" width="40" align="left" alt="Equicord">](https://github.com/Equicord/Equicord) Illegalcord
 
-[![Equibop](https://img.shields.io/badge/Equibop-grey?style=flat)](https://github.com/Equicord/Equibop)
-[![Tests](https://github.com/Equicord/Equicord/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/Equicord/Equicord/actions/workflows/test.yml)
-[![Discord](https://img.shields.io/discord/1173279886065029291.svg?color=768AD4&label=Discord&logo=discord&logoColor=white)](https://equicord.org/discord)
+Illegalcord is a fork of [Equicord](https://github.com/Equicord) & [Vencord](https://github.com/Vendicated/Vencord), with over 300+ plugins.
+An open‑source client built for those who believe in absolute freedom of development.
+No restrictions, no censorship — every plugin is welcome, every idea can take shape.
+Illegalcord doesn’t enforce arbitrary rules; it puts the community and experimentation at the center.
+If you’re here, it means you want to create without limits — and this is the right place to do it.
 
-Equicord is a fork of [Vencord](https://github.com/Vendicated/Vencord), with over 300+ plugins.
-
-You can join our [Discord server](https://equicord.org/discord) for commits, changes, chatting, or even support.
+Telegram x News: https://t.me/Illegalcord
 
 ### Included Plugins
 
 Our included plugins can be found [here](https://equicord.org/plugins).
 
-## Installing / Uninstalling
+### Added Plugins on Illegalcord
+<details>
+<summary>Click to see the plugins added to Illegalcord</summary>
 
-Windows
+- **Nitro Sniper**: | (https://github.com/neoarz/NitroSniper/tree/main)
+- **FakeMuteAndDeafen**
+- **BetterMic**
+- **BetterScreenshare**
+- **BigFileUpload**
+- **Stalker**: | (https://github.com/Reycko/EquicordPlugins/tree/main/stalker) With a modded version by me
+- **BadgeSelector** | (https://github.com/002-sans/VencordPlugins/tree/b8c7c98a50c0700f7389b0484e5659fe5ec0f99e/BadgesSelector)
+- **Securecord** | (AES 256 on messages)
+- **Securecord Opossum Blazing Edition** | BlazingOpossum, block size + IV + MAC Tag 128 bits, key 256 bits. Based on AVX2 instructions, highly-performant, post-quantum symmetric cryptographic algorithm. Advanced, and modern.  | https://github.com/ZygoteCode/BlazingOpossum)
+- **IGP** ( pgp plugin )
+- **Mullvad DNS Over Discord** (Privacy & Security)
+- **DisableAnimations**
+- **BoosterCount**
+- **NoMirroredCam**
+- **OpenOptimizer**
+- **Vcjumkoptimizer**
+- **2FA Hider**
+- **Follow User** (Without friends check)
+- **DontLimitMe**
+- **GateawayLogger**
+- **InviteDefaults**
+- **CustomStream** (https://github.com/MrTopQ/customStream-Vencord)
+- **TypingFriends** (https://github.com/debxylen/Vencord/tree/main/src/plugins/typingFriends)
+- SilentDelete (https://github.com/aurickk/SilentDelete-Vencord) 
+- **VencordPerf**
+- **Hisako's Optimizations** (Currently glitchy)
+- **StereoSound** (Testing)
+- **RipcordStereo** (Testing)
 
-- [GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl.exe)
-- [CLI](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli.exe)
+</details>
 
-MacOS
+Illegalcord has his personal badges btw
 
-- [GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl.MacOS.zip)
-
-Linux
-
-- [GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-x11)
-- [CLI](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-Linux)
-- [AUR](https://aur.archlinux.org/packages?O=0&K=equicord)
-
-```shell
-sh -c "$(curl -sS https://raw.githubusercontent.com/Equicord/Equicord/refs/heads/main/misc/install.sh)"
-```
-
-## Installing Equicord Devbuild
+## Installing Illegalcord
 
 ### Dependencies
 
@@ -47,13 +63,13 @@ Install `pnpm`:
 npm i -g pnpm
 ```
 
-> :exclamation: **IMPORTANT** Make sure you aren't using an admin/root terminal from here onwards. It **will** mess up your Discord/Equicord instance and you **will** most likely have to reinstall.
+> :exclamation: **IMPORTANT** Make sure you aren't using an admin/root terminal from here onwards. It **will** mess up your Discord/Illegalcord instance and you **will** most likely have to reinstall.
 
-Clone Equicord:
+Clone Illegalcord:
 
 ```shell
-git clone https://github.com/Equicord/Equicord
-cd Equicord
+git clone https://github.com/ImHisako/Illegalcord
+cd Illegalcord
 ```
 
 Install dependencies:
@@ -62,41 +78,31 @@ Install dependencies:
 pnpm install --frozen-lockfile
 ```
 
-Build Equicord:
+Build Illegalcord:
 
 ```shell
 pnpm build
 ```
 
-Inject Equicord into your desktop client:
+Inject Illegalcord into your desktop client:
 
 ```shell
 pnpm inject
 ```
 
-Build Equicord for web:
+Build Illegalcord for web:
 
 ```shell
 pnpm buildWeb
 ```
 
-After building Equicord's web extension, locate the appropriate ZIP file in the `dist` directory and follow your browser’s guide for installing custom extensions, if supported.
+After building Illegalcord's web extension, locate the appropriate ZIP file in the `dist` directory and follow your browser’s guide for installing custom extensions, if supported.
 
 Note: Firefox extension zip requires Firefox for developers
 
 ## Credits
 
-Thank you to [Vendicated](https://github.com/Vendicated) for creating [Vencord](https://github.com/Vendicated/Vencord) & [Suncord](https://github.com/verticalsync/Suncord) by [verticalsync](https://github.com/verticalsync) for helping when needed.
-
-## Star History
-
-<a href="https://star-history.com/#Equicord/Equicord&Timeline">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Equicord/Equicord&type=Timeline&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Equicord/Equicord&type=Timeline" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Equicord/Equicord&type=Timeline" />
-  </picture>
-</a>
+Thank you to [thororen1234](https://github.com/thororen1234) For Creating [Equicord](https://github.com/Equicord) & [Vendicated](https://github.com/Vendicated) for creating [Vencord](https://github.com/Vendicated/Vencord) & [Suncord](https://github.com/verticalsync/Suncord) by [verticalsync](https://github.com/verticalsync) 
 
 ## Disclaimer
 
@@ -105,7 +111,7 @@ Mentioning it does not imply any affiliation with or endorsement by Discord Inc.
 Vencord is not connected to Equicord and as such, all donation links go to Vendicated's donation link.
 
 <details>
-<summary>Using Equicord violates Discord's terms of service</summary>
+<summary>Using Illegalcord violates Discord's terms of service</summary>
 
 Client modifications are against Discord’s Terms of Service.
 
