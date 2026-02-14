@@ -214,8 +214,8 @@ export default definePlugin({
         const equicordEntries: SettingsLayoutNode[] = [
             buildEntry({
                 key: "equicord_main",
-                title: "Equicord",
-                panelTitle: "Equicord Settings",
+                title: "Illegalcord",
+                panelTitle: "Illegalcord Settings",
                 Component: VencordTab,
                 Icon: MainSettingsIcon
             }),
@@ -234,7 +234,7 @@ export default definePlugin({
             !IS_UPDATER_DISABLED && UpdaterTab && buildEntry({
                 key: "equicord_updater",
                 title: "Updater",
-                panelTitle: "Equicord Updater",
+                panelTitle: "Illegalcord Updater",
                 Component: UpdaterTab,
                 Icon: UpdaterIcon
             }),
@@ -269,7 +269,7 @@ export default definePlugin({
         const equicordSection: SettingsLayoutNode = {
             key: "equicord_section",
             type: LayoutTypes.SECTION,
-            useTitle: () => "Equicord Settings",
+            useTitle: () => "Illegalcord Settings",
             buildLayout: () => equicordEntries
         };
 

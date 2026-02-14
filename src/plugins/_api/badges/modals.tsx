@@ -120,3 +120,66 @@ export function EquicordDonorModal() {
         </ErrorBoundary>
     ));
 }
+
+export function IllegalcordDonorModal() {
+    const modalKey = openModal(props => (
+        <ErrorBoundary noop onError={() => {
+            closeModal(modalKey);
+            // Add the donation link
+            // VencordNative.native.openExternal("the-link-euphoric");
+        }}>
+            <ModalRoot {...props}>
+                <ModalHeader>
+                    <HeadingPrimary
+                        style={{
+                            width: "100%",
+                            textAlign: "center",
+                            margin: 0
+                        }}
+                    >
+                        <Flex justifyContent="center" alignItems="center" gap="0.5em">
+                            <Heart />
+                            Illegalcord Supporter
+                        </Flex>
+                    </HeadingPrimary>
+                </ModalHeader>
+                <ModalContent>
+                    <Flex justifyContent="center" style={{ padding: "1em" }}>
+                        <img
+                            role="presentation"
+                            src="https://i.pinimg.com/1200x/6d/3e/c6/6d3ec68907cf668ff3e346e766ffc06d.jpg"
+                            alt=""
+                            style={{ margin: "auto", maxWidth: "100px", maxHeight: "100px" }}
+                        />
+                    </Flex>
+                    <div style={{ padding: "1em" }}>
+                        <Paragraph>
+                            This badge is a special perk for Illegalcord Supporters
+                        </Paragraph>
+                        <Paragraph className={Margins.top20}>
+                            Thank you for supporting Illegalcord development! Your contribution helps keep this project alive and thriving.
+                        </Paragraph>
+                    </div>
+                </ModalContent>
+                <ModalFooter>
+                    <Flex justifyContent="center" style={{ width: "100%" }}>
+                        {/* wgf */}
+                        <button
+                            onClick={() => props.onClose()}
+                            style={{
+                                backgroundColor: "var(--button-secondary-background)",
+                                color: "var(--text-normal)",
+                                border: "none",
+                                padding: "8px 16px",
+                                borderRadius: "4px",
+                                cursor: "pointer"
+                            }}
+                        >
+                            Close
+                        </button>
+                    </Flex>
+                </ModalFooter>
+            </ModalRoot>
+        </ErrorBoundary>
+    ));
+}
