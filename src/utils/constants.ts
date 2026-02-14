@@ -1255,6 +1255,10 @@ export const EquicordDevs = Object.freeze({
     davri: {
         name: "Davri",
         id: 457579346282938368n,
+    },
+    irritably: {
+        name: "irritably",
+        id: 928787166916640838,
     }
 } satisfies Record<string, Dev>);
 
