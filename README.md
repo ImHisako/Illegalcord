@@ -44,8 +44,6 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **Hisako's Optimizations** (Currently glitchy)
 - **StereoSound** (Testing)
 - **RipcordStereo** (Testing)
-- **ShowPing** (https://github.com/nicola02nb/showPing)
-- **FakeProfile** (https://github.com/gujarathisampath/fakeProfile)
 
 </details>
 
