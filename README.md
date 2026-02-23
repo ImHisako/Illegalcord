@@ -44,6 +44,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **Hisako's Optimizations** (Currently glitchy)
 - **StereoSound** (Testing)
 - **RipcordStereo** (Testing)
+- **embeddedURLs** (https://github.com/ddadiani/Vencord-EmbeddedLinks/blob/main/src/plugins/embeddedURLs/index.ts)
 
 </details>
 
