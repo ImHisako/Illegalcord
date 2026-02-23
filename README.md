@@ -45,6 +45,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **StereoSound** (Testing)
 - **RipcordStereo** (Testing)
 - **embeddedURLs** (https://github.com/ddadiani/Vencord-EmbeddedLinks/blob/main/src/plugins/embeddedURLs/index.ts)
+- **stereoScreenshareAudio** (https://github.com/nerdwave-nick/Vencord-Stereo-Fix/blob/main/src/plugins/stereoScreenshareAudio/index.ts)
 
 </details>
 
