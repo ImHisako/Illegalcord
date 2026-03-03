@@ -46,7 +46,7 @@ export default definePlugin({
   description: "Force Discord to use Mullvad DNS servers for enhanced privacy",
   authors: [{ name: "Irritably", id: 928787166916640838n }],
   settings,
-  
+
   // Statistics tracking
   statistics: {
     totalRequests: 0,
@@ -76,10 +76,16 @@ export default definePlugin({
     const originalFetch = window.fetch;
     let isActive = false;
     const dnsCache = new Map();
+    const statistics = {
+      totalRequests: 0,
+      successfulResolutions: 0,
+      failedResolutions: 0,
+      cacheHits: 0
+    };
 
     // Advanced logger with colors and levels
     const log = {
-      verbose: function(msg) {
+      verbose: function (msg) {
         if (settings.store.enableLogging && settings.store.logLevel === "verbose") {
           console.debug(
             `%c[${PLUGIN_NAME}] %cVERBOSE: ${msg}`,
@@ -88,7 +94,7 @@ export default definePlugin({
           );
         }
       },
-      info: function(msg) {
+      info: function (msg) {
         if (settings.store.enableLogging && ["verbose", "info"].includes(settings.store.logLevel)) {
           console.log(
             `%c[${PLUGIN_NAME}] %cINFO: ${msg}`,
@@ -97,7 +103,7 @@ export default definePlugin({
           );
         }
       },
-      warn: function(msg) {
+      warn: function (msg) {
         if (settings.store.enableLogging && ["verbose", "info", "warn"].includes(settings.store.logLevel)) {
           console.warn(
             `%c[${PLUGIN_NAME}] %cWARN: ${msg}`,
@@ -106,7 +112,7 @@ export default definePlugin({
           );
         }
       },
-      error: function(msg) {
+      error: function (msg) {
         if (settings.store.enableLogging) {
           console.error(
             `%c[${PLUGIN_NAME}] %cERROR: ${msg}`,
@@ -137,7 +143,7 @@ export default definePlugin({
     // Check if URL should be excluded from DNS modification
     function shouldExcludeURL(url) {
       const urlString = url.toString().toLowerCase();
-      
+
       // Check against excluded patterns
       for (const pattern of EXCLUDED_DOMAINS) {
         if (urlString.includes(pattern)) {
@@ -145,13 +151,13 @@ export default definePlugin({
           return true;
         }
       }
-      
+
       // Exclude OAuth endpoints specifically
       if (url.pathname.includes("/oauth2/") || url.pathname.includes("/auth/")) {
         log.verbose(`Excluding OAuth endpoint: ${url.hostname}${url.pathname}`);
         return true;
       }
-      
+
       return false;
     }
 
@@ -159,11 +165,11 @@ export default definePlugin({
     function getDNSRecord(hostname) {
       // Check cache first
       if (dnsCache.has(hostname)) {
-        this.statistics.cacheHits++;
+        statistics.cacheHits++;
         log.verbose(`Cache hit for ${hostname}: ${dnsCache.get(hostname)}`);
         return dnsCache.get(hostname);
       }
-      
+
       const record = MULLVAD_DNS_RECORDS[hostname] || null;
       if (record) {
         dnsCache.set(hostname, record);
@@ -179,34 +185,34 @@ export default definePlugin({
         return false;
       }
 
-      window.fetch = function(input, init) {
+      window.fetch = function (input, init) {
         try {
           let urlStr = (input instanceof Request) ? input.url : String(input);
           const url = new URL(urlStr);
 
           // Increment request counter
-          this.statistics.totalRequests++;
+          statistics.totalRequests++;
 
           // Check if this is a Discord-related hostname AND not excluded
-          if (url.hostname.includes("discord") && 
-              !url.hostname.includes("mullvad") && 
-              !shouldExcludeURL(url)) {
-            const ip = getDNSRecord.call(this, url.hostname);
+          if (url.hostname.includes("discord") &&
+            !url.hostname.includes("mullvad") &&
+            !shouldExcludeURL(url)) {
+            const ip = getDNSRecord(url.hostname);
 
             if (ip) {
               // Replace hostname with IP
               url.hostname = ip;
               urlStr = url.toString();
 
-              this.statistics.successfulResolutions++;
+              statistics.successfulResolutions++;
               log.info(`🔄 Resolved ${url.hostname} -> ${ip} (Mullvad)`);
-              
+
               // Show notification if enabled
               if (settings.store.showNotifications) {
                 showNotification(`DNS resolved: ${url.hostname} -> ${ip}`, "success");
               }
             } else {
-              this.statistics.failedResolutions++;
+              statistics.failedResolutions++;
               log.warn(`No DNS record found for ${url.hostname}`);
             }
           } else {
@@ -222,14 +228,14 @@ export default definePlugin({
             ? new Request(urlStr, input)
             : urlStr;
 
-          return originalFetch.call(this, request, init);
+          return originalFetch(request, init);
 
         } catch (error) {
-          this.statistics.failedResolutions++;
+          statistics.failedResolutions++;
           log.error(`Fetch patch error: ${error.message}`);
-          return originalFetch.call(this, input, init);
+          return originalFetch(input, init);
         }
-      }.bind(this);
+      };
 
       log.info("✅ Fetch patched successfully");
       return true;
@@ -242,7 +248,7 @@ export default definePlugin({
         if (toastModule) {
           toastModule.show({
             message: `🔒 ${message}`,
-            type: type === "success" 
+            type: type === "success"
               ? toastModule.Type.SUCCESS
               : type === "error"
                 ? toastModule.Type.FAILURE
@@ -264,7 +270,7 @@ export default definePlugin({
       name: PLUGIN_NAME,
       version: VERSION,
       isActive: () => isActive,
-      statistics: this.statistics,
+      statistics,
 
       start: () => {
         if (isActive) {
@@ -275,7 +281,7 @@ export default definePlugin({
         try {
           log.info(`🚀 Starting ${PLUGIN_NAME} v${VERSION}`);
 
-          const fetchSuccess = patchFetch.call(this);
+          const fetchSuccess = patchFetch();
 
           if (fetchSuccess) {
             isActive = true;
@@ -324,12 +330,12 @@ export default definePlugin({
         cachedHostnames: Array.from(dnsCache.keys()),
         cacheEntries: Object.fromEntries(dnsCache)
       }),
-      getStatistics: () => ({ ...this.statistics }),
+      getStatistics: () => ({ ...statistics }),
       clearStatistics: () => {
-        this.statistics.totalRequests = 0;
-        this.statistics.successfulResolutions = 0;
-        this.statistics.failedResolutions = 0;
-        this.statistics.cacheHits = 0;
+        statistics.totalRequests = 0;
+        statistics.successfulResolutions = 0;
+        statistics.failedResolutions = 0;
+        statistics.cacheHits = 0;
         log.info("📊 Statistics cleared");
       },
       clearCache: () => {
