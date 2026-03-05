@@ -2185,7 +2185,7 @@ export default definePlugin({
     patches: [
         {
             // Патч для добавления кнопки в панель (рядом с микрофоном/наушниками)
-            find: "#{intl::ACCOUNT_SPEAKING_WHILE_MUTED}",
+            find: ".WIDGETS_RTC_UPSELL_COACHMARK),",
             replacement: {
                 // Матчим начало массива children после чего угодно, главное чтобы был accountContainerRef дальше
                 match: /(children:\[)(.{0,150}?)(accountContainerRef)/,
