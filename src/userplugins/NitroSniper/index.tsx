@@ -6,9 +6,12 @@ dm @neoarz if u need help or have any questions
 https://github.com/neoarz/NitroSniper
 */
 
-import { Devs } from "@utils/constants";
+import { showNotification } from "@api/Notifications";
+import { definePluginSettings } from "@api/Settings";
+import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
-import definePlugin from "@utils/types";
+import definePlugin, { OptionType } from "@utils/types";
+import { NavigationRouter, UserStore } from "@webpack/common";
 import { findByPropsLazy } from "@webpack";
 
 const logger = new Logger("NitroSniper");
@@ -18,6 +21,14 @@ let startTime = 0;
 let claiming = false;
 const codeQueue: string[] = [];
 
+const settings = definePluginSettings({
+    notifyOnRedeem: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Show a notification when successfully redeeming a nitro code."
+    }
+});
+
 function processQueue() {
     if (claiming || !codeQueue.length) return;
 
@@ -26,8 +37,24 @@ function processQueue() {
 
     GiftActions.redeemGiftCode({
         code,
-        onRedeemed: () => {
+        onRedeemed: (gift: any) => {
             logger.log(`Successfully redeemed code: ${code}`);
+
+            if (settings.store.notifyOnRedeem) {
+                const user = UserStore.getCurrentUser();
+                const giftType = gift?.subscription_plan?.name || "Nitro";
+
+                showNotification({
+                    title: "Nitro Sniped! 🎉",
+                    body: `Successfully redeemed ${giftType} code`,
+                    color: "#5865F2",
+                    icon: user.getAvatarURL(),
+                    onClick: () => {
+                        NavigationRouter.transitionTo("/settings/inventory");
+                    }
+                });
+            }
+
             claiming = false;
             processQueue();
         },
@@ -42,7 +69,12 @@ function processQueue() {
 export default definePlugin({
     name: "NitroSniper",
     description: "Automatically redeems Nitro gift links sent in chat",
-    authors: [Devs.neoarz],
+    authors: [
+        { name: "neoarz", id: 1015372540937502851n },
+        { name: "irritably", id: 928787166916640838n }
+    ],
+
+    settings,
 
     start() {
         startTime = Date.now();
