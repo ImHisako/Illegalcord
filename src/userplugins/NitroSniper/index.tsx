@@ -26,6 +26,11 @@ const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         default: true,
         description: "Show a notification when successfully redeeming a nitro code."
+    },
+    notifyOnFail: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Show a notification when failing to redeem a nitro code."
     }
 });
 
@@ -60,6 +65,18 @@ function processQueue() {
         },
         onError: (err: Error) => {
             logger.error(`Failed to redeem code: ${code}`, err);
+            
+            if (settings.store.notifyOnFail) {
+                const user = UserStore.getCurrentUser();
+                
+                showNotification({
+                    title: "Nitro Redeem Failed ❌",
+                    body: `Failed to redeem code: ${code}`,
+                    color: "#ED4245",
+                    icon: user.getAvatarURL(),
+                });
+            }
+            
             claiming = false;
             processQueue();
         }
