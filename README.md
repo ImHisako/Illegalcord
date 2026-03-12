@@ -16,7 +16,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 <details>
 <summary>Click to see the plugins added to Illegalcord</summary>
 
-- **Nitro Sniper**: | (https://github.com/neoarz/NitroSniper/tree/main)
+- **Nitro Sniper**: | (https://github.com/neoarz/NitroSniper/tree/main) // Now with a Modded version by me
 - **FakeMuteAndDeafen**
 - **BetterMic**
 - **BetterScreenshare**
