@@ -7,11 +7,13 @@
 import {
     getStalkerDataDir,
     readStalkerLog,
-    writeStalkerLog
+    writeStalkerLog,
+    getUserStalkerDir
 } from "./native";
 
 export default {
     getStalkerDataDir,
     readStalkerLog,
-    writeStalkerLog
+    writeStalkerLog,
+    getUserStalkerDir
 };
