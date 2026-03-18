@@ -14,23 +14,30 @@ export async function getDefaultStalkerDataDir(): Promise<string> {
 
 import { readFile } from "fs/promises";
 
-export async function writeStalkerLog(_event: Electron.IpcMainInvokeEvent, contents: string) {
+export async function getUserStalkerDir(_event: Electron.IpcMainInvokeEvent, userId: string, username: string): Promise<string> {
     const logsDir = await getDefaultStalkerDataDir();
-    await mkdir(logsDir, { recursive: true });
-    
+    // Sanitize the username to remove invalid characters for file names
+    const safeUsername = username.replace(/[/\\?*|<>:"']/g, "_");
+    const userDir = path.join(logsDir, `@${safeUsername}_${userId}`);
+    await mkdir(userDir, { recursive: true });
+    return userDir;
+}
+
+export async function writeStalkerLog(_event: Electron.IpcMainInvokeEvent, contents: string, userId: string, username: string) {
+    const userDir = await getUserStalkerDir(_event, userId, username);
+
     const fileName = `stalker-log-${new Date().toISOString().slice(0, 10)}.json`;
-    const filePath = path.join(logsDir, fileName);
-    
+    const filePath = path.join(userDir, fileName);
+
     await writeFile(filePath, contents, "utf8");
 }
 
-export async function readStalkerLog(_event: Electron.IpcMainInvokeEvent): Promise<string> {
-    const logsDir = await getDefaultStalkerDataDir();
-    await mkdir(logsDir, { recursive: true });
-    
+export async function readStalkerLog(_event: Electron.IpcMainInvokeEvent, userId: string, username: string): Promise<string> {
+    const userDir = await getUserStalkerDir(_event, userId, username);
+
     const fileName = `stalker-log-${new Date().toISOString().slice(0, 10)}.json`;
-    const filePath = path.join(logsDir, fileName);
-    
+    const filePath = path.join(userDir, fileName);
+
     try {
         return await readFile(filePath, "utf8");
     } catch (error) {
