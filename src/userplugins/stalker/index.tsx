@@ -35,10 +35,10 @@ export const logger = new Logger("Stalker");
 
 let cachedLogs: StalkerLogEntry[] | null = null;
 
-async function getLogsFromFile(): Promise<StalkerLogEntry[]> {
+async function getLogsFromFile(userId: string, username: string): Promise<StalkerLogEntry[]> {
     try {
         if (Native && Native.readStalkerLog) {
-            const fileContents = await Native.readStalkerLog();
+            const fileContents = await Native.readStalkerLog(userId, username);
             if (fileContents) {
                 const logs = JSON.parse(fileContents);
                 return Array.isArray(logs) ? logs : [];
@@ -65,7 +65,7 @@ export async function logStalkerEvent(entry: StalkerLogEntry) {
             if (cachedLogs) {
                 logs = cachedLogs;
             } else {
-                logs = await getLogsFromFile();
+                logs = await getLogsFromFile(entry.userId, entry.username);
                 cachedLogs = logs;
             }
             
@@ -76,12 +76,13 @@ export async function logStalkerEvent(entry: StalkerLogEntry) {
             cachedLogs = logs;
             
             // Scrivi il file JSON aggiornato
-            await Native.writeStalkerLog(JSON.stringify(logs, null, 2));
+            await Native.writeStalkerLog(JSON.stringify(logs, null, 2), entry.userId, entry.username);
         }
     } catch (error) {
         logger.error("Failed to write stalker log:", error);
     }
 }
+
 export let targets: string[] = [];
 
 const parseTargets = (parse: string): string[] => {
@@ -151,7 +152,6 @@ export const settings = definePluginSettings({
     },
 
 
-
     targets: {
         type: OptionType.STRING,
         placeholder: "1234,5678",
@@ -209,14 +209,14 @@ export default definePlugin({
     },
 
     flux: {
-        MESSAGE_CREATE({ message }: { message: any }) {
+        MESSAGE_CREATE({ message }: { message: any; }) {
             if (!settings.store.logMessages) return;
-            
+
             const isStalking = targets.includes(message.author.id);
             if (isStalking) {
                 const channel = ChannelStore.getChannel(message.channel_id);
                 const guild = channel.guild_id ? GuildStore.getGuild(channel.guild_id) : null;
-                
+
                 logStalkerEvent({
                     timestamp: new Date().toISOString(),
                     userId: message.author.id,
@@ -228,7 +228,7 @@ export default definePlugin({
                 });
             }
         },
-        
+
 
     },
 
