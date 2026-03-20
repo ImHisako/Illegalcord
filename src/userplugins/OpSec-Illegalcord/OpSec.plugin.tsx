@@ -73,6 +73,12 @@ const settings = definePluginSettings({
         description: "Fix Italian accents (perche -> perché, cioe -> cioè)",
         default: true,
         restartNeeded: false
+    },
+    enableEnglish: {
+        type: OptionType.BOOLEAN,
+        description: "Enable English language corrections",
+        default: true,
+        restartNeeded: false
     }
 });
 
@@ -1226,7 +1232,7 @@ function fixPunctuation(text: string, allCaps: boolean = false): string {
         result = result.replace(pattern, replacement);
     }
 
-    if (settings.store.fixContractions && !skipGrammar) {
+    if (settings.store.enableEnglish && settings.store.fixContractions && !skipGrammar) {
         result = fixContractions(result);
         for (const [pattern, replacement] of COMMON_MISSPELLINGS) {
             if (typeof replacement === "function") {
@@ -1341,7 +1347,7 @@ function addPeriodIfNeeded(text: string): string {
 
 export default definePlugin({
     name: "OpSec",
-    description: "Protect your digital footprint - Autocorrect for English & Italian (contractions, punctuation, accents)",
+    description: "Autocorrect for English & Italian - Toggle each language in settings (contractions, punctuation, accents)",
     authors: [
         { name: "Solace", id: 1472732509241479218n },
         { name: "irritably", id: 928787166916640838n }
