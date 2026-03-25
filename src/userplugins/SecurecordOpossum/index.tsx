@@ -555,9 +555,9 @@ export default definePlugin({
             execute: async (args: any[], ctx: any) => {
                 const replyMessage = ctx.message?.referencedMessage;
                 const encryptedTextArg = args[0]?.value;
-
+                                
                 let messageContent: string | undefined;
-
+                                
                 // Se c'è un messaggio di risposta, usa quello
                 if (replyMessage) {
                     messageContent = replyMessage.content;
@@ -565,63 +565,65 @@ export default definePlugin({
                     // Altrimenti usa il testo passato come argomento
                     messageContent = encryptedTextArg;
                 } else {
-                    return {
+                    sendBotMessage(ctx.channel.id, {
                         content: "❌ Please reply to an encrypted message or paste the encrypted text! Usage: `/decrypt [encrypted-text]`"
-                    };
+                    });
+                    return;
                 }
-
+                                
                 // Check if the message is encrypted
                 if (!messageContent?.startsWith("🔒ENCRYPTED:") || !messageContent?.endsWith(":ENDLOCK")) {
-                    return {
+                    sendBotMessage(ctx.channel.id, {
                         content: "❌ The message is not encrypted! Make sure it starts with 🔒ENCRYPTED: and ends with :ENDLOCK"
-                    };
+                    });
+                    return;
                 }
-
+            
                 // Initialize cipher if needed
                 if (!cipher) {
                     const encoder = new TextEncoder();
                     const passwordBytes = encoder.encode(settings.store.encryptionPassword);
                     const key = new Uint8Array(32);
-
+                                
                     // Derive key from password
                     for (let i = 0; i < key.length; i++) {
                         key[i] = passwordBytes[i % passwordBytes.length] ^ (i % 256);
                     }
-
+                                
                     cipher = new BlazingOpossumCipher(key);
                 }
-
+            
                 // Get password from settings
                 const password = settings.store.encryptionPassword;
-
+            
                 if (!password) {
-                    return {
+                    sendBotMessage(ctx.channel.id, {
                         content: "❌ No encryption password set in plugin settings!"
-                    };
+                    });
+                    return;
                 }
-
+            
                 try {
                     // Extract encrypted message (removing extra characters)
                     const encryptedPart = messageContent.substring(12, messageContent.length - 8);
-
+            
                     // Decode message using BlazingOpossum cipher
                     const decryptedMessage = cipher.decrypt(encryptedPart, password);
-
+            
                     const authorName = replyMessage?.author?.username || "Unknown";
-                    return {
+                                
+                    // Send as Clyde bot message
+                    sendBotMessage(ctx.channel.id, {
                         content: `🔐 **Decrypted message${replyMessage ? ` from ${authorName}` : ''}**: ${decryptedMessage}`
-                    };
+                    });
                 } catch (error) {
                     console.error("Decryption error:", error);
-                    return {
+                    sendBotMessage(ctx.channel.id, {
                         content: `🔒 Decryption error: ${(error as Error).message}. Make sure you're using the correct password!`
-                    };
+                    });
                 }
             }
         }
     ]
 
 });
-
-
-
