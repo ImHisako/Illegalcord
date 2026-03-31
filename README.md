@@ -51,6 +51,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **DiscordLock** | (https://github.com/vejcowski/DiscordLock/tree/main) 
 - **KeepGifPickerOpen** (https://github.com/pacxwheaa/KeepGifPickerOpen/tree/main)
 - **Opsec Plugin** (https://github.com/ItzSolace/OpSec-Vencord/tree/main) | (We have a different version with italian support)
+- **OsintToolKit**
 
 </details>
 
