@@ -5,7 +5,7 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
-import { sendBotMessage } from "@api/Commands";
+import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
 import definePlugin, { OptionType } from "@utils/types";
 
 interface DomainInfo {
@@ -45,10 +45,12 @@ const settings = definePluginSettings({
             "Available commands:\n" +
             "/domain <domain> - Lookup a domain via RDAP\n" +
             "/iplookup <ipv4> - Lookup an IPv4 address\n" +
+            "/myip - Show your public IP information\n" +
             "\n" +
             "Example:\n" +
             "/domain google.com\n" +
-            "/iplookup 1.1.1.1",
+            "/iplookup 1.1.1.1\n" +
+            "/myip",
         default: "OSINTToolkit command list"
     }
 });
@@ -167,6 +169,40 @@ async function getIPInfo(ip: string): Promise<IPInfo | null> {
     }
 }
 
+async function getMyIP(): Promise<IPInfo | null> {
+    try {
+        const response = await fetch("https://free.freeipapi.com/api/json");
+
+        if (!response.ok) {
+            throw new Error(`My IP lookup failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        const timezone =
+            Array.isArray(data.timeZones) && data.timeZones.length > 0
+                ? data.timeZones[0]
+                : data.timeZone || data.timezone;
+
+        return {
+            ip: data.ipAddress || data.ip,
+            city: data.cityName || data.city,
+            region: data.regionName || data.region,
+            country: data.countryCode || data.country,
+            countryName: data.countryName || data.country,
+            lat: typeof data.latitude === "number" ? data.latitude : undefined,
+            lon: typeof data.longitude === "number" ? data.longitude : undefined,
+            org: data.organization || data.asnOrganization || data.org,
+            isp: data.isp || data.asnOrganization,
+            timezone,
+            zip: data.zipCode || data.zip
+        };
+    } catch (error) {
+        console.error("My IP lookup error:", error);
+        return null;
+    }
+}
+
 function calculateDomainAge(registrationDate: string): string {
     const now = new Date();
     const regDate = new Date(registrationDate);
@@ -233,6 +269,7 @@ export default definePlugin({
         {
             name: "domain",
             description: "Get domain registration information and age",
+            inputType: ApplicationCommandInputType.BUILT_IN,
             predicate: () => true,
             options: [
                 {
@@ -243,39 +280,37 @@ export default definePlugin({
                 }
             ],
             execute: async (args: any[], ctx: any) => {
+                const channelId = ctx.channel.id;
                 const domainInput = args[0]?.value as string;
 
                 if (!domainInput) {
-                    sendBotMessage(ctx.channel.id, {
-                        content: "Please provide a domain name!"
-                    });
+                    sendBotMessage(channelId, { content: "Please provide a domain name!" });
                     return;
                 }
 
                 const domain = normalizeDomain(domainInput);
                 logDebug("Looking up domain:", domain);
 
-                sendBotMessage(ctx.channel.id, {
-                    content: "Looking up domain information..."
-                });
+                try {
+                    const info = await getDomainInfo(domain);
 
-                const info = await getDomainInfo(domain);
+                    if (!info) {
+                        sendBotMessage(channelId, {
+                            content: `Failed to retrieve information for **${domain}**\nPossible reasons:\n• Domain doesn't exist\n• RDAP server unavailable\n• Invalid domain format`
+                        });
+                        return;
+                    }
 
-                if (!info) {
-                    sendBotMessage(ctx.channel.id, {
-                        content: `Failed to retrieve information for **${domain}**\nPossible reasons:\n• Domain doesn't exist\n• RDAP server unavailable\n• Invalid domain format`
-                    });
-                    return;
+                    sendBotMessage(channelId, { content: createDomainMessage(info) });
+                } catch {
+                    sendBotMessage(channelId, { content: `An unexpected error occurred while looking up **${domain}**` });
                 }
-
-                sendBotMessage(ctx.channel.id, {
-                    content: createDomainMessage(info)
-                });
             }
         },
         {
             name: "iplookup",
             description: "Get geolocation and network information for an IP",
+            inputType: ApplicationCommandInputType.BUILT_IN,
             predicate: () => true,
             options: [
                 {
@@ -286,42 +321,61 @@ export default definePlugin({
                 }
             ],
             execute: async (args: any[], ctx: any) => {
+                const channelId = ctx.channel.id;
                 const ipInput = args[0]?.value as string;
 
                 if (!ipInput) {
-                    sendBotMessage(ctx.channel.id, {
-                        content: "Please provide an IP address!"
-                    });
+                    sendBotMessage(channelId, { content: "Please provide an IP address!" });
                     return;
                 }
 
                 const ip = ipInput.trim();
 
                 if (!isValidIPv4(ip)) {
-                    sendBotMessage(ctx.channel.id, {
-                        content: "Invalid IP address format! Please use IPv4 format (e.g., 8.8.8.8)"
-                    });
+                    sendBotMessage(channelId, { content: "Invalid IP address format! Please use IPv4 format (e.g., 8.8.8.8)" });
                     return;
                 }
 
                 logDebug("Looking up IP:", ip);
 
-                sendBotMessage(ctx.channel.id, {
-                    content: "Looking up IP information..."
-                });
+                try {
+                    const info = await getIPInfo(ip);
 
-                const info = await getIPInfo(ip);
+                    if (!info) {
+                        sendBotMessage(channelId, {
+                            content: `Failed to retrieve information for **${ip}**\nPossible reasons:\n• Provider unavailable\n• Rate limit exceeded\n• Network error\n• Unsupported IP format`
+                        });
+                        return;
+                    }
 
-                if (!info) {
-                    sendBotMessage(ctx.channel.id, {
-                        content: `Failed to retrieve information for **${ip}**\nPossible reasons:\n• Provider unavailable\n• Rate limit exceeded\n• Network error\n• Unsupported IP format`
-                    });
-                    return;
+                    sendBotMessage(channelId, { content: createIPMessage(info) });
+                } catch {
+                    sendBotMessage(channelId, { content: `An unexpected error occurred while looking up **${ip}**` });
                 }
+            }
+        },
+        {
+            name: "myip",
+            description: "Show your public IP address and geolocation",
+            inputType: ApplicationCommandInputType.BUILT_IN,
+            predicate: () => true,
+            execute: async (args: any[], ctx: any) => {
+                const channelId = ctx.channel.id;
 
-                sendBotMessage(ctx.channel.id, {
-                    content: createIPMessage(info)
-                });
+                try {
+                    const info = await getMyIP();
+
+                    if (!info) {
+                        sendBotMessage(channelId, {
+                            content: "Failed to retrieve your IP information.\nPossible reasons:\n• Provider unavailable\n• Rate limit exceeded\n• Network error"
+                        });
+                        return;
+                    }
+
+                    sendBotMessage(channelId, { content: createIPMessage(info) });
+                } catch {
+                    sendBotMessage(channelId, { content: "An unexpected error occurred while retrieving your IP." });
+                }
             }
         }
     ]
