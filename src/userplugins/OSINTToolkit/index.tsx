@@ -422,6 +422,7 @@ export default definePlugin({
                 }
 
                 const searchUrl = `https://usersearch.org/results.php?type=standard&URL_username=${encodeURIComponent(username)}`;
+                const whatsMyNameUrl = `https://whatsmyname.app/?q=${encodeURIComponent(username)}`;
 
                 logDebug("Generating usersearch link for:", username);
 
@@ -429,7 +430,8 @@ export default definePlugin({
                     content: [
                         "```txt",
                         `[USER SEARCH] ${username}`,
-                        `Link         : ${searchUrl}`,
+                        `Link UserSearch : ${searchUrl}`,
+                        `Link Whatsmyname : ${whatsMyNameUrl}`,                        
                         "```"
                     ].join("\n")
                 });
