@@ -46,11 +46,13 @@ const settings = definePluginSettings({
             "/domain <domain> - Lookup a domain via RDAP\n" +
             "/iplookup <ipv4> - Lookup an IPv4 address\n" +
             "/myip - Show your public IP information\n" +
+            "/usersearch <username> - Generate a usersearch.org link for a username\n" +
             "\n" +
             "Example:\n" +
             "/domain google.com\n" +
             "/iplookup 1.1.1.1\n" +
-            "/myip",
+            "/myip\n" +
+            "/usersearch johndoe",
         default: "OSINTToolkit command list"
     }
 });
@@ -79,6 +81,10 @@ function isValidIPv4(ip: string): boolean {
         const num = Number(octet);
         return Number.isInteger(num) && num >= 0 && num <= 255;
     });
+}
+
+function normalizeUsername(input: string): string {
+    return input.trim().replace(/^@+/, "");
 }
 
 async function getDomainInfo(domain: string): Promise<DomainInfo | null> {
@@ -261,7 +267,7 @@ function createIPMessage(info: IPInfo) {
 
 export default definePlugin({
     name: "OSINTToolkit",
-    description: "OSINT - Domain age lookup & IP information",
+    description: "OSINT - Domain age lookup, IP information, and username search",
     authors: [{ name: "Irritably", id: 928787166916640838n }],
     settings,
 
@@ -303,7 +309,9 @@ export default definePlugin({
 
                     sendBotMessage(channelId, { content: createDomainMessage(info) });
                 } catch {
-                    sendBotMessage(channelId, { content: `An unexpected error occurred while looking up **${domain}**` });
+                    sendBotMessage(channelId, {
+                        content: `An unexpected error occurred while looking up **${domain}**`
+                    });
                 }
             }
         },
@@ -332,7 +340,9 @@ export default definePlugin({
                 const ip = ipInput.trim();
 
                 if (!isValidIPv4(ip)) {
-                    sendBotMessage(channelId, { content: "Invalid IP address format! Please use IPv4 format (e.g., 8.8.8.8)" });
+                    sendBotMessage(channelId, {
+                        content: "Invalid IP address format! Please use IPv4 format (e.g., 8.8.8.8)"
+                    });
                     return;
                 }
 
@@ -350,7 +360,9 @@ export default definePlugin({
 
                     sendBotMessage(channelId, { content: createIPMessage(info) });
                 } catch {
-                    sendBotMessage(channelId, { content: `An unexpected error occurred while looking up **${ip}**` });
+                    sendBotMessage(channelId, {
+                        content: `An unexpected error occurred while looking up **${ip}**`
+                    });
                 }
             }
         },
@@ -359,7 +371,7 @@ export default definePlugin({
             description: "Show your public IP address and geolocation",
             inputType: ApplicationCommandInputType.BUILT_IN,
             predicate: () => true,
-            execute: async (args: any[], ctx: any) => {
+            execute: async (_args: any[], ctx: any) => {
                 const channelId = ctx.channel.id;
 
                 try {
@@ -374,8 +386,53 @@ export default definePlugin({
 
                     sendBotMessage(channelId, { content: createIPMessage(info) });
                 } catch {
-                    sendBotMessage(channelId, { content: "An unexpected error occurred while retrieving your IP." });
+                    sendBotMessage(channelId, {
+                        content: "An unexpected error occurred while retrieving your IP."
+                    });
                 }
+            }
+        },
+        {
+            name: "usersearch",
+            description: "Generate a usersearch.org link for a username",
+            inputType: ApplicationCommandInputType.BUILT_IN,
+            predicate: () => true,
+            options: [
+                {
+                    name: "username",
+                    description: "The username to search (e.g., johndoe)",
+                    type: 3,
+                    required: true
+                }
+            ],
+            execute: async (args: any[], ctx: any) => {
+                const channelId = ctx.channel.id;
+                const usernameInput = args[0]?.value as string;
+
+                if (!usernameInput) {
+                    sendBotMessage(channelId, { content: "Please provide a username!" });
+                    return;
+                }
+
+                const username = normalizeUsername(usernameInput);
+
+                if (!username) {
+                    sendBotMessage(channelId, { content: "Invalid username!" });
+                    return;
+                }
+
+                const searchUrl = `https://usersearch.org/results.php?type=standard&URL_username=${encodeURIComponent(username)}`;
+
+                logDebug("Generating usersearch link for:", username);
+
+                sendBotMessage(channelId, {
+                    content: [
+                        "```txt",
+                        `[USER SEARCH] ${username}`,
+                        `Link         : ${searchUrl}`,
+                        "```"
+                    ].join("\n")
+                });
             }
         }
     ]
