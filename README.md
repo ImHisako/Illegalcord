@@ -8,6 +8,9 @@ If you’re here, it means you want to create without limits — and this is the
 
 Telegram x News: https://t.me/Illegalcord
 
+### Stereo Method 
+Download : https://github.com/ProdHallow/Discord-Stereo-Installer/blob/main/Stereo%20Installer.bat
+
 ### Included Plugins
 
 Our included plugins can be found [here](https://equicord.org/plugins).
