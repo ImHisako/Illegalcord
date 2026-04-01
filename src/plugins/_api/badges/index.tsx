@@ -281,8 +281,8 @@ export default definePlugin({
                 return IllegalcordDonorModal();
             },
         } satisfies ProfileBadge));
-    }
-
+    },
+    
     getTrashCordDonorBadges(userId: string) {
         return TrashCordDonorBadges[userId]?.map(badge => ({
             iconSrc: badge.badge,
