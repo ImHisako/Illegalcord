@@ -94,10 +94,12 @@ async function loadAllBadges(noCache = false) {
     const vencordBadges = await loadBadges("https://badges.vencord.dev/badges.json", noCache);
     const equicordBadges = await loadBadges("https://badge.equicord.org/badges.json", noCache);
     const illegalcordBadges = await loadBadges("https://raw.githubusercontent.com/ImHisako/ImHisako/refs/heads/main/Images/badges.json", noCache);
+    const TrashCordBadges = await loadBadges("https://raw.githubusercontent.com/zFrxncesck1/zFrxncesck1/refs/heads/main/host/files/badges.json", noCache);
 
     DonorBadges = vencordBadges;
     EquicordDonorBadges = equicordBadges;
     IllegalcordDonorBadges = illegalcordBadges;
+    TrashCordDonorBadges = TrashCordBadges;
 }
 
 let intervalId: any;
@@ -277,6 +279,26 @@ export default definePlugin({
             },
             onClick() {
                 return IllegalcordDonorModal();
+            },
+        } satisfies ProfileBadge));
+    }
+
+    getTrashCordDonorBadges(userId: string) {
+        return TrashCordDonorBadges[userId]?.map(badge => ({
+            iconSrc: badge.badge,
+            description: badge.tooltip,
+            position: BadgePosition.START,
+            props: {
+                style: {
+                    borderRadius: "50%",
+                    transform: "scale(0.9)"
+                }
+            },
+            onContextMenu(event, badge) {
+                ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={badge} />);
+            },
+            onClick() {
+                return TrashCordDonorModal();
             },
         } satisfies ProfileBadge));
     }
