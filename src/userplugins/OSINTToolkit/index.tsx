@@ -46,7 +46,7 @@ const settings = definePluginSettings({
             "/domain <domain> - Lookup a domain via RDAP\n" +
             "/iplookup <ipv4> - Lookup an IPv4 address\n" +
             "/myip - Show your public IP information\n" +
-            "/usersearch <username> - Generate a usersearch.org link for a username\n" +
+            "/usersearch <username> - Open a usersearch.org lookup in your browser\n" +
             "\n" +
             "Example:\n" +
             "/domain google.com\n" +
@@ -73,6 +73,10 @@ function normalizeDomain(input: string): string {
         .replace(/\.$/, "");
 }
 
+function normalizeUsername(input: string): string {
+    return input.trim().replace(/^@+/, "");
+}
+
 function isValidIPv4(ip: string): boolean {
     const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
     if (!ipRegex.test(ip)) return false;
@@ -83,8 +87,13 @@ function isValidIPv4(ip: string): boolean {
     });
 }
 
-function normalizeUsername(input: string): string {
-    return input.trim().replace(/^@+/, "");
+function isSafeHttpUrl(url: string): boolean {
+    try {
+        const parsed = new URL(url);
+        return parsed.protocol === "https:" || parsed.protocol === "http:";
+    } catch {
+        return false;
+    }
 }
 
 async function getDomainInfo(domain: string): Promise<DomainInfo | null> {
@@ -394,7 +403,7 @@ export default definePlugin({
         },
         {
             name: "usersearch",
-            description: "Generate a usersearch.org link for a username",
+            description: "Open a usersearch.org lookup in your browser",
             inputType: ApplicationCommandInputType.BUILT_IN,
             predicate: () => true,
             options: [
@@ -423,16 +432,39 @@ export default definePlugin({
 
                 const searchUrl = `https://usersearch.org/results.php?type=standard&URL_username=${encodeURIComponent(username)}`;
 
+                if (!isSafeHttpUrl(searchUrl)) {
+                    sendBotMessage(channelId, { content: "Blocked unsafe URL." });
+                    return;
+                }
+
                 logDebug("Generating usersearch link for:", username);
 
-                sendBotMessage(channelId, {
-                    content: [
-                        "```txt",
-                        `[USER SEARCH] ${username}`,
-                        `Link         : ${searchUrl}`,
-                        "```"
-                    ].join("\n")
-                });
+                try {
+                    const { shell } = require("electron");
+                    shell.openExternal(searchUrl);
+
+                    sendBotMessage(channelId, {
+                        content: [
+                            "```txt",
+                            `[USER SEARCH] ${username}`,
+                            "Status       : Opened in browser",
+                            `Link         : ${searchUrl}`,
+                            "```"
+                        ].join("\n")
+                    });
+                } catch (error) {
+                    console.error("Failed to open browser:", error);
+
+                    sendBotMessage(channelId, {
+                        content: [
+                            "```txt",
+                            `[USER SEARCH] ${username}`,
+                            "Status       : Could not open browser automatically",
+                            `Link         : ${searchUrl}`,
+                            "```"
+                        ].join("\n")
+                    });
+                }
             }
         }
     ]
