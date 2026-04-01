@@ -165,3 +165,40 @@
     padding: 12px;
     text-align: center;
 }
+
+/* Yeah i got that from Trashcord btw */
+/* Special card background: gif, cover, centered */
+.vc-special-card-special {
+  background-image: url('https://i.pinimg.com/originals/f0/08/96/f008965bf7d7eafccf65754751c0fad6.gif') !important;
+  background-size: cover !important;
+  background-position: center !important;
+}
+/* White text for all card text + buttons */
+.vc-special-card-special .vc-special-title,
+.vc-special-card-special .vc-special-subtitle,
+.vc-special-card-special .vc-special-text,
+.vc-special-card-special .vc-special-hyperlink-text,
+.vc-special-card-special .vc-donate-support-button,
+.vc-special-card-special .vc-invite-support-button {
+  color: #fff !important;
+}
+/* Custom icon container: replace default icon with custom image */
+.vc-special-image-container {
+  background-image: url('https://github.com/ImHisako/ImHisako/blob/main/Images/Illegalcord.png?raw=true');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+/* Donate & Invite buttons: black with 50% transparency */
+.vc-special-card-special .vc-donate-support-button,
+.vc-special-card-special .vc-invite-support-button {
+    background-color: rgba(0, 0, 0, 0.5) !important;
+}
+.vc-special-card-special .vc-donate-support-button:hover,
+.vc-special-card-special .vc-invite-support-button:hover {
+    background-color: rgba(0, 0, 0, 0.7) !important;
+}
+/* Hide original img inside container */
+.vc-special-image-container img {
+  display: none;
+}
