@@ -137,17 +137,16 @@ export function _getBadges(args: BadgeUserArgs) {
 
     if (illegalcordDonorBadges) {
         badges.unshift(
-            ...equicordDonorBadges.map(badge => ({
+            ...illegalcordDonorBadges.map(badge => ({
                 ...args,
                 ...badge,
             }))
         );
     }
 
-
     if (TrashCordDonorBadges) {
         badges.unshift(
-            ...illegalcordDonorBadges.map(badge => ({
+            ...TrashCordDonorBadges.map(badge => ({
                 ...args,
                 ...badge,
             }))
