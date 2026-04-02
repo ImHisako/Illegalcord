@@ -24,37 +24,39 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **BetterMic**
 - **BetterScreenshare**
 - **BigFileUpload**
-- **Stalker**: | (https://github.com/Reycko/EquicordPlugins/tree/main/stalker) With a modded version by me
-- **BadgeSelector** | (https://github.com/002-sans/VencordPlugins/tree/b8c7c98a50c0700f7389b0484e5659fe5ec0f99e/BadgesSelector)
+- **Stalker**
 - **Securecord** | (AES 256 on messages)
 - **Securecord Opossum Blazing Edition** | BlazingOpossum, block size + IV + MAC Tag 128 bits, key 256 bits. Based on AVX2 instructions, highly-performant, post-quantum symmetric cryptographic algorithm. Advanced, and modern.  | https://github.com/ZygoteCode/BlazingOpossum)
 - **IGP** ( pgp plugin )
 - **Mullvad DNS Over Discord** (Privacy & Security)
 - **CustomDNS** 
 - **DisableAnimations**
-- **BoosterCount** (https://github.com/Reathe/BoosterCount/tree/main)
 - **NoMirroredCam**
 - **OpenOptimizer**
 - **Vcjumkoptimizer**
 - **2FA Hider**
-- **Follow User** (Without friends check)
+- **Follow User** (Without friends check, Follow everyone without limits)
 - **DontLimitMe**
 - **GateawayLogger**
 - **InviteDefaults**
-- **CustomStream** (https://github.com/MrTopQ/customStream-Vencord)
-- **TypingFriends** (https://github.com/debxylen/Vencord/tree/main/src/plugins/typingFriends)
-- **SilentDelete** (https://github.com/aurickk/SilentDelete-Vencord) 
+- **OsintToolKit**
 - **VencordPerf**
 - **Hisako's Optimizations** (Currently glitchy)
 - **StereoSound** (Testing)
 - **RipcordStereo** (Testing)
-- **embeddedURLs** (https://github.com/ddadiani/Vencord-EmbeddedLinks/blob/main/src/plugins/embeddedURLs/index.ts)
-- **GPU Binder** (https://github.com/UnClide/vencord-gpubinder)
-- **stereoScreenshareAudio** (https://github.com/nerdwave-nick/Vencord-Stereo-Fix/blob/main/src/plugins/stereoScreenshareAudio/index.ts)
+- **BoosterCount** (https://github.com/Reathe/BoosterCount/tree/main)
+- **BadgeSelector** | (https://github.com/002-sans/VencordPlugins/tree/b8c7c98a50c0700f7389b0484e5659fe5ec0f99e/BadgesSelector)
+- **CustomStream** | (https://github.com/MrTopQ/customStream-Vencord)
+- **TypingFriends** | (https://github.com/debxylen/Vencord/tree/main/src/plugins/typingFriends)
+- **SilentDelete** | (https://github.com/aurickk/SilentDelete-Vencord) 
+- **embeddedURLs** | (https://github.com/ddadiani/Vencord-EmbeddedLinks/blob/main/src/plugins/embeddedURLs/index.ts)
+- **GPU Binder** | (https://github.com/UnClide/vencord-gpubinder)
+- **stereoScreenshareAudio** | (https://github.com/nerdwave-nick/Vencord-Stereo-Fix/blob/main/src/plugins/stereoScreenshareAudio/index.ts)
 - **DiscordLock** | (https://github.com/vejcowski/DiscordLock/tree/main) 
-- **KeepGifPickerOpen** (https://github.com/pacxwheaa/KeepGifPickerOpen/tree/main)
-- **Opsec Plugin** (https://github.com/ItzSolace/OpSec-Vencord/tree/main) | (We have a different version with italian support)
-- **OsintToolKit**
+- **KeepGifPickerOpen** | (https://github.com/pacxwheaa/KeepGifPickerOpen/tree/main)
+- **Opsec Plugin** | (https://github.com/ItzSolace/OpSec-Vencord/tree/main) | (We have a different version with italian support)
+- **DecibelLimiter** | (https://github.com/BashOnZsh/Bashcord/tree/main/src/userplugins/decibelLimiter)
+- **CrashHandlerEnhanched** | (https://github.com/Mifu999/Equicord-Userplugins/tree/main/userplugins/crashHandlerEnhanced)
 
 </details>
 
