@@ -576,7 +576,7 @@ export default definePlugin({
                 // Check for updates on first crash
                 if (!hasCrashedOnce && settings.store.autoUpdate) {
                     hasCrashedOnce = true;
-                    maybePromptToUpdate("Discord has crashed! There might be an Equicord update that fixes this. Update now?", true);
+                    maybePromptToUpdate("Discord has crashed! There might be an Illegalcord update that fixes this. Update now?", true);
                 }
             } catch { }
 
