@@ -52,7 +52,7 @@ const settings = definePluginSettings({
     },
     muteDurationMs: {
         type: OptionType.SLIDER,
-        description: "Auto‑mute duration (ms)",
+        description: "Auto-mute duration (ms)",
         default: 1200,
         markers: [500, 800, 1200, 2000, 3000],
         minValue: 300,
@@ -61,7 +61,7 @@ const settings = definePluginSettings({
     },
     cooldownMs: {
         type: OptionType.SLIDER,
-        description: "Anti‑spam cooldown (ms) per user",
+        description: "Anti-spam cooldown (ms) per user",
         default: 2000,
         markers: [500, 1000, 2000, 3000, 5000],
         minValue: 250,
@@ -213,10 +213,10 @@ function applyHardMute(connection: AnyConnection, userId: string, normalizedLeve
         connection.setLocalVolume?.(userId, 0);
         const percent = Math.round(normalizedLevel * 100);
         log(`Peak detected (${percent}%) on ${userId}. Volume muted.`);
-        toast(`DecibelLimiter: peak ${percent}% detected, sound muted`, Toasts.Type.MESSAGE);
+        toast(`DecibelLimiter: ${percent}% peak detected, audio muted`, Toasts.Type.MESSAGE);
         scheduleRestore(connection, userId, key);
     } catch (error) {
-        console.error("[DecibelLimiter] Error hard‑muting:", error);
+        console.error("[DecibelLimiter] Error applying hard mute:", error);
     }
 }
 
@@ -278,7 +278,7 @@ function attachStats(connection: AnyConnection) {
     };
 
     statsUnsubscribers.set(connectionId, off);
-    log(`Stats listener attached to connection ${connectionId}`);
+    log(`Stats listener attached on connection ${connectionId}`);
 }
 
 function attachConnectionListener() {
@@ -331,16 +331,16 @@ function cleanup() {
     }
     restoreTimeouts.clear();
 
-    // Immediately restore volumes that are still muted when the plugin stops.
+    // Immediately restore any still-muted volumes if the plugin is stopping.
     for (const [key, remembered] of rememberedVolumes) {
         const target = mutedTargets.get(key);
         if (!target) continue;
 
         try {
             target.connection.setLocalVolume?.(target.userId, remembered);
-            log(`Restoration on plugin stop for ${target.userId}: ${remembered}`);
+            log(`Plugin stop restoration for ${target.userId}: ${remembered}`);
         } catch (error) {
-            console.error(`[DecibelLimiter] Error restoring stop (${target.userId}):`, error);
+            console.error(`[DecibelLimiter] Error restoring on stop (${target.userId}):`, error);
         }
     }
 
@@ -352,7 +352,7 @@ function cleanup() {
 
 export default definePlugin({
     name: "DecibelLimiter",
-    description: "Automatically cuts off audio peaks that are too loud in voice calls",
+    description: "Automatically mutes audio spikes that are too loud in voice calls",
     authors: [{
         name: "Bash",
         id: 1327483363518582784n
