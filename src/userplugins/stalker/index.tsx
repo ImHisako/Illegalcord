@@ -33,7 +33,8 @@ export interface StalkerLogEntry {
 
 export const logger = new Logger("Stalker");
 
-let cachedLogs: StalkerLogEntry[] | null = null;
+// Cache separata per ogni utente: userId -> StalkerLogEntry[]
+const cachedLogsPerUser = new Map<string, StalkerLogEntry[]>();
 
 async function getLogsFromFile(userId: string, username: string): Promise<StalkerLogEntry[]> {
     try {
@@ -47,7 +48,7 @@ async function getLogsFromFile(userId: string, username: string): Promise<Stalke
     } catch (error) {
         logger.error("Failed to read stalker logs from file:", error);
     }
-    
+
     return [];
 }
 
@@ -57,25 +58,24 @@ export async function logStalkerEvent(entry: StalkerLogEntry) {
         if (!settings.store.enableLogging) {
             return;
         }
-        
+
         if (Native && Native.writeStalkerLog) {
-            // Ottieni i log esistenti dal file o dalla cache
+            // Ottieni i log dalla cache specifica per questo utente
             let logs: StalkerLogEntry[];
-            
-            if (cachedLogs) {
-                logs = cachedLogs;
+
+            if (cachedLogsPerUser.has(entry.userId)) {
+                logs = cachedLogsPerUser.get(entry.userId)!;
             } else {
                 logs = await getLogsFromFile(entry.userId, entry.username);
-                cachedLogs = logs;
+                cachedLogsPerUser.set(entry.userId, logs);
             }
-            
+
             // Aggiungi il nuovo evento
             logs.push(entry);
-            
-            // Aggiorna la cache
-            cachedLogs = logs;
-            
-            // Scrivi il file JSON aggiornato
+
+            // La Map tiene già il riferimento aggiornato, non serve re-set
+
+            // Scrivi il file JSON aggiornato solo per questo utente
             await Native.writeStalkerLog(JSON.stringify(logs, null, 2), entry.userId, entry.username);
         }
     } catch (error) {
@@ -177,6 +177,8 @@ const patchUserContext: NavContextMenuPatchCallback = (children, { user }: UserC
             action={() => {
                 if (stalked) {
                     settings.store.targets = settings.store.targets.replace(new RegExp(`(,?)(\\s*)(${user.id})`), "");
+                    // Rimuovi la cache dell'utente quando smetti di stalkarlo
+                    cachedLogsPerUser.delete(user.id);
                 } else {
                     settings.store.targets += `,${user.id}`;
                     if (settings.store.targets.startsWith(",")) settings.store.targets = settings.store.targets.slice(1);
@@ -191,7 +193,10 @@ const patchUserContext: NavContextMenuPatchCallback = (children, { user }: UserC
 export default definePlugin({
     name: "Stalker",
     "description": "Notifies you whenever a person does something.",
-    authors: [{ name: "Reycko", id: 1123725368004726794n }],
+    authors: [
+        { name: "Reycko", id: 1123725368004726794n }
+        { name: "irritably", id: 928787166916640838n }
+    ],
 
     contextMenus: {
         "user-context": patchUserContext,
@@ -206,6 +211,8 @@ export default definePlugin({
     stop() {
         status.deinit();
         voice.deinit();
+        // Pulisci la cache quando il plugin viene fermato
+        cachedLogsPerUser.clear();
     },
 
     flux: {
@@ -228,8 +235,6 @@ export default definePlugin({
                 });
             }
         },
-
-
     },
 
     settings,
