@@ -8,7 +8,7 @@ import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/Co
 import { definePluginSettings } from "@api/Settings";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
-import { ChannelStore, FluxDispatcher, GuildStore, Menu, UserStore } from "@webpack/common";
+import { ChannelStore, GuildStore, Menu, UserStore } from "@webpack/common";
 import { UserContextProps } from "plugins/biggerStreamPreview";
 
 import * as status from "./status";
@@ -16,7 +16,6 @@ import * as voice from "./voice";
 
 const Native = VencordNative.pluginHelpers.Stalker as PluginNative<typeof import("./index.native")>;
 
-// Verifica che il modulo nativo sia disponibile
 if (!Native) {
     console.warn("Stalker native module not available");
 }
@@ -33,66 +32,81 @@ export interface StalkerLogEntry {
 
 export const logger = new Logger("Stalker");
 
-// Cache separata per ogni utente: userId -> StalkerLogEntry[]
-const cachedLogsPerUser = new Map<string, StalkerLogEntry[]>();
+// Cache separata per ogni utente: userId -> { logs, date }
+// La "date" serve a invalidare la cache quando cambia il giorno
+interface UserLogCache {
+    logs: StalkerLogEntry[];
+    date: string; // formato YYYY-MM-DD
+}
+
+const cachedLogsPerUser = new Map<string, UserLogCache>();
+
+// Coda di scrittura per evitare race conditions: userId -> Promise
+const writeLocks = new Map<string, Promise<void>>();
+
+function getTodayDate(): string {
+    return new Date().toISOString().slice(0, 10);
+}
 
 async function getLogsFromFile(userId: string, username: string): Promise<StalkerLogEntry[]> {
-    try {
-        if (Native && Native.readStalkerLog) {
-            const fileContents = await Native.readStalkerLog(userId, username);
-            if (fileContents) {
-                const logs = JSON.parse(fileContents);
-                return Array.isArray(logs) ? logs : [];
-            }
-        }
-    } catch (error) {
-        logger.error("Failed to read stalker logs from file:", error);
-    }
+    if (!Native?.readStalkerLog) return [];
 
-    return [];
+    try {
+        const fileContents = await Native.readStalkerLog(userId, username);
+        const parsed = JSON.parse(fileContents);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+        // Se il JSON è corrotto, logga l'errore e parti da zero invece di perdere silenziosamente i dati
+        logger.error(`Failed to parse stalker log for user ${userId}, starting fresh:`, error);
+        return [];
+    }
+}
+
+function getCacheForUser(userId: string): UserLogCache | undefined {
+    const cache = cachedLogsPerUser.get(userId);
+    // Invalida la cache se il giorno è cambiato
+    if (cache && cache.date !== getTodayDate()) {
+        cachedLogsPerUser.delete(userId);
+        return undefined;
+    }
+    return cache;
 }
 
 export async function logStalkerEvent(entry: StalkerLogEntry) {
-    try {
-        // Controlla se il logging è abilitato nelle impostazioni
-        if (!settings.store.enableLogging) {
-            return;
-        }
+    if (!settings.store.enableLogging) return;
+    if (!Native?.writeStalkerLog) return;
 
-        if (Native && Native.writeStalkerLog) {
-            // Ottieni i log dalla cache specifica per questo utente
-            let logs: StalkerLogEntry[];
+    // Serializza le scritture per questo utente per evitare race conditions
+    const previousLock = writeLocks.get(entry.userId) ?? Promise.resolve();
 
-            if (cachedLogsPerUser.has(entry.userId)) {
-                logs = cachedLogsPerUser.get(entry.userId)!;
-            } else {
-                logs = await getLogsFromFile(entry.userId, entry.username);
-                cachedLogsPerUser.set(entry.userId, logs);
+    const newLock = previousLock.then(async () => {
+        try {
+            let cache = getCacheForUser(entry.userId);
+
+            if (!cache) {
+                const logs = await getLogsFromFile(entry.userId, entry.username);
+                cache = { logs, date: getTodayDate() };
+                cachedLogsPerUser.set(entry.userId, cache);
             }
 
-            // Aggiungi il nuovo evento
-            logs.push(entry);
+            cache.logs.push(entry);
 
-            // La Map tiene già il riferimento aggiornato, non serve re-set
-
-            // Scrivi il file JSON aggiornato solo per questo utente
-            await Native.writeStalkerLog(JSON.stringify(logs, null, 2), entry.userId, entry.username);
+            await Native.writeStalkerLog(JSON.stringify(cache.logs, null, 2), entry.userId, entry.username);
+        } catch (error) {
+            logger.error("Failed to write stalker log:", error);
         }
-    } catch (error) {
-        logger.error("Failed to write stalker log:", error);
-    }
+    });
+
+    writeLocks.set(entry.userId, newLock);
+    await newLock;
 }
 
 export let targets: string[] = [];
 
 const parseTargets = (parse: string): string[] => {
     const regex = /\s*(,?)\s*([0-9]+)/g;
-    const matches = [...parse.matchAll(regex)].map(value => {
-        return value.at(value.length - 1) as string;
-    });
-
+    const matches = [...parse.matchAll(regex)].map(match => match.at(match.length - 1) as string);
     targets = matches;
-
     return matches;
 };
 
@@ -106,7 +120,13 @@ export const settings = definePluginSettings({
     notifyCallJoin: {
         type: OptionType.BOOLEAN,
         default: true,
-        description: "Send a notification when a user joins a call.",
+        description: "Send a notification when a user joins a voice channel.",
+    },
+
+    notifyCallLeave: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Send a notification when a user leaves a voice channel.",
     },
 
     notifyOffline: {
@@ -130,7 +150,7 @@ export const settings = definePluginSettings({
     notifyIdle: {
         type: OptionType.BOOLEAN,
         default: false,
-        description: "Send a notification when a user goes on idle.",
+        description: "Send a notification when a user goes idle.",
     },
 
     notifyGoOnline: {
@@ -151,7 +171,6 @@ export const settings = definePluginSettings({
         description: "Log when a user sends a message in any channel."
     },
 
-
     targets: {
         type: OptionType.STRING,
         placeholder: "1234,5678",
@@ -162,13 +181,12 @@ export const settings = definePluginSettings({
 });
 
 const patchUserContext: NavContextMenuPatchCallback = (children, { user }: UserContextProps) => {
-    if (!settings.store.stalkContext) return;
-    if (!user) return;
+    if (!settings.store.stalkContext || !user) return;
 
     const stalked = settings.store.targets.includes(user.id);
     const group = findGroupChildrenByChildId("apps", children) ?? children;
-    let id = group.findLastIndex(child => child?.props?.id && child.props.id === "ignore"); // ignore button
-    if (id < 0) id = group.length - 1; // or at the end if not found
+    let id = group.findLastIndex(child => child?.props?.id && child.props.id === "ignore");
+    if (id < 0) id = group.length - 1;
 
     group.splice(id, 0,
         <Menu.MenuItem
@@ -177,8 +195,8 @@ const patchUserContext: NavContextMenuPatchCallback = (children, { user }: UserC
             action={() => {
                 if (stalked) {
                     settings.store.targets = settings.store.targets.replace(new RegExp(`(,?)(\\s*)(${user.id})`), "");
-                    // Rimuovi la cache dell'utente quando smetti di stalkarlo
                     cachedLogsPerUser.delete(user.id);
+                    writeLocks.delete(user.id);
                 } else {
                     settings.store.targets += `,${user.id}`;
                     if (settings.store.targets.startsWith(",")) settings.store.targets = settings.store.targets.slice(1);
@@ -192,7 +210,7 @@ const patchUserContext: NavContextMenuPatchCallback = (children, { user }: UserC
 
 export default definePlugin({
     name: "Stalker",
-    "description": "Notifies you whenever a person does something.",
+    description: "Notifies you whenever a person does something.",
     authors: [
         { name: "Reycko", id: 1123725368004726794n },
         { name: "irritably", id: 928787166916640838n }
@@ -211,29 +229,30 @@ export default definePlugin({
     stop() {
         status.deinit();
         voice.deinit();
-        // Pulisci la cache quando il plugin viene fermato
         cachedLogsPerUser.clear();
+        writeLocks.clear();
     },
 
     flux: {
         MESSAGE_CREATE({ message }: { message: any; }) {
             if (!settings.store.logMessages) return;
+            if (!targets.includes(message.author.id)) return;
 
-            const isStalking = targets.includes(message.author.id);
-            if (isStalking) {
-                const channel = ChannelStore.getChannel(message.channel_id);
-                const guild = channel.guild_id ? GuildStore.getGuild(channel.guild_id) : null;
+            const channel = ChannelStore.getChannel(message.channel_id);
+            const guild = channel.guild_id ? GuildStore.getGuild(channel.guild_id) : null;
+            const preview = message.content.length > 100
+                ? `${message.content.substring(0, 100)}...`
+                : message.content;
 
-                logStalkerEvent({
-                    timestamp: new Date().toISOString(),
-                    userId: message.author.id,
-                    username: message.author.username,
-                    action: "message_send",
-                    details: `Sent message: ${message.content.substring(0, 100)}${message.content.length > 100 ? "..." : ""}`,
-                    channelName: channel.name,
-                    guildName: guild?.name
-                });
-            }
+            logStalkerEvent({
+                timestamp: new Date().toISOString(),
+                userId: message.author.id,
+                username: message.author.username,
+                action: "message_send",
+                details: `Sent message: ${preview}`,
+                channelName: channel.name,
+                guildName: guild?.name
+            });
         },
     },
 

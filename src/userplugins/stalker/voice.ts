@@ -8,82 +8,104 @@ import { showNotification } from "@api/Notifications";
 import { findByPropsLazy, findStoreLazy } from "@webpack";
 import { ChannelStore, GenericStore, GuildStore, UserStore } from "@webpack/common";
 
-import { logStalkerEvent, targets } from ".";
+import { logStalkerEvent, settings, targets } from ".";
 
 const { selectVoiceChannel } = findByPropsLazy("selectVoiceChannel", "selectChannel");
 
-let lastVoiceState: { [userid: string]: MainVoiceStateData; } = {};
+const VoiceStateStore: GenericStore = findStoreLazy("VoiceStateStore");
 
 type MainVoiceStateData = {
     channelId: string;
     userId: string;
 };
 
-const VoiceStateStore: GenericStore = findStoreLazy("VoiceStateStore");
+let lastVoiceState: Record<string, MainVoiceStateData> = {};
+
+const getChannelName = (channelId: string): string => {
+    const channel = ChannelStore.getChannel(channelId);
+    if (!channel) return "Unknown channel";
+
+    if (channel.isGuildVoice() || channel.isGuildStageVoice()) {
+        const guild = GuildStore.getGuild(channel.guild_id);
+        return `${channel.name} from ${guild?.name ?? "Unknown server"}`;
+    }
+
+    return channel.name ?? "Unknown channel";
+};
 
 export const init = () => {
-    voiceStateChange(); // init it cause you might wanna join asap
+    // Inizializza lo stato attuale senza notificare,
+    // per evitare notifiche spurie all'avvio per chi era già in chiamata
+    const initialState: Record<string, MainVoiceStateData> = {};
+    for (const id of targets) {
+        const voiceState = VoiceStateStore.getVoiceStateForUser(id);
+        if (voiceState) initialState[id] = voiceState;
+    }
+    lastVoiceState = initialState;
+
     VoiceStateStore.addChangeListener(voiceStateChange);
 };
 
 export const deinit = () => {
     VoiceStateStore.removeChangeListener(voiceStateChange);
-};
-
-const getChannelName = (channelId: string): string => {
-    const channelData = ChannelStore.getChannel(channelId);
-
-    if (channelData.isGuildVoice() || channelData.isGuildStageVoice()) {
-        const guildData = GuildStore.getGuild(channelData.guild_id);
-        return `${channelData.name} from ${guildData.name}`;
-    } else {
-        return channelData.name;
-    }
-
-    return "";
+    lastVoiceState = {};
 };
 
 export const voiceStateChange = () => {
-    const newVoiceState = {};
+    const newVoiceState: Record<string, MainVoiceStateData> = {};
+
     for (const id of targets) {
-        newVoiceState[id] = VoiceStateStore.getVoiceStateForUser(id);
-        const voiceState: MainVoiceStateData = newVoiceState[id];
+        const voiceState: MainVoiceStateData = VoiceStateStore.getVoiceStateForUser(id);
         const lastVoiceStateForUser = lastVoiceState[id];
 
-        if (voiceState && !lastVoiceStateForUser) {
+        if (voiceState) newVoiceState[id] = voiceState;
+
+        const joinedVoice = voiceState && !lastVoiceStateForUser;
+        const leftVoice = !voiceState && lastVoiceStateForUser;
+        const switchedChannel = voiceState && lastVoiceStateForUser && voiceState.channelId !== lastVoiceStateForUser.channelId;
+
+        if (joinedVoice || switchedChannel) {
+            if (!settings.store.notifyCallJoin) continue;
+
             const user = UserStore.getUser(id);
-            const color = `#${user.accentColor?.toString(16)}`;
+            const channelName = getChannelName(voiceState.channelId);
 
             showNotification({
-                body: `${user.username} is in VC: ${getChannelName(voiceState.channelId)}\nClick to join them.`,
                 title: "Stalker",
+                body: `${user.username} joined VC: ${channelName}\nClick to join them.`,
                 icon: user.getAvatarURL(),
-                color,
-                onClick: () => {
-                    selectVoiceChannel(voiceState.channelId);
-                },
+                color: `#${user.accentColor?.toString(16)}`,
+                onClick: () => selectVoiceChannel(voiceState.channelId),
             });
-            
-            // Registra l'evento di stalking
+
             logStalkerEvent({
                 timestamp: new Date().toISOString(),
                 userId: user.id,
                 username: user.username,
                 action: "voice_join",
-                details: `Joined voice channel: ${getChannelName(voiceState.channelId)}`
+                details: `Joined voice channel: ${channelName}`
             });
         }
-        
-        // Controlla se l'utente è uscito da un canale vocale
-        if (!voiceState && lastVoiceStateForUser) {
+
+        if (leftVoice) {
             const user = UserStore.getUser(id);
-            
+            const channelName = getChannelName(lastVoiceStateForUser.channelId);
+
+            if (settings.store.notifyCallLeave) {
+                showNotification({
+                    title: "Stalker",
+                    body: `${user.username} left VC: ${channelName}`,
+                    icon: user.getAvatarURL(),
+                    color: `#${user.accentColor?.toString(16)}`,
+                });
+            }
+
             logStalkerEvent({
                 timestamp: new Date().toISOString(),
                 userId: user.id,
                 username: user.username,
                 action: "voice_leave",
-                details: `Left voice channel: ${getChannelName(lastVoiceStateForUser.channelId)}`
+                details: `Left voice channel: ${channelName}`
             });
         }
     }
