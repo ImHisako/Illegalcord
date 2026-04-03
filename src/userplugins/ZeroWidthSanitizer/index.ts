@@ -9,11 +9,6 @@ import definePlugin, { OptionType } from "@utils/types";
 import { Toasts, showToast } from "@webpack/common";
 
 const settings = definePluginSettings({
-    sanitizeOutgoing: {
-        type: OptionType.BOOLEAN,
-        description: "Sanitize outgoing messages before sending",
-        default: true
-    },
     sanitizeIncoming: {
         type: OptionType.BOOLEAN,
         description: "Sanitize incoming messages before displaying",
@@ -48,19 +43,23 @@ function notify(message: string, type = Toasts.Type.MESSAGE) {
     showToast(message, type);
 }
 
-function sanitizeText(text: unknown): unknown {
-    if (typeof text !== "string") return text;
+function sanitizeText(value: unknown): unknown {
+    if (typeof value !== "string") return value;
 
-    const matches = text.match(INVISIBLE_CHARS_REGEX);
+    const matches = value.match(INVISIBLE_CHARS_REGEX);
     const removedCount = matches?.length ?? 0;
-    if (!removedCount) return text;
+    if (!removedCount) return value;
 
     INVISIBLE_CHARS_REGEX.lastIndex = 0;
-    const result = text.replace(INVISIBLE_CHARS_REGEX, "");
+    const result = value.replace(INVISIBLE_CHARS_REGEX, "");
 
-    log(`Removed ${removedCount} invisible character(s).`, { before: text, after: result });
+    log(`Removed ${removedCount} invisible character(s).`, {
+        before: value,
+        after: result
+    });
+
     notify(
-        `ZeroWidthSanitizer: removed ${removedCount} invisible character(s)`,
+        `ZeroWidthSanitizer: detected and removed ${removedCount} invisible character(s)`,
         Toasts.Type.WARNING
     );
 
@@ -69,31 +68,11 @@ function sanitizeText(text: unknown): unknown {
 
 export default definePlugin({
     name: "ZeroWidthSanitizer",
-    description: "Removes invisible Unicode characters from messages to reduce tracking and fingerprinting",
+    description: "Removes invisible Unicode characters from displayed messages to reduce tracking and fingerprinting",
     authors: [{ name: "Irritably", id: 928787166916640838n }],
     settings,
 
     patches: [
-        {
-            find: "sendMessage(",
-            predicate: () => settings.store.sanitizeOutgoing,
-            replacement: [
-                {
-                    match: /(\bcontent:\s*)([^,}]+)(?=[,}])/g,
-                    replace: "$1$self.sanitizeOutgoing($2)"
-                }
-            ]
-        },
-        {
-            find: "editMessage(",
-            predicate: () => settings.store.sanitizeOutgoing,
-            replacement: [
-                {
-                    match: /(\bcontent:\s*)([^,}]+)(?=[,}])/g,
-                    replace: "$1$self.sanitizeOutgoing($2)"
-                }
-            ]
-        },
         {
             find: "renderMessageContent",
             predicate: () => settings.store.sanitizeIncoming,
@@ -106,11 +85,11 @@ export default definePlugin({
         }
     ],
 
-    sanitizeOutgoing(content: unknown) {
+    sanitizeIncoming(content: unknown) {
         return sanitizeText(content);
     },
 
-    sanitizeIncoming(content: unknown) {
+    sanitizeOutgoing(content: unknown) {
         return sanitizeText(content);
     },
 
