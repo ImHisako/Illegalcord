@@ -5,7 +5,6 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
-import { addPreEditListener, addPreSendListener, removePreEditListener, removePreSendListener } from "@api/MessageEvents";
 import definePlugin, { OptionType } from "@utils/types";
 import { Toasts, showToast } from "@webpack/common";
 
@@ -15,24 +14,19 @@ const settings = definePluginSettings({
         description: "Sanitize outgoing messages before sending",
         default: true
     },
-    sanitizeEdits: {
-        type: OptionType.BOOLEAN,
-        description: "Sanitize edited messages before applying the edit",
-        default: true
-    },
     sanitizeIncoming: {
         type: OptionType.BOOLEAN,
-        description: "Sanitize incoming messages before displaying them",
+        description: "Sanitize incoming messages before displaying",
         default: true
     },
     showToastOnDetection: {
         type: OptionType.BOOLEAN,
-        description: "Show a toast when invisible characters are detected",
+        description: "Show a notification when invisible characters are detected",
         default: true
     },
     showStartupToast: {
         type: OptionType.BOOLEAN,
-        description: "Show a toast when the plugin starts",
+        description: "Show a notification when the plugin starts",
         default: true
     },
     verboseLogs: {
@@ -41,11 +35,6 @@ const settings = definePluginSettings({
         default: false
     }
 });
-
-type MessageObject = {
-    content?: string;
-    [key: string]: unknown;
-};
 
 const INVISIBLE_CHARS_REGEX = /[\u200B-\u200D\u200E\u200F\u202A-\u202E\u2060-\u2064\u206A-\u206F\uFEFF\u00AD]/g;
 
@@ -59,55 +48,24 @@ function notify(message: string, type = Toasts.Type.MESSAGE) {
     showToast(message, type);
 }
 
-function sanitizeText(text: string): { result: string; found: boolean; removedCount: number; } {
+function sanitizeText(text: unknown): unknown {
+    if (typeof text !== "string") return text;
+
     const matches = text.match(INVISIBLE_CHARS_REGEX);
     const removedCount = matches?.length ?? 0;
-    const found = removedCount > 0;
+    if (!removedCount) return text;
+
     INVISIBLE_CHARS_REGEX.lastIndex = 0;
-    const result = found ? text.replace(INVISIBLE_CHARS_REGEX, "") : text;
-    return { result, found, removedCount };
-}
+    const result = text.replace(INVISIBLE_CHARS_REGEX, "");
 
-function sanitizeMaybeString(value: unknown): { value: unknown; found: boolean; removedCount: number; } {
-    if (typeof value !== "string") {
-        return { value, found: false, removedCount: 0 };
-    }
-
-    const { result, found, removedCount } = sanitizeText(value);
-    return { value: result, found, removedCount };
-}
-
-const preSendListener = (_channelId: string, messageObj: MessageObject) => {
-    if (!settings.store.sanitizeOutgoing) return;
-    if (typeof messageObj?.content !== "string") return;
-
-    const { result, found, removedCount } = sanitizeText(messageObj.content);
-    if (!found) return;
-
-    messageObj.content = result;
-    log(`Sanitized outgoing message; removed ${removedCount} invisible character(s).`, messageObj);
-
+    log(`Removed ${removedCount} invisible character(s).`, { before: text, after: result });
     notify(
-        `ZeroWidthSanitizer: removed ${removedCount} invisible character(s) from your outgoing message`,
-        Toasts.Type.MESSAGE
+        `ZeroWidthSanitizer: removed ${removedCount} invisible character(s)`,
+        Toasts.Type.WARNING
     );
-};
 
-const preEditListener = (_channelId: string, _messageId: string, messageObj: MessageObject) => {
-    if (!settings.store.sanitizeEdits) return;
-    if (typeof messageObj?.content !== "string") return;
-
-    const { result, found, removedCount } = sanitizeText(messageObj.content);
-    if (!found) return;
-
-    messageObj.content = result;
-    log(`Sanitized edited message; removed ${removedCount} invisible character(s).`, messageObj);
-
-    notify(
-        `ZeroWidthSanitizer: removed ${removedCount} invisible character(s) from your edited message`,
-        Toasts.Type.MESSAGE
-    );
-};
+    return result;
+}
 
 export default definePlugin({
     name: "ZeroWidthSanitizer",
@@ -115,9 +73,27 @@ export default definePlugin({
     authors: [{ name: "Irritably", id: 928787166916640838n }],
     settings,
 
-    dependencies: ["MessageEventsAPI"],
-
     patches: [
+        {
+            find: "sendMessage(",
+            predicate: () => settings.store.sanitizeOutgoing,
+            replacement: [
+                {
+                    match: /(\bcontent:\s*)([^,}]+)(?=[,}])/g,
+                    replace: "$1$self.sanitizeOutgoing($2)"
+                }
+            ]
+        },
+        {
+            find: "editMessage(",
+            predicate: () => settings.store.sanitizeOutgoing,
+            replacement: [
+                {
+                    match: /(\bcontent:\s*)([^,}]+)(?=[,}])/g,
+                    replace: "$1$self.sanitizeOutgoing($2)"
+                }
+            ]
+        },
         {
             find: "renderMessageContent",
             predicate: () => settings.store.sanitizeIncoming,
@@ -130,36 +106,22 @@ export default definePlugin({
         }
     ],
 
+    sanitizeOutgoing(content: unknown) {
+        return sanitizeText(content);
+    },
+
     sanitizeIncoming(content: unknown) {
-        if (!settings.store.sanitizeIncoming) return content;
-
-        const { value, found, removedCount } = sanitizeMaybeString(content);
-        if (!found) return value;
-
-        log(`Sanitized incoming message; removed ${removedCount} invisible character(s).`, content);
-
-        notify(
-            `ZeroWidthSanitizer: detected and removed ${removedCount} invisible character(s) from an incoming message`,
-            Toasts.Type.WARNING
-        );
-
-        return value;
+        return sanitizeText(content);
     },
 
     start() {
-        addPreSendListener(preSendListener);
-        addPreEditListener(preEditListener);
-
         log("Plugin started");
-
         if (settings.store.showStartupToast) {
             showToast("ZeroWidthSanitizer is active", Toasts.Type.SUCCESS);
         }
     },
 
     stop() {
-        removePreSendListener(preSendListener);
-        removePreEditListener(preEditListener);
         log("Plugin stopped");
     }
 });
