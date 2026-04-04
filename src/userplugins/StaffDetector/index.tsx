@@ -1,0 +1,211 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import { showNotification } from "@api/Notifications";
+import { definePluginSettings } from "@api/Settings";
+import { findByPropsLazy, findStoreLazy } from "@webpack";
+import { ChannelStore, GuildStore, PermissionStore, PermissionsBits, UserStore, VoiceStateStore } from "@webpack/common";
+import definePlugin, { OptionType } from "@utils/types";
+
+interface VoiceStateData {
+    channelId: string;
+    userId: string;
+}
+
+let lastVoiceState: Record<string, VoiceStateData> = {};
+
+const { selectVoiceChannel } = findByPropsLazy("selectVoiceChannel", "selectChannel");
+
+const settings = definePluginSettings({
+    notifyStaffJoin: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Send a notification when a staff member joins a voice channel."
+    },
+    notifyStaffLeave: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Send a notification when a staff member leaves a voice channel."
+    },
+    adminPermission: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Notify for users with Administrator permission"
+    },
+    manageGuildPermission: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Notify for users with Manage Server permission"
+    },
+    manageChannelsPermission: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Notify for users with Manage Channels permission"
+    },
+    manageRolesPermission: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Notify for users with Manage Roles permission"
+    },
+    manageMessagesPermission: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        description: "Notify for users with Manage Messages permission"
+    },
+    kickMembersPermission: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        description: "Notify for users with Kick Members permission"
+    },
+    banMembersPermission: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        description: "Notify for users with Ban Members permission"
+    },
+    moderateMembersPermission: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        description: "Notify for users with Timeout permission"
+    },
+    moveMembersPermission: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        description: "Notify for users with Move Members permission"
+    },
+    muteMembersPermission: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        description: "Notify for users with Mute Members permission"
+    },
+    deafenMembersPermission: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        description: "Notify for users with Deafen Members permission"
+    }
+});
+
+function isUserStaff(userId: string, guildId: string): boolean {
+    const guild = GuildStore.getGuild(guildId);
+    if (!guild) return false;
+
+    const checks = [
+        { setting: "adminPermission", perm: PermissionsBits.ADMINISTRATOR },
+        { setting: "manageGuildPermission", perm: PermissionsBits.MANAGE_GUILD },
+        { setting: "manageChannelsPermission", perm: PermissionsBits.MANAGE_CHANNELS },
+        { setting: "manageRolesPermission", perm: PermissionsBits.MANAGE_ROLES },
+        { setting: "manageMessagesPermission", perm: PermissionsBits.MANAGE_MESSAGES },
+        { setting: "kickMembersPermission", perm: PermissionsBits.KICK_MEMBERS },
+        { setting: "banMembersPermission", perm: PermissionsBits.BAN_MEMBERS },
+        { setting: "moderateMembersPermission", perm: PermissionsBits.MODERATE_MEMBERS },
+        { setting: "moveMembersPermission", perm: PermissionsBits.MOVE_MEMBERS },
+        { setting: "muteMembersPermission", perm: PermissionsBits.MUTE_MEMBERS },
+        { setting: "deafenMembersPermission", perm: PermissionsBits.DEAFEN_MEMBERS }
+    ];
+
+    for (const { setting, perm } of checks) {
+        if (settings.store[setting as keyof typeof settings.store] &&
+            PermissionStore.can(perm, guild, guildId, undefined, userId)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function getChannelName(channelId: string): string {
+    const channel = ChannelStore.getChannel(channelId);
+    if (!channel) return "Unknown channel";
+
+    if (channel.isGuildVoice() || channel.isGuildStageVoice()) {
+        const guild = GuildStore.getGuild(channel.guild_id);
+        return `${channel.name} from ${guild?.name ?? "Unknown server"}`;
+    }
+
+    return channel.name ?? "Unknown channel";
+}
+
+function voiceStateChange() {
+    const newVoiceState: Record<string, VoiceStateData> = {};
+    const allVoiceStates = VoiceStateStore.getVoiceStates();
+
+    for (const state of Object.values(allVoiceStates)) {
+        const { userId, channelId } = state as any;
+        if (!userId || !channelId) continue;
+
+        newVoiceState[userId] = { channelId, userId };
+
+        const lastState = lastVoiceState[userId];
+        const joinedVoice = !lastState && channelId;
+        const leftVoice = lastState && !channelId;
+        const switchedChannel = lastState && channelId && lastState.channelId !== channelId;
+
+        if (joinedVoice || switchedChannel) {
+            const channel = ChannelStore.getChannel(channelId);
+            if (!channel || !channel.guild_id) continue;
+
+            if (!isUserStaff(userId, channel.guild_id)) continue;
+            if (!settings.store.notifyStaffJoin) continue;
+
+            const user = UserStore.getUser(userId);
+            const channelName = getChannelName(channelId);
+
+            showNotification({
+                title: "Staff Alert",
+                body: `${user.username} joined VC: ${channelName}\nClick to join them.`,
+                icon: user.getAvatarURL(),
+                color: `#${user.accentColor?.toString(16).padStart(6, "0")}`,
+                onClick: () => selectVoiceChannel(channelId)
+            });
+        }
+
+        if (leftVoice) {
+            const channel = ChannelStore.getChannel(lastState.channelId);
+            if (!channel || !channel.guild_id) continue;
+
+            if (!isUserStaff(userId, channel.guild_id)) continue;
+            if (!settings.store.notifyStaffLeave) continue;
+
+            const user = UserStore.getUser(userId);
+            const channelName = getChannelName(lastState.channelId);
+
+            showNotification({
+                title: "Staff Alert",
+                body: `${user.username} left VC: ${channelName}`,
+                icon: user.getAvatarURL(),
+                color: `#${user.accentColor?.toString(16).padStart(6, "0")}`
+            });
+        }
+    }
+
+    lastVoiceState = newVoiceState;
+}
+
+export default definePlugin({
+    name: "StaffDetector",
+    description: "Notifies you when staff members join or leave voice channels based on their permissions",
+	authors: [{ name: "Irritably", id: 928787166916640838n }],
+    settings,
+
+    start() {
+        const initialState: Record<string, VoiceStateData> = {};
+        const allVoiceStates = VoiceStateStore.getVoiceStates();
+
+        for (const state of Object.values(allVoiceStates)) {
+            const { userId, channelId } = state as any;
+            if (userId && channelId) {
+                initialState[userId] = { channelId, userId };
+            }
+        }
+
+        lastVoiceState = initialState;
+        VoiceStateStore.addChangeListener(voiceStateChange);
+    },
+
+    stop() {
+        VoiceStateStore.removeChangeListener(voiceStateChange);
+        lastVoiceState = {};
+    }
+});
