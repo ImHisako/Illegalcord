@@ -61,6 +61,11 @@ const settings = definePluginSettings({
         default: false,
         description: "Notify for users with Move Members permission"
     },
+    manageNicknamesPermission: {
+    type: OptionType.BOOLEAN,
+    default: false,
+    description: "Notify for users with Manage Nicknames permission"
+    },
     muteMembersPermission: {
         type: OptionType.BOOLEAN,
         default: false,
@@ -87,6 +92,7 @@ function isUserStaff(userId: string, guildId: string): boolean {
         { setting: "manageGuildPermission", perm: PermissionsBits.MANAGE_GUILD },
         { setting: "manageChannelsPermission", perm: PermissionsBits.MANAGE_CHANNELS },
         { setting: "manageRolesPermission", perm: PermissionsBits.MANAGE_ROLES },
+        { setting: "manageNicknamesPermission", perm: PermissionsBits.MANAGE_NICKNAMES },
         { setting: "manageMessagesPermission", perm: PermissionsBits.MANAGE_MESSAGES },
         { setting: "kickMembersPermission", perm: PermissionsBits.KICK_MEMBERS },
         { setting: "banMembersPermission", perm: PermissionsBits.BAN_MEMBERS },
