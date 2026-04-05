@@ -7,8 +7,11 @@
 import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
 import { findByPropsLazy, findStoreLazy } from "@webpack";
-import { ChannelStore, GuildStore, PermissionStore, PermissionsBits, UserStore, VoiceStateStore } from "@webpack/common";
+import { ChannelStore, GuildMemberStore, GuildStore, PermissionStore, PermissionsBits, UserStore, VoiceStateStore } from "@webpack/common";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
+
+const logger = new Logger("StaffDetector");
 
 interface VoiceStateData {
     channelId: string;
@@ -89,7 +92,16 @@ const settings = definePluginSettings({
 
 function isUserStaff(userId: string, guildId: string): boolean {
     const guild = GuildStore.getGuild(guildId);
-    if (!guild) return false;
+    if (!guild) {
+        logger.debug("No guild found for guildId:", guildId);
+        return false;
+    }
+
+    // Se è l'owner del server, è sempre staff
+    if (guild.ownerId === userId) {
+        logger.debug("User is guild owner");
+        return true;
+    }
 
     const checks = [
         { setting: "adminPermission", perm: PermissionsBits.ADMINISTRATOR },
@@ -106,12 +118,16 @@ function isUserStaff(userId: string, guildId: string): boolean {
     ];
 
     for (const { setting, perm } of checks) {
-        if (settings.store[setting as keyof typeof settings.store] &&
-            PermissionStore.can(perm, guild, guildId, undefined, userId)) {
-            return true;
+        if (settings.store[setting as keyof typeof settings.store]) {
+            const hasPerm = PermissionStore.can(perm, guild, guildId, undefined, userId);
+            if (hasPerm) {
+                logger.debug(`User ${userId} has permission`, setting);
+                return true;
+            }
         }
     }
 
+    logger.debug("User is not staff");
     return false;
 }
 
@@ -131,6 +147,8 @@ function voiceStateChange() {
     const newVoiceState: Record<string, VoiceStateData> = {};
     const allVoiceStates = VoiceStateStore.getVoiceStates();
 
+    logger.debug("Voice state change detected, total states:", Object.keys(allVoiceStates).length);
+
     for (const state of Object.values(allVoiceStates)) {
         const { userId, channelId } = state as any;
         if (!userId || !channelId) continue;
@@ -143,15 +161,29 @@ function voiceStateChange() {
         const switchedChannel = lastState && channelId && lastState.channelId !== channelId;
 
         if (joinedVoice || switchedChannel) {
+            logger.debug(`User ${userId} joined/switched to channel ${channelId}`);
+            
             const channel = ChannelStore.getChannel(channelId);
-            if (!channel || !channel.guild_id) continue;
+            if (!channel || !channel.guild_id) {
+                logger.debug("No channel or guild_id found");
+                continue;
+            }
 
-            if (!isUserStaff(userId, channel.guild_id)) continue;
-            if (!settings.store.notifyStaffJoin) continue;
+            logger.debug("Checking if user is staff in guild:", channel.guild_id);
+            if (!isUserStaff(userId, channel.guild_id)) {
+                logger.debug("User is not staff, skipping");
+                continue;
+            }
+            
+            if (!settings.store.notifyStaffJoin) {
+                logger.debug("Staff join notifications disabled");
+                continue;
+            }
 
             const user = UserStore.getUser(userId);
             const channelName = getChannelName(channelId);
 
+            logger.info("Showing notification for staff join:", user.username);
             showNotification({
                 title: "Staff Alert",
                 body: `${user.username} joined VC: ${channelName}\nClick to join them.`,
@@ -162,15 +194,28 @@ function voiceStateChange() {
         }
 
         if (leftVoice) {
+            logger.debug(`User ${userId} left channel ${lastState.channelId}`);
+            
             const channel = ChannelStore.getChannel(lastState.channelId);
-            if (!channel || !channel.guild_id) continue;
+            if (!channel || !channel.guild_id) {
+                logger.debug("No channel or guild_id found for leave");
+                continue;
+            }
 
-            if (!isUserStaff(userId, channel.guild_id)) continue;
-            if (!settings.store.notifyStaffLeave) continue;
+            if (!isUserStaff(userId, channel.guild_id)) {
+                logger.debug("User is not staff on leave, skipping");
+                continue;
+            }
+            
+            if (!settings.store.notifyStaffLeave) {
+                logger.debug("Staff leave notifications disabled");
+                continue;
+            }
 
             const user = UserStore.getUser(userId);
             const channelName = getChannelName(lastState.channelId);
 
+            logger.info("Showing notification for staff leave:", user.username);
             showNotification({
                 title: "Staff Alert",
                 body: `${user.username} left VC: ${channelName}`,
