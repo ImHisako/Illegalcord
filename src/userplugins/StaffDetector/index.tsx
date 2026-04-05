@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
-import { ChannelStore, GuildStore, PermissionStore, PermissionsBits, UserStore, VoiceStateStore, showToast, Toasts } from "@webpack/common";
+import { ChannelStore, GuildStore, PermissionStore, PermissionsBits, UserStore, VoiceStateStore } from "@webpack/common";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 
@@ -122,11 +123,11 @@ function checkVoiceChannelForStaff(channelId: string) {
     if (staffMembers.length > 0) {
         const staffNames = staffMembers.map(id => UserStore.getUser(id).username).join(", ");
         logger.info("Found staff in channel:", staffNames);
-        showToast(
-            `Staff in VC: ${staffNames}`,
-            Toasts.Type.SUCCESS,
-            { duration: 5000 }
-        );
+        showNotification({
+            title: "Staff Alert",
+            body: `Staff in VC: ${staffNames}`,
+            onClick: () => {}
+        });
     }
 }
 
@@ -150,7 +151,7 @@ export default definePlugin({
             }
 
             logger.debug("Joined voice channel:", channelId);
-            
+
             // Aspetta un attimo che gli stati vocali si aggiornino
             setTimeout(() => {
                 checkVoiceChannelForStaff(channelId);
