@@ -7,7 +7,7 @@
 import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
 import { findByPropsLazy, findStoreLazy } from "@webpack";
-import { ChannelStore, GuildMemberStore, GuildStore, PermissionStore, PermissionsBits, UserStore, VoiceStateStore } from "@webpack/common";
+import { ChannelStore, GuildMemberStore, GuildStore, PermissionStore, PermissionsBits, SelectedGuildStore, UserStore, VoiceStateStore } from "@webpack/common";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 
@@ -257,11 +257,12 @@ export default definePlugin({
     flux: {
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: any[]; }) {
             logger.debug("VOICE_STATE_UPDATES event received with", voiceStates.length, "states");
+            logger.debug("Voice states:", voiceStates.map(s => `${s.userId}:${s.channelId || 'left'}`).join(", "));
             
             const newVoiceState: Record<string, VoiceStateData> = {};
             const allVoiceStates = VoiceStateStore.getVoiceStates();
 
-            // Costruisci il nuovo stato completo
+            // Costruisci il nuovo stato completo da TUTTI i server
             for (const state of Object.values(allVoiceStates)) {
                 const { userId, channelId } = state as any;
                 if (userId && channelId) {
@@ -269,7 +270,7 @@ export default definePlugin({
                 }
             }
 
-            // Controlla i cambiamenti
+            // Controlla i cambiamenti per ogni utente
             for (const state of voiceStates) {
                 const { userId, channelId } = state;
                 if (!userId) continue;
@@ -279,61 +280,54 @@ export default definePlugin({
                 const leftVoice = lastState && !channelId;
                 const switchedChannel = lastState && channelId && lastState.channelId !== channelId;
 
-                if (joinedVoice || switchedChannel) {
-                    logger.debug(`User ${userId} joined/switched to channel ${channelId}`);
-                    
-                    const channel = ChannelStore.getChannel(channelId);
-                    if (!channel || !channel.guild_id) {
-                        logger.debug("No channel or guild_id found");
-                        continue;
-                    }
+                logger.debug(`User ${userId}: joined=${joinedVoice}, left=${leftVoice}, switch=${switchedChannel}, channel=${channelId}`);
 
-                    logger.debug("Checking if user is staff in guild:", channel.guild_id);
-                    if (!isUserStaff(userId, channel.guild_id)) {
-                        logger.debug("User is not staff, skipping");
-                        continue;
-                    }
-                    
+                // Se non c'è cambiamento, skip
+                if (!joinedVoice && !leftVoice && !switchedChannel) continue;
+
+                // Determina quale canale controllare
+                const channelToCheck = channelId || (lastState?.channelId);
+                if (!channelToCheck) continue;
+
+                const channel = ChannelStore.getChannel(channelToCheck);
+                if (!channel || !channel.guild_id) {
+                    logger.debug("No channel or guild_id found for user", userId);
+                    continue;
+                }
+
+                logger.debug(`User ${userId} event in guild ${channel.guild_id}, channel ${channelToCheck}`);
+                
+                // Controlla se è staff nel server dove si trova il canale
+                if (!isUserStaff(userId, channel.guild_id)) {
+                    logger.debug("User is not staff, skipping");
+                    continue;
+                }
+
+                const user = UserStore.getUser(userId);
+                const channelName = getChannelName(channelToCheck);
+
+                if (joinedVoice || switchedChannel) {
                     if (!settings.store.notifyStaffJoin) {
                         logger.debug("Staff join notifications disabled");
                         continue;
                     }
 
-                    const user = UserStore.getUser(userId);
-                    const channelName = getChannelName(channelId);
-
-                    logger.info("Showing notification for staff join:", user.username);
+                    logger.info("Showing notification for staff join:", user.username, "in", channelName);
                     showNotification({
                         title: "Staff Alert",
                         body: `${user.username} joined VC: ${channelName}\nClick to join them.`,
                         icon: user.getAvatarURL(),
-                        onClick: () => selectVoiceChannel(channelId)
+                        onClick: () => selectVoiceChannel(channelToCheck)
                     });
                 }
 
                 if (leftVoice) {
-                    logger.debug(`User ${userId} left channel ${lastState.channelId}`);
-                    
-                    const channel = ChannelStore.getChannel(lastState.channelId);
-                    if (!channel || !channel.guild_id) {
-                        logger.debug("No channel or guild_id found for leave");
-                        continue;
-                    }
-
-                    if (!isUserStaff(userId, channel.guild_id)) {
-                        logger.debug("User is not staff on leave, skipping");
-                        continue;
-                    }
-                    
                     if (!settings.store.notifyStaffLeave) {
                         logger.debug("Staff leave notifications disabled");
                         continue;
                     }
 
-                    const user = UserStore.getUser(userId);
-                    const channelName = getChannelName(lastState.channelId);
-
-                    logger.info("Showing notification for staff leave:", user.username);
+                    logger.info("Showing notification for staff leave:", user.username, "from", channelName);
                     showNotification({
                         title: "Staff Alert",
                         body: `${user.username} left VC: ${channelName}`,
