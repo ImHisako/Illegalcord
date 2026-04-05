@@ -246,11 +246,103 @@ export default definePlugin({
         }
 
         lastVoiceState = initialState;
-        VoiceStateStore.addChangeListener(voiceStateChange);
+        logger.info("StaffDetector started, tracking", Object.keys(initialState).length, "users in voice");
     },
 
     stop() {
-        VoiceStateStore.removeChangeListener(voiceStateChange);
         lastVoiceState = {};
+        logger.info("StaffDetector stopped");
+    },
+
+    flux: {
+        VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: any[]; }) {
+            logger.debug("VOICE_STATE_UPDATES event received with", voiceStates.length, "states");
+            
+            const newVoiceState: Record<string, VoiceStateData> = {};
+            const allVoiceStates = VoiceStateStore.getVoiceStates();
+
+            // Costruisci il nuovo stato completo
+            for (const state of Object.values(allVoiceStates)) {
+                const { userId, channelId } = state as any;
+                if (userId && channelId) {
+                    newVoiceState[userId] = { channelId, userId };
+                }
+            }
+
+            // Controlla i cambiamenti
+            for (const state of voiceStates) {
+                const { userId, channelId } = state;
+                if (!userId) continue;
+
+                const lastState = lastVoiceState[userId];
+                const joinedVoice = !lastState && channelId;
+                const leftVoice = lastState && !channelId;
+                const switchedChannel = lastState && channelId && lastState.channelId !== channelId;
+
+                if (joinedVoice || switchedChannel) {
+                    logger.debug(`User ${userId} joined/switched to channel ${channelId}`);
+                    
+                    const channel = ChannelStore.getChannel(channelId);
+                    if (!channel || !channel.guild_id) {
+                        logger.debug("No channel or guild_id found");
+                        continue;
+                    }
+
+                    logger.debug("Checking if user is staff in guild:", channel.guild_id);
+                    if (!isUserStaff(userId, channel.guild_id)) {
+                        logger.debug("User is not staff, skipping");
+                        continue;
+                    }
+                    
+                    if (!settings.store.notifyStaffJoin) {
+                        logger.debug("Staff join notifications disabled");
+                        continue;
+                    }
+
+                    const user = UserStore.getUser(userId);
+                    const channelName = getChannelName(channelId);
+
+                    logger.info("Showing notification for staff join:", user.username);
+                    showNotification({
+                        title: "Staff Alert",
+                        body: `${user.username} joined VC: ${channelName}\nClick to join them.`,
+                        icon: user.getAvatarURL(),
+                        onClick: () => selectVoiceChannel(channelId)
+                    });
+                }
+
+                if (leftVoice) {
+                    logger.debug(`User ${userId} left channel ${lastState.channelId}`);
+                    
+                    const channel = ChannelStore.getChannel(lastState.channelId);
+                    if (!channel || !channel.guild_id) {
+                        logger.debug("No channel or guild_id found for leave");
+                        continue;
+                    }
+
+                    if (!isUserStaff(userId, channel.guild_id)) {
+                        logger.debug("User is not staff on leave, skipping");
+                        continue;
+                    }
+                    
+                    if (!settings.store.notifyStaffLeave) {
+                        logger.debug("Staff leave notifications disabled");
+                        continue;
+                    }
+
+                    const user = UserStore.getUser(userId);
+                    const channelName = getChannelName(lastState.channelId);
+
+                    logger.info("Showing notification for staff leave:", user.username);
+                    showNotification({
+                        title: "Staff Alert",
+                        body: `${user.username} left VC: ${channelName}`,
+                        icon: user.getAvatarURL()
+                    });
+                }
+            }
+
+            lastVoiceState = newVoiceState;
+        }
     }
 });
