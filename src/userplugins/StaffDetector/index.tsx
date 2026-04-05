@@ -12,6 +12,9 @@ import definePlugin, { OptionType } from "@utils/types";
 
 const logger = new Logger("StaffDetector");
 
+// Track which channels we've already notified about to avoid duplicates
+const notifiedChannels = new Set<string>();
+
 const settings = definePluginSettings({
     adminPermission: {
         type: OptionType.BOOLEAN,
@@ -122,12 +125,26 @@ function checkVoiceChannelForStaff(channelId: string) {
 
     if (staffMembers.length > 0) {
         const staffNames = staffMembers.map(id => UserStore.getUser(id).username).join(", ");
+
+        // Evita notifiche duplicate per lo stesso canale
+        if (notifiedChannels.has(channelId)) {
+            logger.debug("Already notified for this channel, skipping");
+            return;
+        }
+
         logger.info("Found staff in channel:", staffNames);
         showNotification({
             title: "Staff Alert",
             body: `Staff in VC: ${staffNames}`,
-            onClick: () => {}
+            permanent: true, // La notifica non scade automaticamente
+            onClick: () => { }
         });
+
+        // Marca questo canale come già notificato
+        notifiedChannels.add(channelId);
+    } else {
+        // Se non ci sono più staffer, rimuovi dalla lista delle notifiche
+        notifiedChannels.delete(channelId);
     }
 }
 
@@ -141,6 +158,8 @@ export default definePlugin({
         VOICE_CHANNEL_SELECT({ channelId }: { channelId: string | null; }) {
             if (!channelId) {
                 logger.debug("Left voice channel");
+                // Pulisci tutte le notifiche quando lasci un canale
+                notifiedChannels.clear();
                 return;
             }
 
