@@ -1,5 +1,7 @@
 # [<img src="./browser/icon.png" width="40" align="left" alt="Equicord">](https://github.com/Equicord/Equicord) Illegalcord
 
+🌐 **Languages / Lingue:** [English](README.md) | [Italiano](README_IT.md)
+
 Illegalcord is a fork of [Equicord](https://github.com/Equicord) & [Vencord](https://github.com/Vendicated/Vencord), with over 300+ plugins.
 An open‑source client built for those who believe in absolute freedom of development.
 No restrictions, no censorship — every plugin is welcome, every idea can take shape.
