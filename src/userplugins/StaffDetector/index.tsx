@@ -301,6 +301,8 @@ function memberHasPerm(guildId: string, userId: string, perm: bigint): boolean {
     const guild = GuildStore.getGuild(guildId);
     if (!guild) return false;
     if (guild.ownerId === userId) return true;
+    // FIX: guard against roles map not being loaded yet
+    if (!guild.roles) return false;
     const member = GuildMemberStore.getMember(guildId, userId);
     if (!member?.roles) return false;
     const roles = member.roles;
@@ -482,7 +484,7 @@ export default definePlugin({
             scanChannelStaff(channelId, true);
         },
 
-        VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: Array<{ userId: string; channelId?: string; oldChannelId?: string; }>; }) {
+        VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: Array<{ userId: string; channelId?: string; oldChannelId?: string; guildId?: string; }>; }) {
             const currentChannelId: string | null = SelectedChannelStore.getVoiceChannelId?.() ?? null;
             if (!currentChannelId) return;
 
@@ -493,33 +495,38 @@ export default definePlugin({
             if (!myUserId) return;
 
             for (let i = 0; i < voiceStates.length; i++) {
-                const { userId, channelId, oldChannelId } = voiceStates[i];
-                if (userId === myUserId) continue;
-                if (!isServerAllowedForUser(channel.guild_id, userId)) continue;
+                // FIX: isolate per-state errors so one bad entry doesn't crash the whole handler
+                try {
+                    const { userId, channelId, oldChannelId } = voiceStates[i];
+                    if (userId === myUserId) continue;
+                    if (!isServerAllowedForUser(channel.guild_id, userId)) continue;
 
-                const entered = channelId === currentChannelId && oldChannelId !== currentChannelId;
+                    const entered = channelId === currentChannelId && oldChannelId !== currentChannelId;
 
-                if (entered) {
-                    if (!isUserStaff(userId, channel.guild_id) || !isUserTracked(userId)) continue;
-                    currentChannelStaff.add(userId);
-                    const name = getUsername(userId);
-                    const ctx = getChannelContext(currentChannelId);
-                    if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" joined - ${ctx}`);
-                    playStaffSound(true);
-                    notify("🚨 StaffDetector:", `"${name}" joined - ${ctx}`, getAvatarUrl(userId));
-                    continue;
-                }
+                    if (entered) {
+                        if (!isUserStaff(userId, channel.guild_id) || !isUserTracked(userId)) continue;
+                        currentChannelStaff.add(userId);
+                        const name = getUsername(userId);
+                        const ctx = getChannelContext(currentChannelId);
+                        if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" joined - ${ctx}`);
+                        playStaffSound(true);
+                        notify("🚨 StaffDetector:", `"${name}" joined - ${ctx}`, getAvatarUrl(userId));
+                        continue;
+                    }
 
-                const left = oldChannelId === currentChannelId && channelId !== currentChannelId;
-                if (left && currentChannelStaff.has(userId)) {
-                    currentChannelStaff.delete(userId);
-                    const name = getUsername(userId);
-                    const ctx = getChannelContext(currentChannelId);
-                    const remaining = currentChannelStaff.size;
-                    const suffix = remaining > 0 ? ` - ${remaining} staff remaining` : " - No staff remaining";
-                    if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" left - ${ctx} (${remaining} remaining)`);
-                    playStaffSound(false);
-                    notify("✅ StaffDetector:", `"${name}" left - ${ctx}${suffix}`, getAvatarUrl(userId));
+                    const left = oldChannelId === currentChannelId && channelId !== currentChannelId;
+                    if (left && currentChannelStaff.has(userId)) {
+                        currentChannelStaff.delete(userId);
+                        const name = getUsername(userId);
+                        const ctx = getChannelContext(currentChannelId);
+                        const remaining = currentChannelStaff.size;
+                        const suffix = remaining > 0 ? ` - ${remaining} staff remaining` : " - No staff remaining";
+                        if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" left - ${ctx} (${remaining} remaining)`);
+                        playStaffSound(false);
+                        notify("✅ StaffDetector:", `"${name}" left - ${ctx}${suffix}`, getAvatarUrl(userId));
+                    }
+                } catch (e) {
+                    if (settings.store.enableLogs) logger.error("StaffDetector: error processing voice state:", e);
                 }
             }
         },
