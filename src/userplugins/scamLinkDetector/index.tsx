@@ -6,11 +6,9 @@
 
 import { sendBotMessage } from "@api/Commands";
 import { definePluginSettings } from "@api/Settings";
-import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
-import { RelationshipStore, SelectedChannelStore } from "@webpack/common";
 
 const logger = new Logger("ScamLinkDetector", "#ff4444");
 
@@ -113,9 +111,8 @@ export default definePlugin({
         async MESSAGE_CREATE({ optimistic, type, message, channelId }: IMessageCreate) {
             if (optimistic || type !== "MESSAGE_CREATE") return;
             if (message.state === "SENDING") return;
-            if (RelationshipStore.isBlocked(message.author?.id)) return;
-            if (channelId !== SelectedChannelStore.getChannelId()) return;
             if (!message.content) return;
+            if (message.author?.bot) return;
 
             await fetchScamList();
 
@@ -123,14 +120,17 @@ export default definePlugin({
 
             if (scamDomains.length === 0) return;
 
+            logger.warn(`Detected scam links from ${message.author.username}#${message.author.discriminator} in channel ${channelId}: ${scamDomains.join(", ")}`);
+
             const domainList = scamDomains.map(d => `\`${d}\``).join(", ");
-            const warningMessage = `⚠️ **Scam Link Detected**\n\nThis message contains known scam/malicious links:\n${domainList}\n\nThese domains are flagged in the Discord AntiScam database. Do not click them!`;
+            const warningMessage = `⚠️ **Scam Link Detected**\n\nThis message from **${message.author.username}** contains known scam/malicious links:\n${domainList}\n\nThese domains are flagged in the Discord AntiScam database. Do not click them!`;
 
             if (settings.store.blockMessage) {
                 try {
                     await fetch(`/api/v9/channels/${channelId}/messages/${message.id}`, {
                         method: "DELETE"
                     });
+                    logger.info(`Deleted scam message ${message.id} from ${message.author.username}`);
                 } catch (error) {
                     logger.error("Failed to delete scam message:", error);
                 }
@@ -139,8 +139,6 @@ export default definePlugin({
             sendBotMessage(channelId, {
                 content: warningMessage
             });
-
-            logger.warn(`Detected scam links in channel ${channelId}: ${scamDomains.join(", ")}`);
         }
     },
 
