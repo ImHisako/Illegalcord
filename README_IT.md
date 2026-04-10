@@ -4,9 +4,12 @@
 
 Illegalcord è un fork di [Equicord](https://github.com/Equicord) & [Vencord](https://github.com/Vendicated/Vencord), con oltre 300+ plugin.
 Un client open-source creato per chi crede nella libertà assoluta di sviluppo.
-Nessuna restrizione, nessuna censura — ogni plugin è il benvenuto, ogni idea può prendere forma.
-Illegalcord non impone regole arbitrarie; mette la comunità e la sperimentazione al centro.
-Se sei qui, significa che vuoi creare senza limiti — e questo è il posto giusto per farlo.
+Un client open source pensato per chi crede nella libertà assoluta di sviluppo.
+Possiamo considerare questo client un'alternativa affidabile a Lightcord, poiché Illegalcord è un progetto gratuito e open source che supporta l'audio stereo.
+Non ti fidi di Lightcord? Sei nel posto giusto.
+Vuoi sfruttare le API di Discord? Cerchi un client Discord senza regole? Sei nel posto giusto.
+Vuoi chattare in privato su Discord? Il plugin “Securecord Opossum” è quello che fa per te.
+Vuoi ottenere codici Nitro per avere Nitro gratis? Abbiamo un plugin integrato per ottenere Nitro gratis: smetti di pagare per Nitro a partire da ora.
 
 Telegram x News: https://t.me/Illegalcord
 
