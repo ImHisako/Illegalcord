@@ -1,22 +1,8 @@
 import definePlugin, { OptionType } from "@utils/types";
 import { definePluginSettings } from "@api/Settings";
+import { findByProps } from "@webpack";
 
-function getToken(): string | null {
-    try {
-        const id = Math.random().toString();
-        const token = Object.values(
-            webpackChunkdiscord_app.push([[id], {}, (req) => req.c])
-        )
-            .find((m: any) =>
-                m?.exports?.default?.getToken !== undefined
-            )?.exports.default.getToken();
-
-        return token || null;
-    } catch (err) {
-        console.error("[Clan Switcher] Failed to extract token:", err);
-        return null;
-    }
-}
+// ─── Settings ────────────────────────────────────────────────────────────────
 
 const settings = definePluginSettings({
     clans: {
@@ -27,78 +13,156 @@ const settings = definePluginSettings({
     intervalSeconds: {
         type: OptionType.NUMBER,
         default: 5,
-        description: "Interval between clan join attempts (in seconds)"
+        description: "Interval between clan switches (in seconds, min 1)"
+    },
+    randomizeOrder: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        description: "Randomize clan rotation order"
+    },
+    enableLogs: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Enable console logging"
     }
 });
 
-let loop: ReturnType<typeof setInterval> | null = null;
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function getToken(): string | null {
+    return findByProps("getToken")?.getToken?.() ?? null;
+}
+
+function getClanList(): string[] {
+    return settings.store.clans
+        .split(",")
+        .map(c => c.trim())
+        .filter(Boolean);
+}
+
+function log(...args: any[]) {
+    if (settings.store.enableLogs)
+        console.log("[Clan Switcher]", ...args);
+}
+
+function warn(...args: any[]) {
+    if (settings.store.enableLogs)
+        console.warn("[Clan Switcher]", ...args);
+}
+
+async function switchClan(clanId: string): Promise<void> {
+    const token = getToken();
+    if (!token) {
+        warn("Could not retrieve token. Skipping switch.");
+        return;
+    }
+
+    try {
+        const res = await fetch("https://discord.com/api/v9/users/@me/clan", {
+            method: "PUT",
+            headers: {
+                "authorization": token,
+                "content-type": "application/json",
+                "origin": "https://discord.com",
+                "referer": "https://discord.com/channels/@me",
+                "x-discord-locale": "en-US",
+                "x-discord-timezone": Intl.DateTimeFormat().resolvedOptions().timeZone
+            },
+            body: JSON.stringify({
+                identity_enabled: true,
+                identity_guild_id: clanId
+            })
+        });
+
+        if (!res.ok) {
+            warn(`Switch to clan ${clanId} failed: HTTP ${res.status}`);
+        } else {
+            log(`Switched to clan: ${clanId}`);
+        }
+    } catch (err) {
+        warn("Network error during clan switch:", err);
+    }
+}
+
+// ─── Plugin State ─────────────────────────────────────────────────────────────
+
+let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+let clanIndex = 0;
+let isRunning = false;
+
+function getIntervalMs(): number {
+    return Math.max(1, settings.store.intervalSeconds ?? 5) * 1000;
+}
+
+function getNextClanId(list: string[]): string {
+    if (settings.store.randomizeOrder) {
+        return list[Math.floor(Math.random() * list.length)];
+    }
+    const id = list[clanIndex % list.length];
+    clanIndex++;
+    return id;
+}
+
+function scheduleNext() {
+    if (!isRunning) return;
+    timeoutHandle = setTimeout(tick, getIntervalMs());
+}
+
+async function tick() {
+    if (!isRunning) return;
+
+    const token = getToken();
+    if (!token) {
+        warn("No token available. Retrying next interval.");
+        scheduleNext();
+        return;
+    }
+
+    const clanList = getClanList();
+    if (clanList.length === 0) {
+        warn("No IDs available. Check settings.");
+        scheduleNext();
+        return;
+    }
+
+    const clanId = getNextClanId(clanList);
+    await switchClan(clanId);
+    scheduleNext();
+}
+
+// ─── Plugin ──────────────────────────────────────────────────────────────────
 
 export default definePlugin({
-    name: "Clan Switcher",
-    description: "Automatically switches discord clantags",
-    authors: [],
+    name: "ClanSwitcher",
+    description: "Automatically rotates Discord clan tags at a configurable interval.",
+  authors: [{ name: "Irritably", id: 928787166916640838n }],
     settings,
 
     start() {
-		let token = getToken();
-		console.log("[Clan Switcher] Using extracted token.");
+        if (isRunning) return;
 
-        const clanList = settings.store.clans
-            .split(",")
-            .map(c => c.trim())
-            .filter(Boolean);
-
-        const interval = Math.max(1, settings.store.intervalSeconds || 5) * 1000;
-
-        if (!token || clanList.length === 0) {
-            console.warn("[Clan Switcher] Token or clans not configured.");
-            return;
+        const token = getToken();
+        if (!token) {
+            warn("Failed to retrieve token on start. Plugin will retry automatically.");
         }
 
-        let index = 0;
+        const clanList = getClanList();
+        if (clanList.length === 0) {
+            warn("No clan IDs configured. Add them in plugin settings.");
+        }
 
-        loop = setInterval(() => {
-            const clanId = clanList[index % clanList.length];
-            index++;
-
-			fetch("https://discord.com/api/v9/users/@me/clan", {
-				method: "PUT",
-				headers: {
-					'authority': 'discord.com',
-					'accept': '*/*',
-					'accept-language': 'en-US',
-					'authorization': token, // Keep this dynamic
-					'cache-control': 'no-cache',
-					'content-type': 'application/json',
-					'cookie': '__dcfduid=generic_dcfduid; __sdcfduid=generic_sdcfduid; __cfruid=generic_cfruid; _cfuvid=generic_cfuvid',
-					'origin': 'https://discord.com',
-					'pragma': 'no-cache',
-					'referer': 'https://discord.com/channels/@me',
-					'sec-ch-ua': '"Not.A/Brand";v="8", "Chromium";v="114", "Microsoft Edge";v="114"',
-					'sec-ch-ua-mobile': '?0',
-					'sec-ch-ua-platform': '"Windows"',
-					'sec-fetch-dest': 'empty',
-					'sec-fetch-mode': 'cors',
-					'sec-fetch-site': 'same-origin',
-					'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
-					'x-debug-options': 'bugReporterEnabled',
-					'x-discord-locale': 'en-US',
-					'x-discord-timezone': 'UTC',
-					'x-super-properties': 'eyJvcyI6IkdlbmVyaWMiLCJicm93c2VyIjoiR2VuZXJpYyIsImRldmljZSI6IkdlbmVyaWMiLCJzeXN0ZW1fbG9jYWxlIjoiZW4tVVMifQ=='
-				},
-				body: JSON.stringify({
-					identity_enabled: true,
-					identity_guild_id: clanId
-				})
-			}).catch(err => console.error("[Clan Switcher] Error:", err));
-        }, interval);
+        clanIndex = 0;
+        isRunning = true;
+        log("Started.");
+        tick();
     },
 
     stop() {
-        if (loop) {
-            clearInterval(loop);
-            loop = null;
-            console.log("[Clan Switcher] Stopped.");
+        isRunning = false;
+        if (timeoutHandle !== null) {
+            clearTimeout(timeoutHandle);
+            timeoutHandle = null;
         }
+        log("Stopped.");
     }
 });
