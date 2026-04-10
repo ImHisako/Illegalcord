@@ -80,6 +80,12 @@ npm i -g pnpm
 
 > :exclamation: **IMPORTANTE** Assicurati di non usare un terminale amministratore/root da qui in poi. **Rovinerà** la tua installazione di Discord/Illegalcord e molto probabilmente dovrai reinstallare.
 
+Se stai usando il BAT per installare il Client e hai l'errore che l'esecuzione di scripts è disabilitato nel vostro sistema. useguite da powershell con amministratore :
+
+```shell
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+```
+
 Clona Illegalcord:
 
 ```shell
