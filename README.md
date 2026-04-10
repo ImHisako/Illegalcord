@@ -80,7 +80,7 @@ npm i -g pnpm
 
 > :exclamation: **IMPORTANT** Make sure you aren't using an admin/root terminal from here onwards. It **will** mess up your Discord/Illegalcord instance and you **will** most likely have to reinstall.
 
-If you're using *BAT* to install the client and you're getting an error saying that script execution is disabled on your system, run the following command in PowerShell as an administrator: 
+If you're using *BAT* to install the client and you're getting an error saying that script execution is disabled on your system, run the following command in PowerShell as an administrator : 
 ```shell
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 ```
