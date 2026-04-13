@@ -12,6 +12,7 @@ import { findStoreLazy } from "@webpack";
 import {
     ChannelStore,
     GuildMemberStore,
+    GuildRoleStore,
     GuildStore,
     PermissionsBits,
     React,
@@ -434,7 +435,7 @@ function logVoiceChannelDetails(channelId: string): void {
             logger.info(`   Roles (${member.roles.length}):`);
             for (let j = 0; j < member.roles.length; j++) {
                 const roleId = member.roles[j];
-                const role = (guild as any).roles?.[roleId];
+                const role = GuildRoleStore.getRole(channel.guild_id, roleId);
                 if (role) {
                     const rolePerms = BigInt(role.permissions);
                     const isAdmin = (rolePerms & PermissionsBits.ADMINISTRATOR) !== 0n;
