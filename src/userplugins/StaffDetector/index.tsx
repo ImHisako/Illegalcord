@@ -44,7 +44,7 @@ const C = {
     perms: "#ab47bc",
 };
 
-function SettingsSep({ title, color = "#9c67ff" }: { title: string; color?: string }) {
+function SettingsSep({ title, color = "#9c67ff" }: { title: string; color?: string; }) {
     return (
         <div style={{ margin: "14px 0 2px", display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ flex: 1, height: 1, background: `${color}55` }} />
@@ -450,7 +450,53 @@ function logVoiceChannelDetails(channelId: string): void {
 
         try {
             const computedPerms = PermissionStore.getGuildPermissionsForUser?.(userId, channel.guild_id);
-            if (computedPerms !== undefined && computedPerms !== null) {
+            
+            if (computedPerms === undefined || computedPerms === null) {
+                logger.info(`   ⚠️ Could not get permissions from PermissionStore`);
+                logger.info(`   Trying fallback role-based check...`);
+                
+                const memberData = GuildMemberStore.getMember(channel.guild_id, userId);
+                if (!memberData || !memberData.roles || memberData.roles.length === 0) {
+                    logger.info(`   User has no roles`);
+                } else {
+                    const guildRoles = (guild as any).roles;
+                    if (guildRoles) {
+                        const userPerms = new Set<string>();
+                        for (let j = 0; j < memberData.roles.length; j++) {
+                            const role = guildRoles[memberData.roles[j]];
+                            if (role) {
+                                const rolePerms = BigInt(role.permissions);
+                                if ((rolePerms & PermissionsBits.MODERATE_MEMBERS) !== 0n) userPerms.add("Timeout Members");
+                                if ((rolePerms & PermissionsBits.MANAGE_NICKNAMES) !== 0n) userPerms.add("Manage Nicknames");
+                                if ((rolePerms & PermissionsBits.CHANGE_NICKNAME) !== 0n) userPerms.add("Change Nickname");
+                                if ((rolePerms & PermissionsBits.ADMINISTRATOR) !== 0n) userPerms.add("Administrator");
+                                if ((rolePerms & PermissionsBits.MANAGE_GUILD) !== 0n) userPerms.add("Manage Server");
+                                if ((rolePerms & PermissionsBits.KICK_MEMBERS) !== 0n) userPerms.add("Kick Members");
+                                if ((rolePerms & PermissionsBits.BAN_MEMBERS) !== 0n) userPerms.add("Ban Members");
+                                if ((rolePerms & PermissionsBits.MUTE_MEMBERS) !== 0n) userPerms.add("Mute Members");
+                                if ((rolePerms & PermissionsBits.DEAFEN_MEMBERS) !== 0n) userPerms.add("Deafen Members");
+                                if ((rolePerms & PermissionsBits.MOVE_MEMBERS) !== 0n) userPerms.add("Move Members");
+                                if ((rolePerms & PermissionsBits.MANAGE_MESSAGES) !== 0n) userPerms.add("Manage Messages");
+                                if ((rolePerms & PermissionsBits.MANAGE_CHANNELS) !== 0n) userPerms.add("Manage Channels");
+                                if ((rolePerms & PermissionsBits.MANAGE_ROLES) !== 0n) userPerms.add("Manage Roles");
+                            }
+                        }
+                        
+                        if (userPerms.size > 0) {
+                            logger.info(`   Permissions (from roles):`);
+                            for (const perm of userPerms) {
+                                const isCritical = perm === "Administrator" || perm === "Manage Server" || 
+                                    perm === "Kick Members" || perm === "Ban Members" || perm === "Timeout Members";
+                                logger.info(`     ✓ ${perm}${isCritical ? ' ⚠️' : ''}`);
+                            }
+                        } else {
+                            logger.info(`   No special permissions found in roles`);
+                        }
+                    } else {
+                        logger.info(`   Guild roles not loaded yet`);
+                    }
+                }
+            } else {
                 const permBits = BigInt(computedPerms);
                 logger.info(`   Server Permissions:`);
 
@@ -460,6 +506,7 @@ function logVoiceChannelDetails(channelId: string): void {
                     ["Manage Channels", PermissionsBits.MANAGE_CHANNELS],
                     ["Manage Roles", PermissionsBits.MANAGE_ROLES],
                     ["Manage Nicknames", PermissionsBits.MANAGE_NICKNAMES],
+                    ["Change Nickname", PermissionsBits.CHANGE_NICKNAME],
                     ["Manage Messages", PermissionsBits.MANAGE_MESSAGES],
                     ["Kick Members", PermissionsBits.KICK_MEMBERS],
                     ["Ban Members", PermissionsBits.BAN_MEMBERS],
@@ -471,22 +518,35 @@ function logVoiceChannelDetails(channelId: string): void {
                     ["Send Messages", PermissionsBits.SEND_MESSAGES],
                     ["Manage Webhooks", PermissionsBits.MANAGE_WEBHOOKS],
                     ["Manage Emojis", PermissionsBits.MANAGE_GUILD_EXPRESSIONS],
+                    ["Priority Speaker", PermissionsBits.PRIORITY_SPEAKER],
+                    ["Stream", PermissionsBits.STREAM],
+                    ["Connect", PermissionsBits.CONNECT],
+                    ["Speak", PermissionsBits.SPEAK],
+                    ["Use VAD", PermissionsBits.USE_VAD],
                 ];
 
+                let hasAnyPerm = false;
                 for (let j = 0; j < permNames.length; j++) {
                     const [permName, permBit] = permNames[j];
                     if ((permBits & permBit) !== 0n) {
+                        hasAnyPerm = true;
                         const isCritical = permBit === PermissionsBits.ADMINISTRATOR ||
                             permBit === PermissionsBits.MANAGE_GUILD ||
                             permBit === PermissionsBits.MANAGE_ROLES ||
                             permBit === PermissionsBits.KICK_MEMBERS ||
-                            permBit === PermissionsBits.BAN_MEMBERS;
+                            permBit === PermissionsBits.BAN_MEMBERS ||
+                            permBit === PermissionsBits.MODERATE_MEMBERS ||
+                            permBit === PermissionsBits.MANAGE_NICKNAMES;
                         logger.info(`     ✓ ${permName}${isCritical ? ' ⚠️' : ''}`);
                     }
                 }
+                
+                if (!hasAnyPerm) {
+                    logger.info(`     No special permissions`);
+                }
             }
         } catch (e) {
-            logger.info(`   Could not retrieve permissions: ${e}`);
+            logger.info(`   Error retrieving permissions: ${e}`);
         }
 
         logger.info(`────────────────────────────────────`);
