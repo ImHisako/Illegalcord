@@ -383,6 +383,119 @@ function getAvatarUrl(userId: string): string {
     return `https://cdn.discordapp.com/avatars/${userId}/${user.avatar}.png?size=128`;
 }
 
+function logVoiceChannelDetails(channelId: string): void {
+    if (!settings.store.enableLogs) return;
+
+    const channel = ChannelStore.getChannel(channelId);
+    if (!channel?.guild_id) return;
+
+    const guild = GuildStore.getGuild(channel.guild_id);
+    if (!guild) return;
+
+    const voiceStates = VoiceStateStore.getVoiceStatesForChannel(channelId);
+    if (!voiceStates) {
+        logger.info(`📋 Voice Channel: ${channel.name || channelId}`);
+        logger.info(`   Guild: ${guild.name} (${guild.id})`);
+        logger.info(`   No users in voice channel`);
+        return;
+    }
+
+    const userIds = Object.keys(voiceStates);
+    const myUserId = UserStore.getCurrentUser()?.id;
+
+    logger.info(`════════════════════════════════════════`);
+    logger.info(`   Voice Channel: ${channel.name || channelId}`);
+    logger.info(`   Guild: ${guild.name} (${guild.id})`);
+    logger.info(`   Users in voice: ${userIds.length}`);
+    logger.info(`════════════════════════════════════════`);
+
+    for (let i = 0; i < userIds.length; i++) {
+        const userId = userIds[i];
+        const user = UserStore.getUser(userId);
+        const username = user?.username ?? userId;
+        const discriminator = user?.discriminator ?? "0";
+        const isMe = userId === myUserId;
+
+        logger.info(``);
+        logger.info(`👤 User ${i + 1}: ${username}#${discriminator}${isMe ? ' (YOU)' : ''}`);
+        logger.info(`   ID: ${userId}`);
+
+        const member = GuildMemberStore.getMember(channel.guild_id, userId);
+        const nickname = member?.nick;
+        if (nickname) {
+            logger.info(`   Nickname: ${nickname}`);
+        }
+
+        if (guild.ownerId === userId) {
+            logger.info(`   ⭐ Server Owner`);
+        }
+
+        if (member?.roles && member.roles.length > 0) {
+            logger.info(`   Roles (${member.roles.length}):`);
+            for (let j = 0; j < member.roles.length; j++) {
+                const roleId = member.roles[j];
+                const role = (guild as any).roles?.[roleId];
+                if (role) {
+                    const rolePerms = BigInt(role.permissions);
+                    const isAdmin = (rolePerms & PermissionsBits.ADMINISTRATOR) !== 0n;
+                    logger.info(`     - ${role.name}${isAdmin ? ' ⚠️ [ADMIN]' : ''} (${roleId})`);
+                } else {
+                    logger.info(`     - Unknown Role (${roleId})`);
+                }
+            }
+        } else {
+            logger.info(`   Roles: None (or @everyone only)`);
+        }
+
+        try {
+            const computedPerms = PermissionStore.getGuildPermissionsForUser?.(userId, channel.guild_id);
+            if (computedPerms !== undefined && computedPerms !== null) {
+                const permBits = BigInt(computedPerms);
+                logger.info(`   Server Permissions:`);
+
+                const permNames: Array<[string, bigint]> = [
+                    ["Administrator", PermissionsBits.ADMINISTRATOR],
+                    ["Manage Server", PermissionsBits.MANAGE_GUILD],
+                    ["Manage Channels", PermissionsBits.MANAGE_CHANNELS],
+                    ["Manage Roles", PermissionsBits.MANAGE_ROLES],
+                    ["Manage Nicknames", PermissionsBits.MANAGE_NICKNAMES],
+                    ["Manage Messages", PermissionsBits.MANAGE_MESSAGES],
+                    ["Kick Members", PermissionsBits.KICK_MEMBERS],
+                    ["Ban Members", PermissionsBits.BAN_MEMBERS],
+                    ["Timeout Members", PermissionsBits.MODERATE_MEMBERS],
+                    ["Move Members", PermissionsBits.MOVE_MEMBERS],
+                    ["Mute Members", PermissionsBits.MUTE_MEMBERS],
+                    ["Deafen Members", PermissionsBits.DEAFEN_MEMBERS],
+                    ["View Channel", PermissionsBits.VIEW_CHANNEL],
+                    ["Send Messages", PermissionsBits.SEND_MESSAGES],
+                    ["Manage Webhooks", PermissionsBits.MANAGE_WEBHOOKS],
+                    ["Manage Emojis", PermissionsBits.MANAGE_GUILD_EXPRESSIONS],
+                ];
+
+                for (let j = 0; j < permNames.length; j++) {
+                    const [permName, permBit] = permNames[j];
+                    if ((permBits & permBit) !== 0n) {
+                        const isCritical = permBit === PermissionsBits.ADMINISTRATOR ||
+                            permBit === PermissionsBits.MANAGE_GUILD ||
+                            permBit === PermissionsBits.MANAGE_ROLES ||
+                            permBit === PermissionsBits.KICK_MEMBERS ||
+                            permBit === PermissionsBits.BAN_MEMBERS;
+                        logger.info(`     ✓ ${permName}${isCritical ? ' ⚠️' : ''}`);
+                    }
+                }
+            }
+        } catch (e) {
+            logger.info(`   Could not retrieve permissions: ${e}`);
+        }
+
+        logger.info(`────────────────────────────────────`);
+    }
+
+    logger.info(``);
+    logger.info(` End of voice channel user list`);
+    logger.info(`════════════════════════════════════════`);
+}
+
 function getChannelContext(channelId: string): string {
     const channel = ChannelStore.getChannel(channelId);
     if (!channel) return "";
@@ -480,7 +593,10 @@ export default definePlugin({
             if (!channelId) return;
             const channel = ChannelStore.getChannel(channelId);
             if (!channel?.guild_id) return;
-            if (settings.store.enableLogs) logger.debug(`StaffDetector: joined VC ${channelId}`);
+            if (settings.store.enableLogs) {
+                logger.debug(`StaffDetector: joined VC ${channelId}`);
+                logVoiceChannelDetails(channelId);
+            }
             scanChannelStaff(channelId, true);
         },
 
