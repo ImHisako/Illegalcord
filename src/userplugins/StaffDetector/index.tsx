@@ -330,20 +330,22 @@ function memberHasPerm(guildId: string, userId: string, perm: bigint): boolean {
     return false;
 }
 
-const PERM_CHECKS: Array<[keyof typeof settings.store, bigint]> = [
-    ["adminPermission", PermissionsBits.ADMINISTRATOR],
-    ["manageGuildPermission", PermissionsBits.MANAGE_GUILD],
-    ["manageChannelsPermission", PermissionsBits.MANAGE_CHANNELS],
-    ["manageRolesPermission", PermissionsBits.MANAGE_ROLES],
-    ["manageNicknamesPermission", PermissionsBits.MANAGE_NICKNAMES],
-    ["manageMessagesPermission", PermissionsBits.MANAGE_MESSAGES],
-    ["kickMembersPermission", PermissionsBits.KICK_MEMBERS],
-    ["banMembersPermission", PermissionsBits.BAN_MEMBERS],
-    ["moderateMembersPermission", PermissionsBits.MODERATE_MEMBERS],
-    ["moveMembersPermission", PermissionsBits.MOVE_MEMBERS],
-    ["muteMembersPermission", PermissionsBits.MUTE_MEMBERS],
-    ["deafenMembersPermission", PermissionsBits.DEAFEN_MEMBERS],
-];
+function getPermChecks(): Array<[keyof typeof settings.store, bigint]> {
+    return [
+        ["adminPermission", PermissionsBits.ADMINISTRATOR],
+        ["manageGuildPermission", PermissionsBits.MANAGE_GUILD],
+        ["manageChannelsPermission", PermissionsBits.MANAGE_CHANNELS],
+        ["manageRolesPermission", PermissionsBits.MANAGE_ROLES],
+        ["manageNicknamesPermission", PermissionsBits.MANAGE_NICKNAMES],
+        ["manageMessagesPermission", PermissionsBits.MANAGE_MESSAGES],
+        ["kickMembersPermission", PermissionsBits.KICK_MEMBERS],
+        ["banMembersPermission", PermissionsBits.BAN_MEMBERS],
+        ["moderateMembersPermission", PermissionsBits.MODERATE_MEMBERS],
+        ["moveMembersPermission", PermissionsBits.MOVE_MEMBERS],
+        ["muteMembersPermission", PermissionsBits.MUTE_MEMBERS],
+        ["deafenMembersPermission", PermissionsBits.DEAFEN_MEMBERS],
+    ];
+}
 
 function isUserStaff(userId: string, guildId: string): boolean {
     const guild = GuildStore.getGuild(guildId);
@@ -354,8 +356,9 @@ function isUserStaff(userId: string, guildId: string): boolean {
     try {
         const computed: bigint | undefined = PermissionStore.getGuildPermissionsForUser?.(userId, guildId);
         if (computed !== undefined && computed !== null) {
-            for (let i = 0; i < PERM_CHECKS.length; i++) {
-                const [key, perm] = PERM_CHECKS[i];
+            const permChecks = getPermChecks();
+            for (let i = 0; i < permChecks.length; i++) {
+                const [key, perm] = permChecks[i];
                 if (settings.store[key] && (BigInt(computed) & perm) !== 0n) return true;
             }
             return false;
@@ -377,9 +380,10 @@ function isUserStaff(userId: string, guildId: string): boolean {
     }
 
     const userRoleIds = new Set(member.roles);
+    const permChecks = getPermChecks();
     
-    for (let i = 0; i < PERM_CHECKS.length; i++) {
-        const [key, perm] = PERM_CHECKS[i];
+    for (let i = 0; i < permChecks.length; i++) {
+        const [key, perm] = permChecks[i];
         if (!settings.store[key]) continue;
         
         for (let j = 0; j < sortedRoles.length; j++) {
