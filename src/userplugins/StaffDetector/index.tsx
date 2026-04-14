@@ -313,7 +313,7 @@ function memberHasPerm(guildId: string, userId: string, perm: bigint): boolean {
     
     for (let i = 0; i < sortedRoles.length; i++) {
         const role = sortedRoles[i];
-        if (!userRoleIds.has(role.id)) continue;
+        if (!role || !role.id || !userRoleIds.has(role.id)) continue;
         
         const perms = BigInt(role.permissions);
         if ((perms & PermissionsBits.ADMINISTRATOR) !== 0n) return true;
@@ -384,7 +384,7 @@ function isUserStaff(userId: string, guildId: string): boolean {
         
         for (let j = 0; j < sortedRoles.length; j++) {
             const role = sortedRoles[j];
-            if (!userRoleIds.has(role.id)) continue;
+            if (!role || !role.id || !userRoleIds.has(role.id)) continue;
             
             const rolePerms = BigInt(role.permissions);
             if ((rolePerms & PermissionsBits.ADMINISTRATOR) !== 0n) return true;
@@ -498,10 +498,10 @@ function logUserPermissions(userId: string, guildId: string): void {
         
         for (let j = 0; j < sortedRoles.length; j++) {
             const role = sortedRoles[j];
-            if (userRoleIds.has(role.id)) {
-                const rolePerms = BigInt(role.permissions);
-                extractPermissions(rolePerms, userPerms);
-            }
+            if (!role || !role.id || !userRoleIds.has(role.id)) continue;
+            
+            const rolePerms = BigInt(role.permissions);
+            extractPermissions(rolePerms, userPerms);
         }
         
         if (userPerms.size > 0) {
