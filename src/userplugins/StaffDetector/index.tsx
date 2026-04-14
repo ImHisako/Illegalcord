@@ -460,84 +460,34 @@ function logVoiceChannelDetails(channelId: string): void {
 
 function logUserPermissions(userId: string, guildId: string): void {
     try {
-        const computedPerms = PermissionStore.getGuildPermissionsForUser?.(userId, guildId);
+        const memberData = GuildMemberStore.getMember(guildId, userId);
+        if (!memberData || !memberData.roles || memberData.roles.length === 0) {
+            logger.info(`   User has no roles`);
+            return;
+        }
+
+        const sortedRoles = GuildRoleStore.getSortedRoles(guildId);
+        if (!sortedRoles || sortedRoles.length === 0) {
+            logger.info(`   No roles available in GuildRoleStore`);
+            return;
+        }
+
+        const userPerms = new Set<string>();
+        const userRoleIds = new Set(memberData.roles);
         
-        if (computedPerms !== undefined && computedPerms !== null) {
-            const permBits = BigInt(computedPerms);
-            logger.info(`   Server Permissions:`);
-
-            const permNames: Array<[string, bigint]> = [
-                ["Administrator", PermissionsBits.ADMINISTRATOR],
-                ["Manage Server", PermissionsBits.MANAGE_GUILD],
-                ["Manage Channels", PermissionsBits.MANAGE_CHANNELS],
-                ["Manage Roles", PermissionsBits.MANAGE_ROLES],
-                ["Manage Nicknames", PermissionsBits.MANAGE_NICKNAMES],
-                ["Change Nickname", PermissionsBits.CHANGE_NICKNAME],
-                ["Manage Messages", PermissionsBits.MANAGE_MESSAGES],
-                ["Kick Members", PermissionsBits.KICK_MEMBERS],
-                ["Ban Members", PermissionsBits.BAN_MEMBERS],
-                ["Timeout Members", PermissionsBits.MODERATE_MEMBERS],
-                ["Move Members", PermissionsBits.MOVE_MEMBERS],
-                ["Mute Members", PermissionsBits.MUTE_MEMBERS],
-                ["Deafen Members", PermissionsBits.DEAFEN_MEMBERS],
-                ["View Channel", PermissionsBits.VIEW_CHANNEL],
-                ["Send Messages", PermissionsBits.SEND_MESSAGES],
-                ["Manage Webhooks", PermissionsBits.MANAGE_WEBHOOKS],
-                ["Manage Emojis", PermissionsBits.MANAGE_GUILD_EXPRESSIONS],
-                ["Priority Speaker", PermissionsBits.PRIORITY_SPEAKER],
-            ];
-
-            let hasAnyPerm = false;
-            for (let j = 0; j < permNames.length; j++) {
-                const [permName, permBit] = permNames[j];
-                if ((permBits & permBit) !== 0n) {
-                    hasAnyPerm = true;
-                    const isCritical = permBit === PermissionsBits.ADMINISTRATOR ||
-                        permBit === PermissionsBits.MANAGE_GUILD ||
-                        permBit === PermissionsBits.MANAGE_ROLES ||
-                        permBit === PermissionsBits.KICK_MEMBERS ||
-                        permBit === PermissionsBits.BAN_MEMBERS ||
-                        permBit === PermissionsBits.MODERATE_MEMBERS ||
-                        permBit === PermissionsBits.MANAGE_NICKNAMES;
-                    logger.info(`     ✓ ${permName}${isCritical ? ' ⚠️' : ''}`);
-                }
+        for (let j = 0; j < sortedRoles.length; j++) {
+            const role = sortedRoles[j];
+            if (userRoleIds.has(role.id)) {
+                const rolePerms = BigInt(role.permissions);
+                extractPermissions(rolePerms, userPerms);
             }
-            
-            if (!hasAnyPerm) {
-                logger.info(`     No special permissions`);
-            }
+        }
+        
+        if (userPerms.size > 0) {
+            logger.info(`   Permissions:`);
+            logPermissions(userPerms);
         } else {
-            logger.info(`   ⚠️ PermissionStore empty, using GuildRoleStore fallback...`);
-            
-            const memberData = GuildMemberStore.getMember(guildId, userId);
-            if (!memberData || !memberData.roles || memberData.roles.length === 0) {
-                logger.info(`   User has no roles`);
-                return;
-            }
-
-            const sortedRoles = GuildRoleStore.getSortedRoles(guildId);
-            if (!sortedRoles || sortedRoles.length === 0) {
-                logger.info(`   No roles available in GuildRoleStore`);
-                return;
-            }
-
-            const userPerms = new Set<string>();
-            const userRoleIds = new Set(memberData.roles);
-            
-            for (let j = 0; j < sortedRoles.length; j++) {
-                const role = sortedRoles[j];
-                if (userRoleIds.has(role.id)) {
-                    const rolePerms = BigInt(role.permissions);
-                    extractPermissions(rolePerms, userPerms);
-                }
-            }
-            
-            if (userPerms.size > 0) {
-                logger.info(`   Permissions (from GuildRoleStore):`);
-                logPermissions(userPerms);
-            } else {
-                logger.info(`   No special permissions found`);
-            }
+            logger.info(`   No special permissions found`);
         }
     } catch (e) {
         logger.info(`   Error retrieving permissions: ${e}`);
