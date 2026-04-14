@@ -148,6 +148,13 @@ const settings = definePluginSettings({
         default: true,
         description: "Play audio alert on staff join/leave.",
     },
+    soundVolume: {
+        type: OptionType.SLIDER,
+        default: 0.36,
+        description: "Master volume for all StaffDetector sounds (0% - 100%).",
+        markers: [0, 0.25, 0.5, 0.75, 1],
+        stickToMarkers: false,
+    },
     useCustomSounds: {
         type: OptionType.BOOLEAN,
         default: false,
@@ -233,7 +240,7 @@ const settings = definePluginSettings({
     userIncludeIds: {
         type: OptionType.STRING,
         default: "",
-        description: "Track ONLY these user IDs (empty = all with matching perms). Overrides server filter — these users are always tracked regardless of server exclude/include. Accepts one or more IDs separated by comma, space, or dash.",
+        description: "Track ONLY these user IDs (empty = all with matching perms). Overrides server filter and permission check — flagged even without staff permissions. Useful to track undercover staff alts. Accepts one or more IDs separated by comma, space, or dash.",
     },
     userExcludeIds: {
         type: OptionType.STRING,
@@ -250,7 +257,7 @@ const settings = definePluginSettings({
     manageGuildPermission: { type: OptionType.BOOLEAN, default: true, description: "Manage Server" },
     manageChannelsPermission: { type: OptionType.BOOLEAN, default: true, description: "Manage Channels" },
     manageRolesPermission: { type: OptionType.BOOLEAN, default: true, description: "Manage Roles" },
-    manageNicknamesPermission: { type: OptionType.BOOLEAN, default: true, description: "Manage Nicknames" },
+    manageNicknamesPermission: { type: OptionType.BOOLEAN, default: false, description: "Manage Nicknames" },
     manageMessagesPermission: { type: OptionType.BOOLEAN, default: true, description: "Manage Messages" },
     kickMembersPermission: { type: OptionType.BOOLEAN, default: true, description: "Kick Members" },
     banMembersPermission: { type: OptionType.BOOLEAN, default: true, description: "Ban Members" },
@@ -296,6 +303,15 @@ function isUserTracked(userId: string): boolean {
     if (inc.length && !inc.includes(userId)) return false;
     const exc = parseIds(settings.store.userExcludeIds);
     return !exc.length || !exc.includes(userId);
+}
+
+function shouldFlag(userId: string, guildId: string): boolean {
+    const exc = parseIds(settings.store.userExcludeIds);
+    if (exc.length && exc.includes(userId)) return false;
+    if (isUserExplicitlyIncluded(userId)) return true;
+    const inc = parseIds(settings.store.userIncludeIds);
+    if (inc.length && !inc.includes(userId)) return false;
+    return isUserStaff(userId, guildId);
 }
 
 function memberHasPerm(guildId: string, userId: string, perm: bigint): boolean {
@@ -565,7 +581,7 @@ function notify(title: string, body: string, icon?: string): void {
 
 function playSrc(src: string): void {
     const audio = new Audio(src);
-    audio.volume = 1;
+    audio.volume = Math.min(1, Math.max(0, settings.store.soundVolume ?? 0.36));
     audio.play().catch(e => {
         if (settings.store.enableLogs) logger.error("StaffDetector: playSrc error:", e);
     });
@@ -604,7 +620,7 @@ function scanChannelStaff(channelId: string, isInit: boolean): void {
             const uid = userIds[i];
             if (uid === myUserId) continue;
             if (!isServerAllowedForUser(channel.guild_id, uid)) continue;
-            if (isUserStaff(uid, channel.guild_id) && isUserTracked(uid)) {
+            if (shouldFlag(uid, channel.guild_id)) {
                 currentChannelStaff.add(uid);
                 staffFound.push(uid);
             }
@@ -662,7 +678,6 @@ export default definePlugin({
             if (!myUserId) return;
 
             for (let i = 0; i < voiceStates.length; i++) {
-                // FIX: isolate per-state errors so one bad entry doesn't crash the whole handler
                 try {
                     const { userId, channelId, oldChannelId } = voiceStates[i];
                     if (userId === myUserId) continue;
@@ -671,7 +686,7 @@ export default definePlugin({
                     const entered = channelId === currentChannelId && oldChannelId !== currentChannelId;
 
                     if (entered) {
-                        if (!isUserStaff(userId, channel.guild_id) || !isUserTracked(userId)) continue;
+                        if (!shouldFlag(userId, channel.guild_id)) continue;
                         currentChannelStaff.add(userId);
                         const name = getUsername(userId);
                         const ctx = getChannelContext(currentChannelId);
