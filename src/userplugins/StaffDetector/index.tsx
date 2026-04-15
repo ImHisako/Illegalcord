@@ -25,6 +25,7 @@ const SelectedChannelStore = findStoreLazy("SelectedChannelStore");
 const PermissionStore = findStoreLazy("PermissionStore");
 const logger = new Logger("StaffDetector");
 const currentChannelStaff = new Set<string>();
+let currentVoiceChannelId: string | null = null;
 
 const DEFAULT_SOUND_URLS = {
     join: "https://github.com/zFrxncesck1/zFrxncesck1/raw/refs/heads/main/host/sounds/join.wav",
@@ -651,11 +652,14 @@ export default definePlugin({
 
     start() {
         const vcId: string | null = SelectedChannelStore.getVoiceChannelId?.() ?? null;
+        currentVoiceChannelId = vcId;
         if (vcId) scanChannelStaff(vcId, true);
     },
 
     flux: {
         VOICE_CHANNEL_SELECT({ channelId }: { channelId: string | null; }) {
+            if (channelId === currentVoiceChannelId) return;
+            currentVoiceChannelId = channelId;
             currentChannelStaff.clear();
             if (!channelId) return;
             const channel = ChannelStore.getChannel(channelId);
@@ -716,5 +720,6 @@ export default definePlugin({
 
     stop() {
         currentChannelStaff.clear();
+        currentVoiceChannelId = null;
     },
 });
