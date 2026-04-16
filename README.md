@@ -37,6 +37,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **CustomDNS** 
 - **DisableAnimations**
 - **NoMirroredCam**
+- **ServerCloner**
 - **OpenOptimizer**
 - **Vcjumkoptimizer**
 - **2FA Hider**
