@@ -31,6 +31,7 @@ I plugin inclusi possono essere trovati [qui](https://equicord.org/plugins).
 - **StaffDetector**
 - **BigFileUpload**
 - **Stalker**
+- **ServerCloner**
 - **Securecord** | (AES 256 sui messaggi)
 - **Securecord Opossum Blazing Edition** | BlazingOpossum, dimensione blocco + IV + MAC Tag 128 bit, chiave 256 bit. Basato su istruzioni AVX2, algoritmo crittografico simmetrico post-quantistico ad alte prestazioni. Avanzato e moderno. | https://github.com/ZygoteCode/BlazingOpossum)
 - **IGP** (plugin pgp)
