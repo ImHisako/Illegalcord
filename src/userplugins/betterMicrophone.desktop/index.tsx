@@ -17,11 +17,11 @@
 */
 
 import { definePluginSettings } from "@api/Settings";
-import { PluginInfo } from "@plugins/betterMicrophone.desktop/constants";
-import { openMicrophoneSettingsModal } from "@plugins/betterMicrophone.desktop/modals";
-import { MicrophonePatcher } from "@plugins/betterMicrophone.desktop/patchers";
-import { initMicrophoneStore } from "@plugins/betterMicrophone.desktop/stores";
-import { Emitter, MicrophoneSettingsIcon } from "@plugins/philsPluginLibrary";
+import { PluginInfo } from "../betterMicrophone.desktop/constants";
+import { openMicrophoneSettingsModal } from "../betterMicrophone.desktop/modals";
+import { MicrophonePatcher } from "../betterMicrophone.desktop/patchers";
+import { initMicrophoneStore } from "../betterMicrophone.desktop/stores";
+import { Emitter, MicrophoneSettingsIcon } from "../philsPluginLibrary";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { findComponentByCodeLazy } from "@webpack";

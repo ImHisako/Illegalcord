@@ -19,9 +19,9 @@
 import { Card } from "@components/Card";
 import { Flex } from "@components/Flex";
 import { Switch } from "@components/Switch";
-import { MicrophoneSettingsModal } from "@plugins/betterMicrophone.desktop/components";
-import { PluginInfo } from "@plugins/betterScreenshare.desktop/constants";
-import { ScreenshareAudioProfile, ScreenshareAudioStore, ScreenshareProfile, ScreenshareStore } from "@plugins/betterScreenshare.desktop/stores";
+import { MicrophoneSettingsModal } from "../../betterMicrophone.desktop/components";
+import { PluginInfo } from "../../betterScreenshare.desktop/constants";
+import { ScreenshareAudioProfile, ScreenshareAudioStore, ScreenshareProfile, ScreenshareStore } from "../../betterScreenshare.desktop/stores";
 import {
     MediaEngineStore,
     openURL,
@@ -34,8 +34,8 @@ import {
     types,
     validateNumberInput,
     validateTextInputNumber
-} from "@plugins/philsPluginLibrary";
-import { Styles } from "@plugins/philsPluginLibrary/styles";
+} from "../../philsPluginLibrary";
+import { Styles } from "../../philsPluginLibrary/styles";
 import { ModalSize, openModalLazy } from "@utils/modal";
 import { SelectOption } from "@vencord/discord-types";
 import { Button, Forms, React, Select, Slider, TextInput, useEffect, useState } from "@webpack/common";

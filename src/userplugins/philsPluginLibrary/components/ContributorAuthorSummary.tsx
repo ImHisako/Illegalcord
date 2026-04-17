@@ -17,9 +17,9 @@
 */
 
 import { Flex } from "@components/Flex";
-import { AuthorUserSummaryItem } from "@plugins/philsPluginLibrary/components/AuthorSummaryItem";
-import { Author, Contributor } from "@plugins/philsPluginLibrary/types";
-import { openURL } from "@plugins/philsPluginLibrary/utils";
+import { AuthorUserSummaryItem } from "../../philsPluginLibrary/components/AuthorSummaryItem";
+import { Author, Contributor } from "../../philsPluginLibrary/types";
+import { openURL } from "../../philsPluginLibrary/utils";
 import { Text } from "@webpack/common";
 import React from "react";
 

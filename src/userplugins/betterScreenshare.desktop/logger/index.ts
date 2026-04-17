@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { PluginInfo } from "@plugins/betterScreenshare.desktop/constants";
+import { PluginInfo } from "../../betterScreenshare.desktop/constants";
 import { Logger } from "@utils/Logger";
 
 export const logger = new Logger(PluginInfo.PLUGIN_NAME);

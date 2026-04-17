@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { panelClasses } from "@plugins/philsPluginLibrary/discordModules";
+import { panelClasses } from "../../../philsPluginLibrary/discordModules";
 import { classes } from "@utils/misc";
 import React from "react";
 

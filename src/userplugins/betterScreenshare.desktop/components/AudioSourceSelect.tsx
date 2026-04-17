@@ -16,8 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { screenshareStore } from "@plugins/betterScreenshare.desktop/stores";
-import { MediaEngineStore, types } from "@plugins/philsPluginLibrary";
+import { screenshareStore } from "../../betterScreenshare.desktop/stores";
+import { MediaEngineStore, types } from "../../philsPluginLibrary";
 import { Select, useEffect, useState } from "@webpack/common";
 import React from "react";
 

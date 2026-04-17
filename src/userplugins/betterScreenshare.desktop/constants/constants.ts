@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { types } from "@plugins/philsPluginLibrary";
+import { types } from "../../philsPluginLibrary";
 import { Devs } from "@utils/constants";
 
 export const PluginInfo = {

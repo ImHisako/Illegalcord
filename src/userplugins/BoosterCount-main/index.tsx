@@ -13,7 +13,9 @@ import { closeModal, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, M
 import definePlugin from "@utils/types";
 import { findByPropsLazy, findComponentByCodeLazy } from "@webpack";
 import { FluxDispatcher, GuildMemberStore, Menu, PresenceStore, ScrollerThin, Text, useEffect, UserStore, useStateFromStores } from "@webpack/common";
-import { cl } from "plugins/memberCount";
+import { classNameFactory } from "@utils/css";
+
+const cl = classNameFactory("bc-");
 
 const logger = new Logger("showBoostCounts");
 const { getToken } = findByPropsLazy("setToken");

@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { Bitrate, Framerate, Resolution } from "@plugins/philsPluginLibrary/types";
+import { Bitrate, Framerate, Resolution } from "../../../../philsPluginLibrary/types";
 
 import { Connection } from "./";
 

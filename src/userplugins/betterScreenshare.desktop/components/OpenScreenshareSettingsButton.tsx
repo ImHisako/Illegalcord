@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { openScreenshareModal } from "@plugins/betterScreenshare.desktop/modals";
+import { openScreenshareModal } from "../../betterScreenshare.desktop/modals";
 import { Button } from "@webpack/common";
 import React from "react";
 

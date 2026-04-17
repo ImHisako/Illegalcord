@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { panelClasses } from "@plugins/philsPluginLibrary";
+import { panelClasses } from "../../../philsPluginLibrary";
 import { classes } from "@utils/misc";
 import { Button } from "@webpack/common";
 import React, { JSX } from "react";
