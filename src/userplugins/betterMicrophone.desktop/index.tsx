@@ -18,80 +18,64 @@
 
 import { definePluginSettings } from "@api/Settings";
 import { PluginInfo } from "./constants";
-import { openScreenshareModal } from "./modals";
-import { ScreenshareAudioPatcher, ScreensharePatcher } from "./patchers";
-import { GoLivePanelWrapper, replacedSubmitFunction } from "./patches";
-import { initScreenshareAudioStore, initScreenshareStore } from "./stores";
-import { Emitter, ScreenshareSettingsIcon } from "../philsPluginLibrary";
+import { openMicrophoneSettingsModal } from "./modals";
+import { MicrophonePatcher } from "./patchers";
+import { initMicrophoneStore } from "./stores";
+import { Emitter, MicrophoneSettingsIcon } from "../philsPluginLibrary";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { findComponentByCodeLazy } from "@webpack";
 
 const Button = findComponentByCodeLazy(".NONE,disabled:", ".PANEL_BUTTON");
 
-function screenshareSettingsButton() {
-
+function micSettingsButton() {
+    const { hideSettingsIcon } = settings.use(["hideSettingsIcon"]);
+    if (hideSettingsIcon) return null;
     return (
         <Button
             tooltipText="Change screenshare settings"
-            icon={ScreenshareSettingsIcon}
+            icon={MicrophoneSettingsIcon}
             role="button"
-            onClick={openScreenshareModal}
+            onClick={openMicrophoneSettingsModal}
         />
     );
 }
 
+const settings = definePluginSettings({
+    hideSettingsIcon: {
+        type: OptionType.BOOLEAN,
+        description: "Hide the settings icon",
+        default: true,
+    }
+});
+
 export default definePlugin({
-    name: "BetterScreenshare",
-    description: "This plugin allows you to further customize your screen sharing.",
-    authors: [Devs.philhk],
+    name: "BetterMicrophone",
+    description: "This plugin allows you to further customize your microphone.",
+    authors: [Devs.phil],
     dependencies: ["PhilsPluginLibrary"],
     patches: [
         {
-            find: "GoLiveModal: user cannot be undefined", // Module: 60594; canaryRelease: 364525; L431
+            find: "#{intl::ACCOUNT_SPEAKING_WHILE_MUTED}",
             replacement: {
-                match: /onSubmit:(\w+)/,
-                replace: "onSubmit:$self.replacedSubmitFunction($1)"
-            }
-        },
-        {
-            find: "StreamSettings: user cannot be undefined", // Module: 641115; canaryRelease: 364525; L254
-            replacement: {
-                match: /\(.{0,10}(,{.{0,100}modalContent)/,
-                replace: "($self.GoLivePanelWrapper$1"
-            }
-        },
-        {
-            find: ".StreamPreviewIntro", // Stream settings modal
-            replacement: {
-                match: /className:\i\.buttons,.{0,100}children:\[/,
-                replace: "$&$self.screenshareSettingsButton(),"
+                match: /className:\i\.buttons,.{0,50}children:\[/,
+                replace: "$&$self.micSettingsButton(),"
             }
         }
     ],
-    settings: definePluginSettings({
-        hideDefaultSettings: {
-            type: OptionType.BOOLEAN,
-            description: "Hide Discord screen sharing settings",
-            default: true,
-        }
-    }),
+    settings: settings,
     start(): void {
-        initScreenshareStore();
-        initScreenshareAudioStore();
-        this.screensharePatcher = new ScreensharePatcher().patch();
-        this.screenshareAudioPatcher = new ScreenshareAudioPatcher().patch();
+        initMicrophoneStore();
 
+        this.microphonePatcher = new MicrophonePatcher().patch();
     },
     stop(): void {
-        this.screensharePatcher?.unpatch();
-        this.screenshareAudioPatcher?.unpatch();
+        this.microphonePatcher?.unpatch();
+
         Emitter.removeAllListeners(PluginInfo.PLUGIN_NAME);
     },
     toolboxActions: {
-        "Open Screenshare Settings": openScreenshareModal
+        "Open Microphone Settings": openMicrophoneSettingsModal
     },
-    replacedSubmitFunction,
-    GoLivePanelWrapper,
-    screenshareSettingsButton
+    micSettingsButton
 });
