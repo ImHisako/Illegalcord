@@ -134,7 +134,7 @@ Grazie a [thororen1234](https://github.com/thororen1234) per aver creato [Equico
 
 Discord è un marchio di Discord Inc., e menzionato esclusivamente a scopo descrittivo.
 Menzionarlo non implica alcuna affiliazione o approvazione da parte di Discord Inc.
-Vencord non è connesso a Equicord e come tali, tutti i link per le donazioni vanno al link di donazione di Vendicated.
+Vencord non è connesso a Equicord & Illegalcord e come tali.
 
 <details>
 <summary>Usare Illegalcord viola i termini di servizio di Discord</summary>
@@ -145,6 +145,6 @@ Tuttavia, Discord è piuttosto indifferente nei loro confronti e non ci sono cas
 
 Indipendentemente da ciò, se il tuo account è essenziale per te e la sua disabilitazione sarebbe un disastro, probabilmente dovresti evitare di usare mod client (non solo Equicord), giusto per essere al sicuro.
 
-Inoltre, assicurati di non pubblicare screenshot con Equicord in un server dove potresti essere bannato per questo.
+Inoltre, assicurati di non pubblicare screenshot con Illegalcord in un server dove potresti essere bannato per questo.
 
 </details>
