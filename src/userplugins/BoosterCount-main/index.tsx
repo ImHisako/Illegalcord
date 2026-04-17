@@ -70,6 +70,7 @@ function MakeContextCallback(): NavContextMenuPatchCallback {
 export default definePlugin({
     name: "BoostCounts",
     description: "Shows all the boosters in the server and the number of boosts for each booster.",
+    tags: ["Servers", "Appearance"],
     dependencies: ["MessagePopoverAPI"],
     authors: [{
         name: "Raf", id: 121253596753952768n

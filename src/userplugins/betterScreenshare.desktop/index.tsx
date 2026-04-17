@@ -44,6 +44,7 @@ function screenshareSettingsButton() {
 export default definePlugin({
     name: "BetterScreenshare",
     description: "This plugin allows you to further customize your screen sharing.",
+    tags: ["Voice", "Customisation"],
     authors: [Devs.philhk],
     dependencies: ["PhilsPluginLibrary"],
     patches: [

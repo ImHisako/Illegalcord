@@ -1172,20 +1172,20 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
                                             gap: "6px",
                                             padding: "8px 12px",
                                             borderRadius: "8px",
-                                            backgroundColor: isActive 
+                                            backgroundColor: isActive
                                                 ? "#5865F2"
                                                 : "var(--background-secondary-alt)",
-                                            background: isActive 
-                                                ? "linear-gradient(135deg, #5865F2 0%, #4752c4 100%)" 
+                                            background: isActive
+                                                ? "linear-gradient(135deg, #5865F2 0%, #4752c4 100%)"
                                                 : "var(--background-secondary-alt)",
                                             color: "#ffffff",
                                             cursor: "pointer",
                                             transition: "all 0.2s ease",
-                                            border: isActive 
-                                                ? "2px solid #5865F2" 
+                                            border: isActive
+                                                ? "2px solid #5865F2"
                                                 : "1px solid var(--background-modifier-accent)",
-                                            boxShadow: isActive 
-                                                ? "0 3px 10px rgba(88, 101, 242, 0.4)" 
+                                            boxShadow: isActive
+                                                ? "0 3px 10px rgba(88, 101, 242, 0.4)"
                                                 : "0 1px 4px rgba(0,0,0,0.1)",
                                             minWidth: "100px"
                                         }}
@@ -1233,7 +1233,7 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
                                             <>
                                                 {/* Иконка галочки для активного */}
                                                 {isActive && (
-                                                    <span style={{ 
+                                                    <span style={{
                                                         fontSize: "12px",
                                                         fontWeight: "bold"
                                                     }}>✓</span>
@@ -1242,8 +1242,8 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
                                                 {!isActive && (
                                                     <span style={{ fontSize: "12px" }}>📁</span>
                                                 )}
-                                                <span style={{ 
-                                                    fontWeight: "600", 
+                                                <span style={{
+                                                    fontWeight: "600",
                                                     fontSize: "12px",
                                                     letterSpacing: "0.2px",
                                                     color: "#ffffff"
@@ -1253,8 +1253,8 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
                                                 <span style={{
                                                     fontSize: "10px",
                                                     fontWeight: "700",
-                                                    backgroundColor: isActive 
-                                                        ? "rgba(255,255,255,0.25)" 
+                                                    backgroundColor: isActive
+                                                        ? "rgba(255,255,255,0.25)"
                                                         : "var(--brand-experiment)",
                                                     color: "#ffffff",
                                                     padding: "2px 6px",
@@ -1269,9 +1269,9 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
 
                                         {/* Кнопки действий для вкладки */}
                                         {isActive && !isEditing && (
-                                            <div style={{ 
-                                                display: "flex", 
-                                                gap: "6px", 
+                                            <div style={{
+                                                display: "flex",
+                                                gap: "6px",
                                                 marginLeft: "6px",
                                                 paddingLeft: "8px",
                                                 borderLeft: "1px solid rgba(255,255,255,0.3)"
@@ -2172,6 +2172,7 @@ function getCustomThumbnail(originalThumbnail: string): string {
 export default definePlugin({
     name: "CustomStreamTopQ",
     description: "Custom stream preview images with profiles & slideshow. GitHub: https://github.com/MrTopQ/customStream-Vencord",
+    tags: ["Voice", "Media"],
     authors: [
         {
             name: "TopQ",

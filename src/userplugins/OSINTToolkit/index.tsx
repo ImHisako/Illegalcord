@@ -268,6 +268,7 @@ function createIPMessage(info: IPInfo) {
 export default definePlugin({
     name: "OSINTToolkit",
     description: "OSINT - Domain age lookup, IP information, and username search",
+    tags: ["Utility", "Developers"],
     authors: [{ name: "Irritably", id: 928787166916640838n }],
     settings,
 
@@ -431,7 +432,7 @@ export default definePlugin({
                         "```txt",
                         `[USER SEARCH] ${username}`,
                         `Link UserSearch : ${searchUrl}`,
-                        `Link Whatsmyname : ${whatsMyNameUrl}`,                        
+                        `Link Whatsmyname : ${whatsMyNameUrl}`,
                         "```"
                     ].join("\n")
                 });

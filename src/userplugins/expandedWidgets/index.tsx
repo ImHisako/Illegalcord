@@ -4,6 +4,7 @@ import definePlugin from "@utils/types";
 export default definePlugin({
     name: "ExpandedWidgets",
     description: "Enables setting multiple of the same tags for a game in your profile",
+    tags: ["Chat", "Appearance"],
     authors: [
         Devs.sadie
     ],

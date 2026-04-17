@@ -23,6 +23,7 @@ import definePlugin from "@utils/types";
 const plugin = definePlugin({
     name: "PhilsPluginLibrary",
     description: "A library for phil's plugins",
+    tags: ["Utility", "Voice"],
     authors: [Devs.philhk],
     patches: [
         {

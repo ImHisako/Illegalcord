@@ -1110,7 +1110,7 @@ async function handleSmallFileUpload(file: File, skipBatchStart = false) {
                 customUploaderBodyType: settings.store.customUploaderBodyType,
                 loggingLevel: (settings.store.loggingLevel as LoggingLevel) ?? "errors",
                 uploadTimeout: parseInt(settings.store.uploadTimeout || "300000", 10),
-				useEmbedsVideo: settings.store.useEmbedsVideo
+                useEmbedsVideo: settings.store.useEmbedsVideo
             }
         );
 
@@ -1247,8 +1247,8 @@ async function triggerFileUpload() {
             respectNitroLimit: settings.store.respectNitroLimit === "Yes",
             nitroTier: settings.store.nitroType,
             uploadTimeout: parseInt(settings.store.uploadTimeout || "300000", 10),
-			useEmbedsVideo: settings.store.useEmbedsVideo
-        }) as UploadResult & { useNativeUpload?: boolean; buffer?: ArrayBuffer };
+            useEmbedsVideo: settings.store.useEmbedsVideo
+        }) as UploadResult & { useNativeUpload?: boolean; buffer?: ArrayBuffer; };
 
         // If file is under Nitro limit, use Discord's native upload
         if (result.useNativeUpload && result.buffer && result.fileName) {
@@ -1446,6 +1446,7 @@ setNitroLimitChecker(shouldUseNativeUpload);
 export default definePlugin({
     name: "BigFileUpload",
     description: "Bypass Discord's upload limit by uploading to external file uploaders via drag-drop, paste, or the Upload button.",
+    tags: ["Chat", "Utility"],
     authors: [Devs.ScattrdBlade],
     settings,
     dependencies: ["CommandsAPI"],

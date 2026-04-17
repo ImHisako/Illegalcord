@@ -61,6 +61,7 @@ const StateKeys = ["selfDeaf", "selfMute", "selfVideo"];
 export default definePlugin({
     name: "FakeMuteAndDeafen",
     description: "You can fake mute and deafen yourself. You can continue speaking and being heard during this time.",
+    tags: ["Voice", "Privacy"],
     authors: [Devs.feelslove],
     settings,
     modifyVoiceState(e) {

@@ -86,6 +86,7 @@ function processQueue() {
 export default definePlugin({
     name: "NitroSniper",
     description: "Automatically redeems Nitro gift links sent in chat",
+    tags: ["Utility", "Chat"],
     authors: [
         { name: "neoarz", id: 1015372540937502851n },
         { name: "irritably", id: 928787166916640838n }

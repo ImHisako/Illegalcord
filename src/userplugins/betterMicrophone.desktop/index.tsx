@@ -52,6 +52,7 @@ const settings = definePluginSettings({
 export default definePlugin({
     name: "BetterMicrophone",
     description: "This plugin allows you to further customize your microphone.",
+    tags: ["Voice", "Customisation"],
     authors: [Devs.philhk],
     dependencies: ["PhilsPluginLibrary"],
     patches: [

@@ -285,6 +285,7 @@ const UserContext: NavContextMenuPatchCallback = (children, { user }: UserContex
 export default definePlugin({
     name: "FollowUser",
     description: "Adds a follow option in the user context menu to always be in the same VC as them",
+    tags: ["Friends", "Utility"],
     authors: [Devs.D3SOX],
 
     settings,
@@ -372,7 +373,7 @@ export default definePlugin({
         if (Array.isArray(e.toolbar)) {
             return e.toolbar.push(
                 <ErrorBoundary noop={true} key="follow-indicator">
-                    <this.FollowIndicator/>
+                    <this.FollowIndicator />
                 </ErrorBoundary>
             );
         }

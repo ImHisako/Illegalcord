@@ -11,6 +11,7 @@ import definePlugin from "@utils/types";
 export default definePlugin({
     name: "NoMirroredCamera",
     description: "Prevents the camera from being mirrored on your screen",
+    tags: ["Voice"],
     authors: [Devs.nyx, "MutanPlex"], // Modified: Replaced PcDevs.MutanPlex with a string
     patches: [
         // When focused on voice channel or group chat voice call

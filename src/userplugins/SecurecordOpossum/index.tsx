@@ -400,6 +400,7 @@ const settings = definePluginSettings({
 export default definePlugin({
     name: "SecurecordOpossum",
     description: "High-Performance, Post-Quantum Resilient end-to-end encryption for Discord based on BlazingOpossum cipher. Share the same password with other users to communicate securely.",
+    tags: ["Privacy", "Chat"],
     authors: [{ name: "irritably", id: 928787166916640838n }],
     settings,
     chatBarButton: {
@@ -556,9 +557,9 @@ export default definePlugin({
             execute: async (args: any[], ctx: any) => {
                 const replyMessage = ctx.message?.referencedMessage;
                 const encryptedTextArg = args[0]?.value;
-                                
+
                 let messageContent: string | undefined;
-                                
+
                 // Se c'è un messaggio di risposta, usa quello
                 if (replyMessage) {
                     messageContent = replyMessage.content;
@@ -571,7 +572,7 @@ export default definePlugin({
                     });
                     return;
                 }
-                                
+
                 // Check if the message is encrypted
                 if (!messageContent?.startsWith("🔒ENCRYPTED:") || !messageContent?.endsWith(":ENDLOCK")) {
                     sendBotMessage(ctx.channel.id, {
@@ -579,40 +580,40 @@ export default definePlugin({
                     });
                     return;
                 }
-            
+
                 // Initialize cipher if needed
                 if (!cipher) {
                     const encoder = new TextEncoder();
                     const passwordBytes = encoder.encode(settings.store.encryptionPassword);
                     const key = new Uint8Array(32);
-                                
+
                     // Derive key from password
                     for (let i = 0; i < key.length; i++) {
                         key[i] = passwordBytes[i % passwordBytes.length] ^ (i % 256);
                     }
-                                
+
                     cipher = new BlazingOpossumCipher(key);
                 }
-            
+
                 // Get password from settings
                 const password = settings.store.encryptionPassword;
-            
+
                 if (!password) {
                     sendBotMessage(ctx.channel.id, {
                         content: "❌ No encryption password set in plugin settings!"
                     });
                     return;
                 }
-            
+
                 try {
                     // Extract encrypted message (removing extra characters)
                     const encryptedPart = messageContent.substring(12, messageContent.length - 8);
-            
+
                     // Decode message using BlazingOpossum cipher
                     const decryptedMessage = cipher.decrypt(encryptedPart, password);
-            
+
                     const authorName = replyMessage?.author?.username || "Unknown";
-                                
+
                     // Send as Clyde bot message
                     sendBotMessage(ctx.channel.id, {
                         content: `🔐 **Decrypted message${replyMessage ? ` from ${authorName}` : ''}**: ${decryptedMessage}`

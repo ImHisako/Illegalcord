@@ -246,6 +246,7 @@ const settings = definePluginSettings({
 export default definePlugin({
     name: "TypingFriends",
     description: "See which of your friends are typing anywhere",
+    tags: ["Friends", "Notifications"],
     authors: [Devs.Xylen],
     settings: settings,
 

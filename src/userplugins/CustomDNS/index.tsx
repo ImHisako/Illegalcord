@@ -84,6 +84,7 @@ const settings = definePluginSettings({
 export default definePlugin({
     name: "CustomDNS",
     description: "Force Discord to use custom DNS servers (DNS.SB or Quad9) for enhanced privacy (If Activated Remove MullvadDNS) ",
+    tags: ["Privacy", "Utility"],
     authors: [{ name: "Irritably", id: 928787166916640838n }],
     settings,
 

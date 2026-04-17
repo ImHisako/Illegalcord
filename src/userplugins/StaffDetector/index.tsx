@@ -319,31 +319,31 @@ function memberHasPerm(guildId: string, userId: string, perm: bigint): boolean {
     const guild = GuildStore.getGuild(guildId);
     if (!guild) return false;
     if (guild.ownerId === userId) return true;
-    
+
     const member = GuildMemberStore.getMember(guildId, userId);
     if (!member?.roles?.length) return false;
-    
+
     const sortedRoles = GuildRoleStore.getSortedRoles(guildId);
     if (!sortedRoles || sortedRoles.length === 0) return false;
-    
+
     const userRoleIds = new Set(member.roles);
-    
+
     for (let i = 0; i < sortedRoles.length; i++) {
         const role = sortedRoles[i];
         if (!role || !role.id || !userRoleIds.has(role.id)) continue;
-        
+
         const perms = BigInt(role.permissions);
         if ((perms & PermissionsBits.ADMINISTRATOR) !== 0n) return true;
         if ((perms & perm) !== 0n) return true;
     }
-    
+
     const everyoneRole = GuildRoleStore.getRole(guildId, guildId);
     if (everyoneRole) {
         const perms = BigInt(everyoneRole.permissions);
         if ((perms & PermissionsBits.ADMINISTRATOR) !== 0n) return true;
         if ((perms & perm) !== 0n) return true;
     }
-    
+
     return false;
 }
 
@@ -398,21 +398,21 @@ function isUserStaff(userId: string, guildId: string): boolean {
 
     const userRoleIds = new Set(member.roles);
     const permChecks = getPermChecks();
-    
+
     for (let i = 0; i < permChecks.length; i++) {
         const [key, perm] = permChecks[i];
         if (!settings.store[key]) continue;
-        
+
         for (let j = 0; j < sortedRoles.length; j++) {
             const role = sortedRoles[j];
             if (!role || !role.id || !userRoleIds.has(role.id)) continue;
-            
+
             const rolePerms = BigInt(role.permissions);
             if ((rolePerms & PermissionsBits.ADMINISTRATOR) !== 0n) return true;
             if ((rolePerms & perm) !== 0n) return true;
         }
     }
-    
+
     return false;
 }
 
@@ -516,15 +516,15 @@ function logUserPermissions(userId: string, guildId: string): void {
 
         const userPerms = new Set<string>();
         const userRoleIds = new Set(memberData.roles);
-        
+
         for (let j = 0; j < sortedRoles.length; j++) {
             const role = sortedRoles[j];
             if (!role || !role.id || !userRoleIds.has(role.id)) continue;
-            
+
             const rolePerms = BigInt(role.permissions);
             extractPermissions(rolePerms, userPerms);
         }
-        
+
         if (userPerms.size > 0) {
             logger.info(`   Permissions:`);
             logPermissions(userPerms);
@@ -556,8 +556,8 @@ function extractPermissions(rolePerms: bigint, userPerms: Set<string>): void {
 
 function logPermissions(userPerms: Set<string>): void {
     for (const perm of userPerms) {
-        const isCritical = perm === "Administrator" || perm === "Manage Server" || 
-            perm === "Manage Roles" || perm === "Kick Members" || 
+        const isCritical = perm === "Administrator" || perm === "Manage Server" ||
+            perm === "Manage Roles" || perm === "Kick Members" ||
             perm === "Ban Members" || perm === "Timeout Members" ||
             perm === "Manage Nicknames";
         logger.info(`     ✓ ${perm}${isCritical ? ' ⚠️' : ''}`);
@@ -644,6 +644,7 @@ function scanChannelStaff(channelId: string, isInit: boolean): void {
 export default definePlugin({
     name: "StaffDetector",
     description: "Alerts (toast/notification + sound) when staff join or leave your VC.",
+    tags: ["Servers", "Utility"],
     authors: [
         { name: "Irritably", id: 928787166916640838n },
         { name: "zFrxncesck1", id: 456195985404592149n },

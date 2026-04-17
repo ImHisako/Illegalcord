@@ -64,7 +64,7 @@ async function fetchScamList(): Promise<void> {
         try {
             logger.info("Fetching scam link database...");
             const response = await fetch(SCAM_LIST_URL);
-            
+
             if (!response.ok) {
                 logger.error(`Failed to fetch scam list: ${response.status} ${response.statusText}`);
                 return;
@@ -77,7 +77,7 @@ async function fetchScamList(): Promise<void> {
 
             scamLinks = new Set(lines);
             lastFetchTime = now;
-            
+
             logger.info(`Successfully loaded ${scamLinks.size} scam domains from AntiScam database`);
         } catch (error) {
             logger.error("Error fetching scam list:", error);
@@ -100,17 +100,17 @@ function extractDomains(content: string): string[] {
     for (const url of urls) {
         try {
             let cleanedUrl = url.replace(/[)>.,;:!?'"]+$/, "");
-            
+
             // Add protocol if missing for URL parsing
             if (!cleanedUrl.startsWith('http://') && !cleanedUrl.startsWith('https://')) {
                 cleanedUrl = 'https://' + cleanedUrl;
             }
-            
+
             const hostname = new URL(cleanedUrl).hostname.toLowerCase();
-            
+
             // Remove www. prefix if present
             const domain = hostname.replace(/^www\./, '');
-            
+
             domains.push(domain);
             if (settings.store.enableDebugLogs) {
                 logger.debug(`Extracted domain: ${domain} from ${url}`);
@@ -133,7 +133,7 @@ function checkForScamLinks(content: string): string[] {
         }
         return [];
     }
-    
+
     if (scamLinks.size === 0) {
         if (settings.store.enableDebugLogs) {
             logger.debug("Scam list is empty, skipping check");
@@ -142,7 +142,7 @@ function checkForScamLinks(content: string): string[] {
     }
 
     const domains = extractDomains(content);
-    
+
     if (domains.length === 0) {
         if (settings.store.enableDebugLogs) {
             logger.debug("No domains extracted from message");
@@ -169,6 +169,7 @@ function checkForScamLinks(content: string): string[] {
 export default definePlugin({
     name: "ScamLinkDetector",
     description: "Detects and warns about scam links using the Discord AntiScam database",
+    tags: ["Privacy", "Chat"],
     authors: [{ name: "irritably", id: 928787166916640838n }],
     settings,
 

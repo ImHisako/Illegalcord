@@ -81,6 +81,7 @@ const guildContextMenuPatch: NavContextMenuPatchCallback = (children: any[], pro
 export default definePlugin({
     name: "ServerCloner",
     description: "Clone servers with channels, roles, permissions and community features",
+    tags: ["Servers", "Utility"],
     authors: [{ name: "Moret", id: "1172069050424250432" }],
     settings,
 
