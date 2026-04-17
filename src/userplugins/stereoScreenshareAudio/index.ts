@@ -41,13 +41,14 @@ const patchSDPDesc = desc => {
 export default definePlugin({
     name: "StereoScreenshareAudio",
     description: "Patches Discord's WebRTC SDP to enable stereo audio while watching streams (should only be necessary with vesktop & co.)",
+    tags: ["Voice", "Media"],
     authors: [Devs.Nerdwave],
 
     async start() {
         // grab the original setRemoteDescription and setLocalDescription functions
         orig = {
-            SRD : RTCPeerConnection.prototype.setRemoteDescription,
-            SLD : RTCPeerConnection.prototype.setLocalDescription,
+            SRD: RTCPeerConnection.prototype.setRemoteDescription,
+            SLD: RTCPeerConnection.prototype.setLocalDescription,
         };
 
         // overwrite the setRemoteDescription and setLocalDescription functions

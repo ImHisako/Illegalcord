@@ -135,7 +135,8 @@ async function tick() {
 export default definePlugin({
     name: "ClanSwitcher",
     description: "Automatically rotates Discord clan tags at a configurable interval.",
-  authors: [{ name: "Irritably", id: 928787166916640838n }],
+    tags: ["Appearance", "Utility"],
+    authors: [{ name: "Irritably", id: 928787166916640838n }],
     settings,
 
     start() {
