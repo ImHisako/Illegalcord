@@ -43,7 +43,7 @@ const settings = definePluginSettings({
   bypassCDN: {
     type: OptionType.BOOLEAN,
     description: "Bypass CDN domains for better performance.",
-    default: true
+    default: false
   },
   autoStart: {
     type: OptionType.BOOLEAN,
