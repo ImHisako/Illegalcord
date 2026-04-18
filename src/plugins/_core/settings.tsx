@@ -187,7 +187,7 @@ export default definePlugin({
         const equicordEntries: SettingsLayoutNode[] = [
             buildEntry({
                 key: "equicord_main",
-                title: "Equicord",
+                title: "Illegalcord",
                 panelTitle: "Illegalcord Settings",
                 Component: VencordTab,
                 Icon: MainSettingsIcon
