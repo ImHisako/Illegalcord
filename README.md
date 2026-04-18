@@ -37,6 +37,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **Mullvad DNS Over Discord** (Privacy & Security)
 - **CustomDNS**
 - **PresenceLab**
+- **MutualScanner**
 - **DisableAnimations**
 - **NoMirroredCam**
 - **ServerCloner**
