@@ -188,7 +188,7 @@ export default definePlugin({
             buildEntry({
                 key: "equicord_main",
                 title: "Equicord",
-                panelTitle: "Equicord Settings",
+                panelTitle: "Illegalcord Settings",
                 Component: VencordTab,
                 Icon: MainSettingsIcon
             }),
@@ -207,7 +207,7 @@ export default definePlugin({
             !IS_UPDATER_DISABLED && UpdaterTab && buildEntry({
                 key: "equicord_updater",
                 title: "Updater",
-                panelTitle: "Equicord Updater",
+                panelTitle: "Illegalcord Updater",
                 Component: UpdaterTab,
                 Icon: UpdaterIcon
             }),
@@ -220,7 +220,7 @@ export default definePlugin({
             buildEntry({
                 key: "equicord_cloud",
                 title: "Cloud",
-                panelTitle: "Equicord Cloud",
+                panelTitle: "Illegalcord Cloud",
                 Component: CloudTab,
                 Icon: CloudIcon
             }),
