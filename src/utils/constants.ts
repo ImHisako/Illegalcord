@@ -91,6 +91,10 @@ export const Devs = /* #__PURE__*/ Object.freeze({
         name: "Megumin",
         id: 545581357812678656n
     },
+    clrxxo: {
+        name: "clrxxo",
+        id: 1413598677028569259n,
+    },
     botato: {
         name: "botato",
         id: 440990343899643943n

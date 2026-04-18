@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import "./settings.css";
+
 import { definePluginSettings } from "@api/Settings";
 import { BackupRestoreIcon, CloudIcon, LogIcon, MainSettingsIcon, PaintbrushIcon, PatchHelperIcon, PluginsIcon, UpdaterIcon } from "@components/Icons";
 import {
@@ -19,6 +21,7 @@ import {
 import { gitHashShort } from "@shared/vencordUserAgent";
 import { Devs } from "@utils/constants";
 import { isTruthy } from "@utils/guards";
+import { Logger } from "@utils/Logger";
 import definePlugin, { IconProps, OptionType } from "@utils/types";
 import { waitFor } from "@webpack";
 import { React } from "@webpack/common";
@@ -95,6 +98,58 @@ interface SettingsLayoutBuilder {
     buildLayout(): SettingsLayoutNode[];
 }
 
+const SECTION_KEY_PREFIX = "equicord_section";
+const CUSTOM_ENTRY_DIVIDER_CLASS = "vc-kamidere-settings-plugin-divider";
+const DEFAULT_SETTINGS_LOCATION: SettingsLocation = "aboveNitro";
+const SETTINGS_LOCATIONS = new Set<SettingsLocation>([
+    "top",
+    "aboveNitro",
+    "belowNitro",
+    "aboveActivity",
+    "belowActivity",
+    "bottom",
+]);
+const logger = new Logger("Settings");
+
+function isRenderableComponent(value: unknown): value is ComponentType<any> {
+    return typeof value === "function" || (typeof value === "object" && value !== null);
+}
+
+function isValidEntryOptions(entry: unknown): entry is EntryOptions {
+    return typeof entry === "object"
+        && entry !== null
+        && typeof (entry as { key?: unknown; }).key === "string"
+        && typeof (entry as { title?: unknown; }).title === "string"
+        && isRenderableComponent((entry as { Component?: unknown; }).Component)
+        && isRenderableComponent((entry as { Icon?: unknown; }).Icon);
+}
+
+function isValidSettingsSectionMapping(entry: unknown): entry is [string, string] {
+    return Array.isArray(entry)
+        && entry.length >= 2
+        && typeof entry[0] === "string"
+        && entry[0].length > 0
+        && typeof entry[1] === "string"
+        && entry[1].length > 0;
+}
+
+function getSafeSettingsLocation(value: unknown): SettingsLocation {
+    return typeof value === "string" && SETTINGS_LOCATIONS.has(value as SettingsLocation)
+        ? value as SettingsLocation
+        : DEFAULT_SETTINGS_LOCATION;
+}
+
+const settingsSectionMap: [string, string][] = [
+    ["KamidereSettings", "equicord_main_panel"],
+    ["KamiderePlugins", "equicord_plugins_panel"],
+    ["KamidereThemes", "equicord_themes_panel"],
+    ["KamidereUpdater", "equicord_updater_panel"],
+    ["KamidereChangelog", "equicord_changelog_panel"],
+    ["KamidereCloud", "equicord_cloud_panel"],
+    ["KamidereBackupAndRestore", "equicord_backup_restore_panel"],
+    ["KamiderePatchHelper", "equicord_patch_helper_panel"],
+];
+
 const settings = definePluginSettings({
     settingsLocation: {
         type: OptionType.SELECT,
@@ -117,6 +172,7 @@ export default definePlugin({
     required: true,
 
     settings,
+    settingsSectionMap,
 
     patches: [
         {
@@ -145,6 +201,13 @@ export default definePlugin({
                 match: /(\i)\.buildLayout\(\)(?=\.map)/,
                 replace: "$self.buildLayout($1)"
             }
+        },
+        {
+            find: "getWebUserSettingFromSection",
+            replacement: {
+                match: /new Map\(\[(?=\[.{0,10}\.ACCOUNT,.{0,10}\.ACCOUNT_PANEL)/,
+                replace: "new Map([...$self.getSettingsSectionMappings(),"
+            }
         }
     ],
 
@@ -170,6 +233,8 @@ export default definePlugin({
         return ({
             key,
             type: LayoutTypes.SIDEBAR_ITEM,
+            legacySearchKey: title.toUpperCase(),
+            getLegacySearchKey: () => title.toUpperCase(),
             useTitle: () => title,
             icon: () => <Icon width={20} height={20} />,
             buildLayout: () => [panel]
@@ -273,6 +338,129 @@ export default definePlugin({
 
     customSections: [] as ((SectionTypes: Record<string, string>) => { section: string; element: ComponentType; label: string; id?: string; })[],
     customEntries: [] as EntryOptions[],
+    sidebarSyncFrame: 0 as number,
+    sidebarObserver: null as MutationObserver | null,
+    layoutVersion: 0,
+
+    getSettingsSectionMappings() {
+        return settingsSectionMap.filter(isValidSettingsSectionMapping);
+    },
+
+    invalidateSectionLayout() {
+        this.layoutVersion++;
+        this.scheduleCustomEntrySidebarSync();
+    },
+
+    scheduleCustomEntrySidebarSync() {
+        if (this.sidebarSyncFrame) cancelAnimationFrame(this.sidebarSyncFrame);
+        this.sidebarSyncFrame = requestAnimationFrame(() => {
+            this.sidebarSyncFrame = 0;
+            this.syncCustomEntrySidebarDecorations();
+        });
+    },
+
+    findSidebarItemElement(entry: EntryOptions) {
+        if (!isValidEntryOptions(entry)) return null;
+
+        const route = `${entry.key}_panel`;
+
+        const directMatch = document.querySelector<HTMLElement>(
+            [
+                `[aria-controls="${route}"]`,
+                `[data-item-id="${route}"]`,
+                `[data-list-item-id="${route}"]`,
+                `[aria-controls="${entry.key}"]`,
+                `[data-item-id="${entry.key}"]`,
+                `[data-list-item-id="${entry.key}"]`,
+            ].join(", "),
+        );
+        if (directMatch) return directMatch;
+
+        const normalizedTitle = entry.title.trim().toLowerCase();
+        const candidates = document.querySelectorAll<HTMLElement>("[role='tab'], button, [aria-controls], [data-item-id], [data-list-item-id]");
+
+        for (const candidate of candidates) {
+            if (candidate.textContent?.trim().toLowerCase() !== normalizedTitle) continue;
+            return candidate;
+        }
+
+        return null;
+    },
+
+    isSidebarItemLike(element: HTMLElement) {
+        return element.matches("[aria-controls], [data-item-id], [data-list-item-id], [role='tab'], button")
+            || Boolean(element.querySelector("[aria-controls], [data-item-id], [data-list-item-id], [role='tab'], button"));
+    },
+
+    resolveSidebarDividerAnchor(element: HTMLElement) {
+        let current = element;
+
+        while (current.parentElement && current.parentElement !== document.body) {
+            const parent = current.parentElement;
+            const hasItemSibling = Array.from(parent.children).some((child): child is HTMLElement =>
+                child instanceof HTMLElement
+                && child !== current
+                && this.isSidebarItemLike(child)
+            );
+
+            if (hasItemSibling) return current;
+            current = parent;
+        }
+
+        return element;
+    },
+
+    clearCustomEntrySidebarDecorations() {
+        document.querySelectorAll(`.${CUSTOM_ENTRY_DIVIDER_CLASS}`).forEach(el => el.remove());
+    },
+
+    syncCustomEntrySidebarDecorations() {
+        const customEntries = this.customEntries.filter(isValidEntryOptions);
+        if (!customEntries.length) return;
+
+        this.clearCustomEntrySidebarDecorations();
+
+        const firstCustomEntryElement = customEntries
+            .map(entry => this.findSidebarItemElement(entry))
+            .find((element): element is HTMLElement => element !== null);
+        if (!firstCustomEntryElement) return;
+
+        const anchor = this.resolveSidebarDividerAnchor(firstCustomEntryElement);
+        const parent = anchor.parentElement;
+        if (!parent) return;
+
+        const divider = document.createElement("div");
+        divider.className = CUSTOM_ENTRY_DIVIDER_CLASS;
+        divider.setAttribute("aria-hidden", "true");
+        parent.insertBefore(divider, anchor);
+    },
+
+    start() {
+        if (!document.body) return;
+
+        this.scheduleCustomEntrySidebarSync();
+
+        this.sidebarObserver?.disconnect();
+        this.sidebarObserver = new MutationObserver(() => this.scheduleCustomEntrySidebarSync());
+        this.sidebarObserver.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ["aria-controls", "data-item-id", "data-list-item-id", "class"]
+        });
+    },
+
+    stop() {
+        this.sidebarObserver?.disconnect();
+        this.sidebarObserver = null;
+
+        if (this.sidebarSyncFrame) {
+            cancelAnimationFrame(this.sidebarSyncFrame);
+            this.sidebarSyncFrame = 0;
+        }
+
+        this.clearCustomEntrySidebarDecorations();
+    },
 
     get electronVersion() {
         return VencordNative.native.getVersions().electron ?? window.legcord?.electron ?? null;
