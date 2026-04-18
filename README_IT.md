@@ -128,7 +128,9 @@ Nota: Il file zip dell'estensione Firefox richiede Firefox per sviluppatori
 
 ## Crediti
 
-Grazie a [thororen1234](https://github.com/thororen1234) per aver creato [Equicord](https://github.com/Equicord) & [Vendicated](https://github.com/Vendicated) per aver creato [Vencord](https://github.com/Vendicated/Vencord) & [Suncord](https://github.com/verticalsync/Suncord) di [verticalsync](https://github.com/verticalsync) 
+- [thororen1234](https://github.com/thororen1234) per aver creato [Equicord](https://github.com/Equicord)
+- [Vendicated](https://github.com/Vendicated) per aver creato [Vencord](https://github.com/Vendicated/Vencord)
+- [verticalsync](https://github.com/verticalsync) per aver creato [Suncord](https://github.com/verticalsync/Suncord)
 
 ## Dichiarazione di Non Responsabilità
 
