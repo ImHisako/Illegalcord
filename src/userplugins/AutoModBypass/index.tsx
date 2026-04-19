@@ -76,7 +76,7 @@ const settings = definePluginSettings({
             { label: "Full Width", value: "fullWidth" },
             { label: "Strikethrough", value: "strikethrough" },
             { label: "Invisible Separator", value: "invisibleSeparator" },
-            { label: "Undetected (Anti-Cheat)", value: "undetected" },
+            { label: "Undetected", value: "undetected" },
         ],
     },
 });
