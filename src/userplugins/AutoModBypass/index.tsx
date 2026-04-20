@@ -87,7 +87,7 @@ function transformText(text: string, style: TextStyle): string {
 }
 
 function transformMessage(text: string, style: TextStyle): string {
-    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|@everyone|@here)/gi;
     const parts: string[] = [];
     let lastIndex = 0;
 
