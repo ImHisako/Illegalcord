@@ -139,10 +139,12 @@ export default definePlugin({
         if (!memory) return;
 
         const usedMB = memory.usedJSHeapSize / 1024 / 1024;
+        const estimatedTotal = this.estimateTotalRAM();
+        const displayMB = estimatedTotal || usedMB;
         const maxMB = settings.store.maxMemoryMB;
 
-        if (maxMB > 0 && usedMB > maxMB) {
-            logger.info(`Memory usage ${usedMB.toFixed(0)}MB exceeds limit ${maxMB}MB, triggering clean`);
+        if (maxMB > 0 && displayMB > maxMB) {
+            logger.info(`Memory usage ${displayMB.toFixed(0)}MB (est) exceeds limit ${maxMB}MB, triggering clean`);
             this.cleanMemory("auto-clean threshold exceeded");
         }
 
@@ -402,6 +404,24 @@ export default definePlugin({
         }
     },
 
+    estimateTotalRAM(): number | null {
+        try {
+            const perf = performance as any;
+            if (!perf.memory) return null;
+
+            const jsHeapMB = perf.memory.usedJSHeapSize / 1024 / 1024;
+
+            const nav = navigator as any;
+            const deviceMemory = nav.deviceMemory || 8;
+
+            const estimatedTotal = jsHeapMB * 2.5 + 400;
+
+            return Math.round(estimatedTotal);
+        } catch (error) {
+            return null;
+        }
+    },
+
     createMemoryIndicator() {
         if (document.getElementById("ramcleaner-indicator")) return;
 
@@ -418,17 +438,31 @@ export default definePlugin({
         const indicator = document.getElementById("ramcleaner-indicator");
         if (!indicator) return;
 
+        const estimatedTotal = this.estimateTotalRAM();
+        const displayMB = estimatedTotal || usedMB;
         const percentage = (usedMB / totalMB) * 100;
-        let color = "#43b581";
 
-        if (percentage > 80) {
-            color = "#f04747";
-        } else if (percentage > 60) {
-            color = "#faa61a";
+        let color = "#43b581";
+        const maxMB = settings.store.maxMemoryMB;
+
+        if (maxMB > 0) {
+            const limitPercentage = (displayMB / maxMB) * 100;
+            if (limitPercentage > 80) {
+                color = "#f04747";
+            } else if (limitPercentage > 60) {
+                color = "#faa61a";
+            }
+        } else {
+            if (percentage > 80) {
+                color = "#f04747";
+            } else if (percentage > 60) {
+                color = "#faa61a";
+            }
         }
 
-        indicator.textContent = `RAM: ${usedMB.toFixed(0)}MB`;
+        indicator.textContent = `RAM: ${displayMB.toFixed(0)}MB`;
         indicator.style.backgroundColor = color;
+        indicator.title = `JS Heap: ${usedMB.toFixed(0)}MB | Estimated Total: ${displayMB.toFixed(0)}MB`;
     },
 
     removeMemoryIndicator() {
