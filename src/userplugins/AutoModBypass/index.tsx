@@ -86,17 +86,38 @@ function transformText(text: string, style: TextStyle): string {
     return text.split("").map(char => map[char] ?? char).join("");
 }
 
+function transformMessage(text: string, style: TextStyle): string {
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+    const parts: string[] = [];
+    let lastIndex = 0;
+
+    let match;
+    while ((match = urlRegex.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+            parts.push(transformText(text.slice(lastIndex, match.index), style));
+        }
+        parts.push(match[0]);
+        lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < text.length) {
+        parts.push(transformText(text.slice(lastIndex), style));
+    }
+
+    return parts.join("");
+}
+
 export default definePlugin({
     name: "AutoModBypass",
     description: "Transforms your messages into various text styles (Fraktur, Zalgo, Squared, etc.) for automod bypass & Fun",
     authors: [{ name: "Irritably", id: 928787166916640838n }],
-    tags: ["Chat", "Fun"],
+    tags: ["Chat", "Fun", "Utils"],
     enabledByDefault: false,
     settings,
 
     onBeforeMessageSend(_channelId, messageObj) {
         if (!messageObj.content) return;
 
-        messageObj.content = transformText(messageObj.content, settings.store.textStyle as TextStyle);
+        messageObj.content = transformMessage(messageObj.content, settings.store.textStyle as TextStyle);
     },
 });
