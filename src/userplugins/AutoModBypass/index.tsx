@@ -88,16 +88,48 @@ function transformText(text: string, style: TextStyle): string {
 
 function transformMessage(text: string, style: TextStyle): string {
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|@everyone|@here)/gi;
+    const emojiRegex = /<(a)?:([a-zA-Z0-9_]+):(\d{17,20})>/g;
     const parts: string[] = [];
     let lastIndex = 0;
 
+    const segments: Array<{ start: number; end: number; type: "emoji" | "url" | "text"; content: string; }> = [];
+
     let match;
+    while ((match = emojiRegex.exec(text)) !== null) {
+        segments.push({
+            start: match.index,
+            end: match.index + match[0].length,
+            type: "emoji",
+            content: match[0]
+        });
+    }
+
+    const urlSegments: Array<{ start: number; end: number; type: "url"; content: string; }> = [];
     while ((match = urlRegex.exec(text)) !== null) {
-        if (match.index > lastIndex) {
-            parts.push(transformText(text.slice(lastIndex, match.index), style));
+        const overlaps = segments.some(s =>
+            s.type === "emoji" &&
+            match.index < s.end &&
+            (match.index + match[0].length) > s.start
+        );
+        if (!overlaps) {
+            urlSegments.push({
+                start: match.index,
+                end: match.index + match[0].length,
+                type: "url",
+                content: match[0]
+            });
         }
-        parts.push(match[0]);
-        lastIndex = match.index + match[0].length;
+    }
+
+    const allSegments = [...segments, ...urlSegments].sort((a, b) => a.start - b.start);
+
+    for (let i = 0; i < allSegments.length; i++) {
+        const segment = allSegments[i];
+        if (segment.start > lastIndex) {
+            parts.push(transformText(text.slice(lastIndex, segment.start), style));
+        }
+        parts.push(segment.content);
+        lastIndex = segment.end;
     }
 
     if (lastIndex < text.length) {
