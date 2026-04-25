@@ -17,6 +17,7 @@
 */
 
 import { ApplicationCommandInputType, ApplicationCommandOptionType, findOption } from "@api/Commands";
+import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
 import { sendMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
@@ -69,7 +70,11 @@ export default definePlugin({
             execute: async (opts, ctx) => {
                 const { channel } = ctx;
                 if (!channel?.guild_id) {
-                    sendMessage(channel.id, { content: "This command can only be used in a server." });
+                    showNotification({
+                        title: "MassMention",
+                        body: "This command can only be used in a server.",
+                        icon: "https://cdn.discordapp.com/embed/avatars/0.png"
+                    });
                     return;
                 }
 
@@ -78,11 +83,13 @@ export default definePlugin({
                 const totalMentionsOption = findOption(opts, "total_mentions") as number | undefined;
                 const { excludeBots = true, delayBetweenMessages = 5000 } = settings.store;
 
-                sendMessage(channel.id, { content: "Fetching members..." });
-
                 let members = GuildMemberStore.getMembers(guildId);
                 if (!members || members.length === 0) {
-                    sendMessage(channel.id, { content: "No members found in this server." });
+                    showNotification({
+                        title: "MassMention",
+                        body: "No members found in this server.",
+                        icon: "https://cdn.discordapp.com/embed/avatars/0.png"
+                    });
                     return;
                 }
 
@@ -95,7 +102,11 @@ export default definePlugin({
                 });
 
                 if (!members.length) {
-                    sendMessage(channel.id, { content: "No valid users found to mention." });
+                    showNotification({
+                        title: "MassMention",
+                        body: "No valid users found to mention.",
+                        icon: "https://cdn.discordapp.com/embed/avatars/0.png"
+                    });
                     return;
                 }
 
@@ -103,7 +114,11 @@ export default definePlugin({
                     ? Math.min(totalMentionsOption, members.length)
                     : members.length;
 
-                sendMessage(channel.id, { content: `Starting mass mention: ${totalMentions} users, ${mentionsPerMessage} per message.` });
+                showNotification({
+                    title: "MassMention",
+                    body: `Starting mass mention: ${totalMentions} users, ${mentionsPerMessage} per message.`,
+                    icon: "https://cdn.discordapp.com/embed/avatars/0.png"
+                });
 
                 let index = 0;
                 let successCount = 0;
@@ -127,7 +142,11 @@ export default definePlugin({
                     }
                 }
 
-                sendMessage(channel.id, { content: `Mass mention complete! Mentioned ${successCount} users.` });
+                showNotification({
+                    title: "MassMention",
+                    body: `Mass mention complete! Mentioned ${successCount} users.`,
+                    icon: "https://cdn.discordapp.com/embed/avatars/0.png"
+                });
             }
         }
     ],
