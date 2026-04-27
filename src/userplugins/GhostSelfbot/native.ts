@@ -6,7 +6,7 @@
 
 import { Logger } from "@utils/Logger";
 import { execSync, spawn } from "child_process";
-import { IpcMainInvokeEvent, shell } from "electron";
+import { IpcMainInvokeEvent } from "electron";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
@@ -201,7 +201,26 @@ export function launchGhostExe(_event: IpcMainInvokeEvent, autoFillToken: boolea
         enableWebhookSetup(_event);
     }
 
-    shell.openPath(ghostExePath);
+    // Ensure fonts and data are accessible by setting working directory
+    const ghostPluginDir = detectGhostPluginPath();
+    const options = {
+        cwd: ghostPluginDir,
+        env: {
+            ...process.env,
+            GHOST_PLUGIN_DIR: ghostPluginDir
+        }
+    };
+
+    logger.log("Launching Ghost.exe from directory:", ghostPluginDir);
+    const child = spawn(ghostExePath, [], options);
+
+    child.on("error", error => {
+        logger.error("Failed to start Ghost.exe:", error.message);
+    });
+
+    child.on("exit", code => {
+        logger.log("Ghost.exe exited with code:", code);
+    });
 }
 
 export function launchGhostSource(_event: IpcMainInvokeEvent, autoFillToken: boolean, autoInstallRequirements: boolean, pythonPath: string, token: string | null, nitroWebhookUrl: string, privnoteWebhookUrl: string, autoSetupWebhooks: boolean): void {

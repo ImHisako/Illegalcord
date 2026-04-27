@@ -7,7 +7,8 @@ from utils.config import VERSION
 
 
 def patch_macos_plist(app_name):
-    plist_path = os.path.join("dist", f"{app_name}.app", "Contents", "Info.plist")
+    plist_path = os.path.join(
+        "dist", f"{app_name}.app", "Contents", "Info.plist")
 
     if not os.path.exists(plist_path):
         print("Info.plist not found, skipping version patch")
@@ -43,9 +44,20 @@ def build():
         f"--icon={icon}",
         "--hidden-import=discord",
         "--hidden-import=discord.ext.commands",
+        "--hidden-import=discord_self_embed",
         "--hidden-import=PIL.ImageTk",
         "--hidden-import=PIL._tkinter_finder",
+        "--hidden-import=PIL.Image",
+        "--hidden-import=PIL.ImageDraw",
+        "--hidden-import=PIL.ImageFont",
+        "--hidden-import=PIL.ImageChops",
+        "--hidden-import=Crypto",
+        "--hidden-import=cupcake_editor",
+        "--hidden-import=bs4",
+        "--hidden-import=hPyT",
         "--collect-submodules=discord",
+        "--collect-submodules=discord_self_embed",
+        "--collect-submodules=PIL",
         entry_script
     ]
 
@@ -53,8 +65,8 @@ def build():
         args += [
             "--paths=.venv\\Lib\\site-packages",
             "--add-data=data\\*;data",
-            "--add-data=data\\fonts\\*;data/fonts",
-            "--add-data=data\\icons\\*;data/icons"
+            "--add-data=data\\fonts\\*;data\\fonts",
+            "--add-data=data\\icons\\*;data\\icons"
         ]
     else:
         args += [
