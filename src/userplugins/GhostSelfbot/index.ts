@@ -27,6 +27,11 @@ export function getCurrentDiscordToken(): string | null {
 }
 
 const settings = definePluginSettings({
+    autoLaunch: {
+        type: OptionType.BOOLEAN,
+        description: "Automatically launch Ghost.exe when Discord starts",
+        default: false
+    },
     launchMode: {
         type: OptionType.SELECT,
         description: "Choose whether to launch Ghost.exe or the source code",
@@ -56,13 +61,36 @@ const settings = definePluginSettings({
         description: "Path to Python executable (required for source code mode)",
         default: "python",
         placeholder: "python or C:\\Python311\\python.exe"
+    },
+    nitroWebhookUrl: {
+        type: OptionType.STRING,
+        description: "Discord webhook URL for Nitro sniper notifications",
+        default: "",
+        placeholder: "https://discord.com/api/webhooks/..."
+    },
+    privnoteWebhookUrl: {
+        type: OptionType.STRING,
+        description: "Discord webhook URL for Privnote sniper notifications",
+        default: "",
+        placeholder: "https://discord.com/api/webhooks/..."
+    },
+    autoSetupWebhooks: {
+        type: OptionType.BOOLEAN,
+        description: "Tell Ghost to automatically create webhook channels on first launch",
+        default: false
     }
 });
 
 function launchGhostExe(): void {
     try {
         const token = settings.store.autoFillToken ? getCurrentDiscordToken() : null;
-        Native.launchGhostExe(settings.store.autoFillToken, token);
+        Native.launchGhostExe(
+            settings.store.autoFillToken,
+            token,
+            settings.store.nitroWebhookUrl || "",
+            settings.store.privnoteWebhookUrl || "",
+            settings.store.autoSetupWebhooks
+        );
 
         showNotification({
             title: "Ghost Selfbot",
@@ -88,7 +116,10 @@ function launchGhostSource(): void {
             settings.store.autoFillToken,
             settings.store.autoInstallRequirements,
             pythonPath,
-            token
+            token,
+            settings.store.nitroWebhookUrl || "",
+            settings.store.privnoteWebhookUrl || "",
+            settings.store.autoSetupWebhooks
         );
 
         showNotification({
@@ -189,6 +220,17 @@ export default definePlugin({
     start() {
         logger.log("Ghost Selfbot plugin loaded.");
         logger.log("Commands available: /ghost, /ghost-install, /ghost-check");
+
+        if (settings.store.autoLaunch) {
+            setTimeout(() => {
+                logger.log("Auto-launching Ghost Selfbot...");
+                if (settings.store.launchMode === "exe") {
+                    launchGhostExe();
+                } else {
+                    launchGhostSource();
+                }
+            }, 5000);
+        }
     },
 
     stop() {

@@ -181,7 +181,7 @@ export function updateGhostConfig(_event: IpcMainInvokeEvent, token: string): bo
     }
 }
 
-export function launchGhostExe(_event: IpcMainInvokeEvent, autoFillToken: boolean, token: string | null): void {
+export function launchGhostExe(_event: IpcMainInvokeEvent, autoFillToken: boolean, token: string | null, nitroWebhookUrl: string, privnoteWebhookUrl: string, autoSetupWebhooks: boolean): void {
     const ghostExePath = getGhostExePath();
 
     if (!ghostExePath || !existsSync(ghostExePath)) {
@@ -193,22 +193,30 @@ export function launchGhostExe(_event: IpcMainInvokeEvent, autoFillToken: boolea
         logger.log("Token updated in Ghost config");
     }
 
+    if (nitroWebhookUrl || privnoteWebhookUrl) {
+        updateGhostWebhooks(_event, nitroWebhookUrl, privnoteWebhookUrl);
+    }
+
+    if (autoSetupWebhooks) {
+        enableWebhookSetup(_event);
+    }
+
     shell.openPath(ghostExePath);
 }
 
-export function launchGhostSource(_event: IpcMainInvokeEvent, autoFillToken: boolean, autoInstallRequirements: boolean, pythonPath: string, token: string | null): void {
+export function launchGhostSource(_event: IpcMainInvokeEvent, autoFillToken: boolean, autoInstallRequirements: boolean, pythonPath: string, token: string | null, nitroWebhookUrl: string, privnoteWebhookUrl: string, autoSetupWebhooks: boolean): void {
     const ghostSourcePath = getGhostSourcePath();
 
     if (!ghostSourcePath || !existsSync(ghostSourcePath)) {
         throw new Error("Ghost source code not found");
     }
 
-    if (!checkPythonInstalled(pythonPath)) {
+    if (!checkPythonInstalled(_event, pythonPath)) {
         throw new Error(`Python not found at ${pythonPath}`);
     }
 
     if (autoInstallRequirements) {
-        if (!installRequirements(pythonPath)) {
+        if (!installRequirements(_event, pythonPath)) {
             throw new Error("Failed to install Python requirements");
         }
     }
@@ -216,6 +224,14 @@ export function launchGhostSource(_event: IpcMainInvokeEvent, autoFillToken: boo
     if (autoFillToken && token) {
         updateGhostConfig(_event, token);
         logger.log("Token updated in Ghost config");
+    }
+
+    if (nitroWebhookUrl || privnoteWebhookUrl) {
+        updateGhostWebhooks(_event, nitroWebhookUrl, privnoteWebhookUrl);
+    }
+
+    if (autoSetupWebhooks) {
+        enableWebhookSetup(_event);
     }
 
     const ghostPy = join(ghostSourcePath, "ghost.py");
@@ -244,4 +260,55 @@ export function checkGhostSetup(_event: IpcMainInvokeEvent, pythonPath: string):
         pythonFound: checkPythonInstalled(_event, pythonPath),
         requirementsFound: !!(requirementsPath && existsSync(requirementsPath))
     };
+}
+
+export function updateGhostWebhooks(_event: IpcMainInvokeEvent, nitroWebhookUrl: string, privnoteWebhookUrl: string): boolean {
+    try {
+        const ghostConfigPath = getGhostConfigPath();
+
+        if (!existsSync(ghostConfigPath)) {
+            logger.error("Ghost config not found. Please run Ghost.exe first to create config.");
+            return false;
+        }
+
+        const config = JSON.parse(readFileSync(ghostConfigPath, "utf-8"));
+
+        if (nitroWebhookUrl) {
+            if (!config.snipers) config.snipers = {};
+            if (!config.snipers.nitro) config.snipers.nitro = {};
+            config.snipers.nitro.webhook = nitroWebhookUrl;
+            logger.log("Nitro sniper webhook updated");
+        }
+
+        if (privnoteWebhookUrl) {
+            if (!config.snipers) config.snipers = {};
+            if (!config.snipers.privnote) config.snipers.privnote = {};
+            config.snipers.privnote.webhook = privnoteWebhookUrl;
+            logger.log("Privnote sniper webhook updated");
+        }
+
+        writeFileSync(ghostConfigPath, JSON.stringify(config, null, 4));
+        return true;
+    } catch (error) {
+        logger.error("Failed to update Ghost webhooks:", error);
+        return false;
+    }
+}
+
+export function enableWebhookSetup(_event: IpcMainInvokeEvent): boolean {
+    try {
+        const cacheDir = join(process.env.APPDATA || "", "Ghost/data/cache");
+        const webhookFlagPath = join(cacheDir, "CREATE_WEBHOOKS");
+
+        if (!existsSync(cacheDir)) {
+            require("fs").mkdirSync(cacheDir, { recursive: true });
+        }
+
+        writeFileSync(webhookFlagPath, "True");
+        logger.log("Webhook auto-setup enabled");
+        return true;
+    } catch (error) {
+        logger.error("Failed to enable webhook setup:", error);
+        return false;
+    }
 }
