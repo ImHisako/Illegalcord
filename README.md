@@ -7,12 +7,12 @@ An open‑source client built for those who believe in absolute freedom of devel
 We can consider this client a reliable alternative to Lightcord, since Illegalcord is a free, open-source project that supports stereo.
 Don't u trust Lightcord? You are in the right place.
 Do u want abuse Discord API's ? Want a Discord client with no rules? You're in the right place.
-Want to chat privately on Discord? The "Securecord Opossum" plugin is ready for you. 
+Want to chat privately on Discord? The "Securecord Opossum" plugin is ready for you.
 Want to get Nitro codes to get free Nitro? We have a built-in plugin to get free Nitro: stop paying for Nitro starting now.
 
 Telegram x News: https://t.me/Illegalcord
 
-### Stereo Method 
+### Stereo Method
 Download : https://github.com/ProdHallow/Discord-Stereo-Installer/blob/main/Stereo%20Installer.bat
 
 ### Included Plugins
@@ -55,15 +55,16 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **BadgeSelector** | (https://github.com/002-sans/VencordPlugins/tree/b8c7c98a50c0700f7389b0484e5659fe5ec0f99e/BadgesSelector)
 - **CustomStream** | (https://github.com/MrTopQ/customStream-Vencord)
 - **TypingFriends** | (https://github.com/debxylen/Vencord/tree/main/src/plugins/typingFriends)
-- **SilentDelete** | (https://github.com/aurickk/SilentDelete-Vencord) 
+- **SilentDelete** | (https://github.com/aurickk/SilentDelete-Vencord)
 - **embeddedURLs** | (https://github.com/ddadiani/Vencord-EmbeddedLinks/blob/main/src/plugins/embeddedURLs/index.ts)
 - **GPU Binder** | (https://github.com/UnClide/vencord-gpubinder)
 - **stereoScreenshareAudio** | (https://github.com/nerdwave-nick/Vencord-Stereo-Fix/blob/main/src/plugins/stereoScreenshareAudio/index.ts)
-- **DiscordLock** | (https://github.com/vejcowski/DiscordLock/tree/main) 
+- **DiscordLock** | (https://github.com/vejcowski/DiscordLock/tree/main)
 - **KeepGifPickerOpen** | (https://github.com/pacxwheaa/KeepGifPickerOpen/tree/main)
 - **Opsec Plugin** | (https://github.com/ItzSolace/OpSec-Vencord/tree/main) | (We have a different version with italian support)
 - **DecibelLimiter** | (https://github.com/BashOnZsh/Bashcord/tree/main/src/userplugins/decibelLimiter)
 - **CrashHandlerEnhanched** | (https://github.com/Mifu999/Equicord-Userplugins/tree/main/userplugins/crashHandlerEnhanced)
+- **GhostSelfbot** | Launch Ghost Selfbot (exe or source) with auto-setup, Python requirements installer, and token management | https://ghostt.cc/
 
 </details>
 
@@ -85,7 +86,7 @@ npm i -g pnpm
 
 > :exclamation: **IMPORTANT** Make sure you aren't using an admin/root terminal from here onwards. It **will** mess up your Discord/Illegalcord instance and you **will** most likely have to reinstall.
 
-If you're using *BAT* to install the client and you're getting an error saying that script execution is disabled on your system, run the following command in PowerShell as an administrator : 
+If you're using *BAT* to install the client and you're getting an error saying that script execution is disabled on your system, run the following command in PowerShell as an administrator :
 ```shell
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 ```

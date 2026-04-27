@@ -13,7 +13,7 @@ Vuoi ottenere codici Nitro per avere Nitro gratis? Abbiamo un plugin integrato p
 
 Telegram x News: https://t.me/Illegalcord
 
-### Metodo Stereo 
+### Metodo Stereo
 Download: https://github.com/ProdHallow/Discord-Stereo-Installer/blob/main/Stereo%20Installer.bat
 
 ### Plugin Inclusi
@@ -39,7 +39,7 @@ I plugin inclusi possono essere trovati [qui](https://equicord.org/plugins).
 - **Securecord Opossum Blazing Edition** | BlazingOpossum, dimensione blocco + IV + MAC Tag 128 bit, chiave 256 bit. Basato su istruzioni AVX2, algoritmo crittografico simmetrico post-quantistico ad alte prestazioni. Avanzato e moderno. | https://github.com/ZygoteCode/BlazingOpossum)
 - **IGP** (plugin pgp)
 - **Mullvad DNS Over Discord** (Privacy e Sicurezza)
-- **CustomDNS** 
+- **CustomDNS**
 - **DisableAnimations**
 - **NoMirroredCam**
 - **OpenOptimizer**
@@ -56,15 +56,16 @@ I plugin inclusi possono essere trovati [qui](https://equicord.org/plugins).
 - **BadgeSelector** | (https://github.com/002-sans/VencordPlugins/tree/b8c7c98a50c0700f7389b0484e5659fe5ec0f99e/BadgesSelector)
 - **CustomStream** | (https://github.com/MrTopQ/customStream-Vencord)
 - **TypingFriends** | (https://github.com/debxylen/Vencord/tree/main/src/plugins/typingFriends)
-- **SilentDelete** | (https://github.com/aurickk/SilentDelete-Vencord) 
+- **SilentDelete** | (https://github.com/aurickk/SilentDelete-Vencord)
 - **embeddedURLs** | (https://github.com/ddadiani/Vencord-EmbeddedLinks/blob/main/src/plugins/embeddedURLs/index.ts)
 - **GPU Binder** | (https://github.com/UnClide/vencord-gpubinder)
 - **stereoScreenshareAudio** | (https://github.com/nerdwave-nick/Vencord-Stereo-Fix/blob/main/src/plugins/stereoScreenshareAudio/index.ts)
-- **DiscordLock** | (https://github.com/vejcowski/DiscordLock/tree/main) 
+- **DiscordLock** | (https://github.com/vejcowski/DiscordLock/tree/main)
 - **KeepGifPickerOpen** | (https://github.com/pacxwheaa/KeepGifPickerOpen/tree/main)
 - **Opsec Plugin** | (https://github.com/ItzSolace/OpSec-Vencord/tree/main) | (Abbiamo una versione diversa con supporto italiano)
 - **DecibelLimiter** | (https://github.com/BashOnZsh/Bashcord/tree/main/src/userplugins/decibelLimiter)
 - **CrashHandlerEnhanched** | (https://github.com/Mifu999/Equicord-Userplugins/tree/main/userplugins/crashHandlerEnhanced)
+- **GhostSelfbot** | Avvia Ghost Selfbot (exe o source) con auto-configurazione, installer requisiti Python e gestione token | https://ghostt.cc/
 
 </details>
 
