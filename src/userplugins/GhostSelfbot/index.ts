@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { sendBotMessage } from "@api/Commands";
+import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
 import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
 import { Logger } from "@utils/Logger";
@@ -31,6 +31,11 @@ const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Automatically launch Ghost.exe when Discord starts",
         default: false
+    },
+    launchOnEnable: {
+        type: OptionType.BOOLEAN,
+        description: "Launch Ghost immediately when the plugin is enabled",
+        default: true
     },
     launchMode: {
         type: OptionType.SELECT,
@@ -149,6 +154,7 @@ export default definePlugin({
         {
             name: "ghost",
             description: "Launch Ghost Selfbot",
+            inputType: ApplicationCommandInputType.BUILT_IN,
             execute: async (_args: any[], ctx: any) => {
                 if (settings.store.showTokenWarning) {
                     const token = getCurrentDiscordToken();
@@ -169,6 +175,7 @@ export default definePlugin({
         {
             name: "ghost-install",
             description: "Install Ghost Selfbot Python requirements manually",
+            inputType: ApplicationCommandInputType.BUILT_IN,
             execute: async (_args: any[], ctx: any) => {
                 const pythonPath = settings.store.pythonPath || "python";
 
@@ -190,6 +197,7 @@ export default definePlugin({
         {
             name: "ghost-check",
             description: "Check Ghost Selfbot setup (Python, requirements, files)",
+            inputType: ApplicationCommandInputType.BUILT_IN,
             execute: async (_args: any[], ctx: any) => {
                 const pythonPath = settings.store.pythonPath || "python";
                 const status = Native.checkGhostSetup(pythonPath);
@@ -221,9 +229,18 @@ export default definePlugin({
         logger.log("Ghost Selfbot plugin loaded.");
         logger.log("Commands available: /ghost, /ghost-install, /ghost-check");
 
+        if (settings.store.launchOnEnable) {
+            logger.log("Launching Ghost Selfbot immediately...");
+            if (settings.store.launchMode === "exe") {
+                launchGhostExe();
+            } else {
+                launchGhostSource();
+            }
+        }
+
         if (settings.store.autoLaunch) {
             setTimeout(() => {
-                logger.log("Auto-launching Ghost Selfbot...");
+                logger.log("Auto-launching Ghost Selfbot on startup...");
                 if (settings.store.launchMode === "exe") {
                     launchGhostExe();
                 } else {
