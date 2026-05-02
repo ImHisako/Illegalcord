@@ -5,15 +5,18 @@
  */
 
 import { showNotification } from "@api/Notifications";
+import type { OnlineStatus } from "@vencord/discord-types";
 import { ChannelStore, NavigationRouter, PresenceStore, UserStore } from "@webpack/common";
 
 import { logStalkerEvent, settings, targets } from ".";
 
-type Statuses = Record<string, string>;
+type Statuses = Record<string, OnlineStatus>;
 
 let lastStatuses: Statuses | undefined;
 
-const shouldNotifyForTransition = (lastStatus: string, newStatus: string): boolean => {
+const NOTIFICATION_COLOR = "#5865f2";
+
+const shouldNotifyForTransition = (lastStatus: OnlineStatus, newStatus: OnlineStatus): boolean => {
     if (lastStatus === "offline" && settings.store.notifyGoOnline) return true;
     if (newStatus === "dnd" && settings.store.notifyDnd) return true;
     if (newStatus === "idle" && settings.store.notifyIdle) return true;
@@ -22,7 +25,7 @@ const shouldNotifyForTransition = (lastStatus: string, newStatus: string): boole
     return false;
 };
 
-const formatStatus = (status: string): string =>
+const formatStatus = (status: OnlineStatus): string =>
     status === "dnd" ? "in dnd" : status;
 
 export const init = () => {
@@ -57,28 +60,29 @@ export const statusChange = () => {
 
         if (lastStatus === newStatus) continue;
 
-        if (shouldNotifyForTransition(lastStatus, newStatus)) {
-            const user = UserStore.getUser(id);
-            if (!user) continue;
+        const user = UserStore.getUser(id);
+        if (!user) continue;
 
+        if (shouldNotifyForTransition(lastStatus, newStatus)) {
             showNotification({
                 title: "Stalker",
                 body: `${user.username} is now ${formatStatus(newStatus)}`,
-                color: `#${user.accentColor?.toString(16)}`,
+                color: NOTIFICATION_COLOR,
                 icon: user.getAvatarURL(),
                 onClick: () => {
-                    NavigationRouter.transitionTo(`/channels/@me/${ChannelStore.getDMFromUserId(user.id)}`);
+                    const channelId = ChannelStore.getDMFromUserId(user.id);
+                    if (channelId) NavigationRouter.transitionTo(`/channels/@me/${channelId}`);
                 },
             });
-
-            logStalkerEvent({
-                timestamp: new Date().toISOString(),
-                userId: user.id,
-                username: user.username,
-                action: "status_change",
-                details: `Status changed from ${lastStatus} to ${newStatus}`
-            });
         }
+
+        logStalkerEvent({
+            timestamp: new Date().toISOString(),
+            userId: user.id,
+            username: user.username,
+            action: "status_change",
+            details: `Status changed from ${lastStatus} to ${newStatus}.`
+        });
     }
 
     lastStatuses = { ...newStatuses };

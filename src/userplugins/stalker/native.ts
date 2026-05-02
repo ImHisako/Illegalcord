@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { DATA_DIR } from "@main/utils/constants";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
-import { DATA_DIR } from "@main/utils/constants";
 
 const STALKER_DATA_DIR = path.join(DATA_DIR, "Stalking");
 

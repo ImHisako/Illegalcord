@@ -8,29 +8,31 @@ import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/Co
 import { definePluginSettings } from "@api/Settings";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
-import { ChannelStore, GuildStore, Menu, UserStore } from "@webpack/common";
-import { UserContextProps } from "plugins/biggerStreamPreview";
+import type { Message, User } from "@vencord/discord-types";
+import { ChannelStore, GuildStore, Menu } from "@webpack/common";
 
+import * as activity from "./activity";
 import * as status from "./status";
 import * as voice from "./voice";
 
-const Native = VencordNative.pluginHelpers.Stalker as PluginNative<typeof import("./index.native")>;
+export const logger = new Logger("Stalker");
+
+const Native = VencordNative.pluginHelpers.Stalker as PluginNative<typeof import("./native")>;
 
 if (!Native) {
-    console.warn("Stalker native module not available");
+    logger.warn("Stalker native module not available");
 }
 
 export interface StalkerLogEntry {
     timestamp: string;
     userId: string;
     username: string;
-    action: "status_change" | "voice_join" | "voice_leave" | "message_send";
+    action: "activity_start" | "activity_stop" | "activity_update" | "client_status_change" | "custom_status_change" | "message_send" | "status_change" | "voice_join" | "voice_leave" | "voice_update";
     details: string;
     channelName?: string;
     guildName?: string;
+    metadata?: Record<string, string | number | boolean | null>;
 }
-
-export const logger = new Logger("Stalker");
 
 // Cache separata per ogni utente: userId -> { logs, date }
 // La "date" serve a invalidare la cache quando cambia il giorno
@@ -171,6 +173,42 @@ export const settings = definePluginSettings({
         description: "Log when a user sends a message in any channel."
     },
 
+    logMessagePreview: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Include message previews in local message logs."
+    },
+
+    logActivities: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Log when a user starts, stops, or changes an activity."
+    },
+
+    notifyActivities: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        description: "Send a notification when a user starts an activity."
+    },
+
+    logCustomStatus: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Log custom status changes."
+    },
+
+    logClientStatus: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Log whether a user is online from desktop, mobile, or web."
+    },
+
+    logVoiceStateChanges: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Log voice state changes like mute, deaf, video, and streaming."
+    },
+
     targets: {
         type: OptionType.STRING,
         placeholder: "1234,5678",
@@ -180,10 +218,14 @@ export const settings = definePluginSettings({
     },
 });
 
+interface UserContextProps {
+    user?: User;
+}
+
 const patchUserContext: NavContextMenuPatchCallback = (children, { user }: UserContextProps) => {
     if (!settings.store.stalkContext || !user) return;
 
-    const stalked = settings.store.targets.includes(user.id);
+    const stalked = targets.includes(user.id);
     const group = findGroupChildrenByChildId("apps", children) ?? children;
     let id = group.findLastIndex(child => child?.props?.id && child.props.id === "ignore");
     if (id < 0) id = group.length - 1;
@@ -193,15 +235,17 @@ const patchUserContext: NavContextMenuPatchCallback = (children, { user }: UserC
             id="vc-st-stalk"
             label={stalked ? "Unstalk" : "Stalk"}
             action={() => {
+                const currentTargets = new Set(parseTargets(settings.store.targets));
+
                 if (stalked) {
-                    settings.store.targets = settings.store.targets.replace(new RegExp(`(,?)(\\s*)(${user.id})`), "");
+                    currentTargets.delete(user.id);
                     cachedLogsPerUser.delete(user.id);
                     writeLocks.delete(user.id);
                 } else {
-                    settings.store.targets += `,${user.id}`;
-                    if (settings.store.targets.startsWith(",")) settings.store.targets = settings.store.targets.slice(1);
+                    currentTargets.add(user.id);
                 }
 
+                settings.store.targets = [...currentTargets].join(",");
                 parseTargets(settings.store.targets);
             }}
         />
@@ -225,9 +269,11 @@ export default definePlugin({
         parseTargets(settings.store.targets);
         status.init();
         voice.init();
+        activity.init();
     },
 
     stop() {
+        activity.deinit();
         status.deinit();
         voice.deinit();
         cachedLogsPerUser.clear();
@@ -235,24 +281,32 @@ export default definePlugin({
     },
 
     flux: {
-        MESSAGE_CREATE({ message }: { message: any; }) {
+        MESSAGE_CREATE({ message }: { message: Message; }) {
             if (!settings.store.logMessages) return;
             if (!targets.includes(message.author.id)) return;
 
             const channel = ChannelStore.getChannel(message.channel_id);
-            const guild = channel.guild_id ? GuildStore.getGuild(channel.guild_id) : null;
-            const preview = message.content.length > 100
-                ? `${message.content.substring(0, 100)}...`
-                : message.content;
+            const guild = channel?.guild_id ? GuildStore.getGuild(channel.guild_id) : null;
+            const preview = settings.store.logMessagePreview
+                ? message.content.length > 100
+                    ? `${message.content.substring(0, 100)}...`
+                    : message.content
+                : null;
 
             logStalkerEvent({
                 timestamp: new Date().toISOString(),
                 userId: message.author.id,
                 username: message.author.username,
                 action: "message_send",
-                details: `Sent message: ${preview}`,
-                channelName: channel.name,
-                guildName: guild?.name
+                details: preview ? `Sent message: ${preview}` : "Sent a message.",
+                channelName: channel?.name,
+                guildName: guild?.name,
+                metadata: {
+                    channelId: message.channel_id,
+                    guildId: channel?.guild_id ?? null,
+                    messageId: message.id,
+                    hasContent: message.content.length > 0
+                }
             });
         },
     },

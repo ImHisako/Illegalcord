@@ -6,14 +6,14 @@
 
 import {
     getStalkerDataDir,
+    getUserStalkerDir,
     readStalkerLog,
     writeStalkerLog,
-    getUserStalkerDir
 } from "./native";
 
 export default {
     getStalkerDataDir,
+    getUserStalkerDir,
     readStalkerLog,
     writeStalkerLog,
-    getUserStalkerDir
 };
