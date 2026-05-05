@@ -37,6 +37,12 @@
     gap: 10px;
 }
 
+.vc-surveillance-target-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
 .vc-surveillance-stat,
 .vc-surveillance-panel,
 .vc-surveillance-event-row {
@@ -73,8 +79,13 @@
     margin-top: 10px;
 }
 
+.vc-surveillance-server-select {
+    margin-top: 10px;
+}
+
 .vc-surveillance-target-input > div,
-.vc-surveillance-timeline-head > div {
+.vc-surveillance-timeline-head > div,
+.vc-surveillance-server-select > div {
     flex: 1;
 }
 
@@ -146,7 +157,10 @@
 
 .vc-surveillance-event-message,
 .vc-surveillance-event-message_edit,
-.vc-surveillance-event-message_delete {
+.vc-surveillance-event-message_delete,
+.vc-surveillance-event-reaction_add,
+.vc-surveillance-event-reaction_remove,
+.vc-surveillance-event-reaction_remove_all {
     background: var(--green-360);
 }
 
@@ -166,6 +180,22 @@
 .vc-surveillance-event-activity_stop,
 .vc-surveillance-event-activity_update {
     background: var(--purple-400);
+}
+
+.vc-surveillance-event-channel_create,
+.vc-surveillance-event-channel_delete,
+.vc-surveillance-event-channel_update,
+.vc-surveillance-event-guild_member_add,
+.vc-surveillance-event-guild_member_remove,
+.vc-surveillance-event-guild_member_update,
+.vc-surveillance-event-guild_update,
+.vc-surveillance-event-role_create,
+.vc-surveillance-event-role_delete,
+.vc-surveillance-event-role_update,
+.vc-surveillance-event-thread_create,
+.vc-surveillance-event-thread_delete,
+.vc-surveillance-event-thread_update {
+    background: var(--red-400);
 }
 
 .vc-surveillance-event-main {
@@ -198,6 +228,7 @@
 
 @media (max-width: 720px) {
     .vc-surveillance-stats,
+    .vc-surveillance-target-grid,
     .vc-surveillance-event-row {
         grid-template-columns: 1fr;
     }

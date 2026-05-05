@@ -8,15 +8,33 @@ export type SurveillanceEventType =
     | "activity_start"
     | "activity_stop"
     | "activity_update"
+    | "channel_create"
+    | "channel_delete"
+    | "channel_update"
+    | "guild_member_add"
+    | "guild_member_remove"
+    | "guild_member_update"
+    | "guild_update"
     | "message"
     | "message_delete"
     | "message_edit"
+    | "reaction_add"
+    | "reaction_remove"
+    | "reaction_remove_all"
+    | "role_create"
+    | "role_delete"
+    | "role_update"
     | "status"
+    | "thread_create"
+    | "thread_delete"
+    | "thread_update"
     | "typing"
     | "voice_join"
     | "voice_leave"
     | "voice_move"
     | "voice_update";
+
+export type SurveillanceScope = "person" | "server";
 
 export interface SurveillanceEvent {
     id: string;
@@ -25,6 +43,7 @@ export interface SurveillanceEvent {
     userId: string;
     username: string;
     details: string;
+    scope?: SurveillanceScope;
     channelId?: string;
     channelName?: string;
     guildId?: string;
