@@ -395,8 +395,6 @@ class KeyManager {
     }
 }
 
-const keyManager = new KeyManager();
-
 export const KEYSERVERS = {
     OPENPGP: "https://keys.openpgp.org",
     UBUNTU: "https://keyserver.ubuntu.com",
@@ -692,6 +690,8 @@ const settings = definePluginSettings({
         default: "🔒",
     },
 });
+
+const keyManager = new KeyManager();
 
 export default definePlugin({
     name: "IGP",
