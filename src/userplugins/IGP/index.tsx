@@ -737,6 +737,7 @@ export default definePlugin({
                 { name: "verify", description: "Verify a signed message.", type: ApplicationCommandOptionType.SUB_COMMAND, options: [
                     { name: "message", description: "Signed message to verify.", type: ApplicationCommandOptionType.STRING, required: true }
                 ] },
+                { name: "howtouse", description: "Show how to use IGP.", type: ApplicationCommandOptionType.SUB_COMMAND },
                 { name: "sharekey", description: "Share your public key.", type: ApplicationCommandOptionType.SUB_COMMAND },
                 { name: "fingerprint", description: "Show your key fingerprint.", type: ApplicationCommandOptionType.SUB_COMMAND },
                 { name: "generate", description: "Generate a new PGP key pair.", type: ApplicationCommandOptionType.SUB_COMMAND, options: [
@@ -772,6 +773,31 @@ export default definePlugin({
                     await ensureOpenPGP();
 
                     switch (sub.name) {
+                        case "howtouse": {
+                            reply([
+                                "**IGP PGP complete guide**",
+                                "",
+                                "1. Create your key pair with `/pgp generate`. Use ECC unless you specifically need RSA. Your private key stays in the plugin settings, while your public key is what other people need to message you.",
+                                "",
+                                "2. Share your public key with `/pgp sharekey`. This command and `/pgp encrypt` are sent to the real chat because other people need to see the key or encrypted message.",
+                                "",
+                                "3. When someone shares their public key, import it with `/pgp import user:@user key:key`. After that, you can encrypt messages for that person.",
+                                "",
+                                "4. Message someone with `/pgp encrypt user:@user message:text`. Everyone can see the PGP block in the channel, but only the owner of the matching private key can read the content.",
+                                "",
+                                "5. To read a message, copy the full block from `-----BEGIN PGP MESSAGE-----` to `-----END PGP MESSAGE-----` and run `/pgp decrypt message:block`. If Discord also copies the lock icon, leave it there. IGP strips it automatically.",
+                                "",
+                                "6. Use `/pgp fingerprint` to show your key fingerprint and compare it outside Discord. If it matches, you know the imported key is the right one.",
+                                "",
+                                "7. `/pgp sign` signs text with your private key. `/pgp verify` checks a signature using your public key and the imported contact keys.",
+                                "",
+                                "8. `/pgp search` tries to find public keys on keyservers. Only import keys you have verified because anyone can publish a key with a similar name.",
+                                "",
+                                "Note: `decrypt`, `import`, `generate`, `fingerprint`, `sign`, `verify`, `search`, and `howtouse` are local Clyde replies. Other people do not see them."
+                            ].join("\n"));
+                            return;
+                        }
+
                         case "encrypt": {
                             const userOpt = getOpt("user");
                             const messageOpt = getOpt("message");
