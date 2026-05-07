@@ -185,6 +185,9 @@ let openpgp: OpenPGP | null = null;
 let openpgpLoaded = false;
 let openpgpLoadPromise: Promise<void> | null = null;
 const logger = new Logger("VGP");
+const PGP_MESSAGE_BEGIN = "-----BEGIN PGP MESSAGE-----";
+const PGP_MESSAGE_END = "-----END PGP MESSAGE-----";
+const PGP_MESSAGE_REGEX = /-----BEGIN PGP MESSAGE-----[\s\S]+?-----END PGP MESSAGE-----/;
 
 async function loadOpenPGP(): Promise<void> {
     if (openpgpLoaded) return;
@@ -208,6 +211,28 @@ function requireOpenPGP(): OpenPGP {
 
 function formatError(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+}
+
+function normalizePgpMessage(message: string): string {
+    const trimmed = message.trim();
+    if (trimmed.includes("\n")) return trimmed;
+
+    const start = trimmed.indexOf(PGP_MESSAGE_BEGIN);
+    const end = trimmed.indexOf(PGP_MESSAGE_END);
+    if (start === -1 || end === -1) return trimmed;
+
+    const compactBody = trimmed
+        .slice(start + PGP_MESSAGE_BEGIN.length, end)
+        .replace(/\s+/g, "");
+    const checksum = compactBody.match(/=[A-Za-z0-9+/]{4}$/)?.[0] ?? "";
+    const payload = checksum ? compactBody.slice(0, -checksum.length) : compactBody;
+    const body = payload.match(/.{1,64}/g)?.join("\n") ?? payload;
+
+    return `${PGP_MESSAGE_BEGIN}\n\n${body}${checksum ? `\n${checksum}` : ""}\n${PGP_MESSAGE_END}`;
+}
+
+function extractPgpMessage(message: string): string {
+    return normalizePgpMessage(message.match(PGP_MESSAGE_REGEX)?.[0] ?? message);
 }
 
 async function ensureOpenPGP() {
@@ -399,14 +424,15 @@ async function searchKeyserver(query: string, keyserver: KeyserverName = "OPENPG
 async function decryptMessage(message: string, authorId: string): Promise<{ data: string; verified: boolean; }> {
     await ensureOpenPGP();
     const pgp = requireOpenPGP();
+    const armoredMessage = extractPgpMessage(message);
 
     // Check if the message is a signed message that contains an encrypted message inside
-    if (message.includes("-----BEGIN PGP SIGNED MESSAGE-----")) {
+    if (armoredMessage.includes("-----BEGIN PGP SIGNED MESSAGE-----")) {
         // This is a signed message, not an encrypted one
         // We need to extract the content and handle it appropriately
         try {
             // Parse the signed message to extract the content
-            const signedMsg = await pgp.readCleartextMessage({ cleartextMessage: message });
+            const signedMsg = await pgp.readCleartextMessage({ cleartextMessage: armoredMessage });
             const content = signedMsg.getText();
 
             // Check if the content itself contains an encrypted message
@@ -421,7 +447,7 @@ async function decryptMessage(message: string, authorId: string): Promise<{ data
 
             // If we get here, it's a signed message without an encrypted part inside
             // So we should verify it instead of trying to decrypt it
-            const verificationResult = await verifyMessage(message);
+            const verificationResult = await verifyMessage(armoredMessage);
             return { data: verificationResult.text, verified: verificationResult.valid };
         } catch (e) {
             showToast("Cannot process signed message: " + formatError(e), Toasts.Type.FAILURE);
@@ -479,7 +505,7 @@ async function decryptMessage(message: string, authorId: string): Promise<{ data
     let decrypted;
     try {
         decrypted = await pgp.decrypt({
-            message: await pgp.readMessage({ armoredMessage: message }),
+            message: await pgp.readMessage({ armoredMessage }),
             decryptionKeys: [private_key],
             // Set to false to see the message anyways, but will show the key not verified warning
             expectSigned: false,
@@ -676,7 +702,7 @@ export default definePlugin({
     renderChatBarButton: ChatBarIcon,
     decryptMessageIcon: () => <DecryptMessageIcon />,
 
-    GPG_REGEX: /-----BEGIN PGP MESSAGE-----[\s\S]+?-----END PGP MESSAGE-----/,
+    GPG_REGEX: PGP_MESSAGE_REGEX,
     renderMessagePopoverButton(message) {
         return this.GPG_REGEX.test(message?.content) ?
             {
@@ -763,7 +789,7 @@ export default definePlugin({
                             }
 
                             const encrypted = await encrypt(messageOpt, publicKey);
-                            reply(`${settings.store.encryptionIndicator}\n${encrypted}`);
+                            await sendMessage(ctx.channel.id, { content: `${settings.store.encryptionIndicator}\n${encrypted}` });
                             return;
                         }
 
