@@ -4,15 +4,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-
-import { definePluginSettings } from "@api/Settings";
-import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
-import { registerCommand } from "@api/Commands";
-import { addMessagePreSendListener, removeMessagePreSendListener, MessageSendListener } from "@api/MessageEvents";
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
-import { Devs } from "@utils/constants";
+import { ApplicationCommandInputType, ApplicationCommandOptionType, sendBotMessage } from "@api/Commands";
+import { addMessagePreSendListener, MessageSendListener, removeMessagePreSendListener } from "@api/MessageEvents";
+import { definePluginSettings } from "@api/Settings";
+import { Logger } from "@utils/Logger";
 import definePlugin, { IconComponent, OptionType } from "@utils/types";
-import { Message } from "@vencord/discord-types";
+import { CommandContext, Message } from "@vencord/discord-types";
 
 interface IMessageCreate {
     type: "MESSAGE_CREATE";
@@ -22,13 +20,22 @@ interface IMessageCreate {
     message: Message;
 }
 
+interface DecryptCommandContext extends CommandContext {
+    message?: {
+        referencedMessage?: Message;
+    };
+}
+
+const logger = new Logger("SecurecordOpossum");
+const ENCRYPTED_PREFIX = "🔒ENCRYPTED:";
+const ENCRYPTED_SUFFIX = ":ENDLOCK";
+
 // BlazingOpossum Cipher - High-Performance, Post-Quantum Resilient Symmetric Cipher
 class BlazingOpossumCipher {
-    private static readonly BLOCK_SIZE = 16;      // 128-bit blocks
-    private static readonly KEY_SIZE = 32;        // 256-bit key
-    private static readonly IV_SIZE = 16;         // 128-bit IV
-    private static readonly TAG_SIZE = 16;        // 128-bit Poly-hash Tag
-    private static readonly ROUNDS = 20;          // Increased rounds for Quantum resistance
+    private static readonly BLOCK_SIZE = 16; // 128-bit blocks
+    private static readonly IV_SIZE = 16; // 128-bit IV
+    private static readonly TAG_SIZE = 16; // 128-bit Poly-hash Tag
+    private static readonly ROUNDS = 20; // Increased rounds for Quantum resistance
 
     private roundKeys: Uint8Array[];
 
@@ -185,8 +192,8 @@ class BlazingOpossumCipher {
 
     private processCTR(inputData: Uint8Array, iv: Uint8Array): Uint8Array {
         const outputData = new Uint8Array(inputData.length);
-        let ivLow = this.readUint32LE(iv, 0);
-        let ivHigh = this.readUint32LE(iv, 4);
+        const ivLow = this.readUint32LE(iv, 0);
+        const ivHigh = this.readUint32LE(iv, 4);
         let counter = 0;
 
         let processedBytes = 0;
@@ -207,12 +214,9 @@ class BlazingOpossumCipher {
         return outputData;
     }
 
-    public encrypt(plaintext: string, password: string): string {
+    public encrypt(plaintext: string): string {
         const encoder = new TextEncoder();
         const data = encoder.encode(plaintext);
-
-        // Derive key from password using PBKDF2 or simple hash
-        const keyMaterial = this.deriveKey(password);
 
         // Generate random IV
         const iv = crypto.getRandomValues(new Uint8Array(BlazingOpossumCipher.IV_SIZE));
@@ -229,12 +233,12 @@ class BlazingOpossumCipher {
         result.set(processed, BlazingOpossumCipher.IV_SIZE);
         result.set(tag, BlazingOpossumCipher.IV_SIZE + processed.length);
 
-        return btoa(String.fromCharCode(...result));
+        return bytesToBase64(result);
     }
 
-    public decrypt(encrypted: string, password: string): string {
+    public decrypt(encrypted: string): string {
         try {
-            const data = new Uint8Array(atob(encrypted).split('').map(c => c.charCodeAt(0)));
+            const data = base64ToBytes(encrypted);
 
             if (data.length < BlazingOpossumCipher.IV_SIZE + BlazingOpossumCipher.TAG_SIZE) {
                 throw new Error("Data too short");
@@ -248,15 +252,12 @@ class BlazingOpossumCipher {
             const computedTag = this.computeTag(encryptedData, iv);
 
             // Verify tag (constant-time comparison)
-            let tagValid = true;
+            let tagDiff = 0;
             for (let i = 0; i < BlazingOpossumCipher.TAG_SIZE; i++) {
-                if (receivedTag[i] !== computedTag[i]) {
-                    tagValid = false;
-                    break;
-                }
+                tagDiff |= receivedTag[i] ^ computedTag[i];
             }
 
-            if (!tagValid) {
+            if (tagDiff !== 0) {
                 throw new Error("Integrity check failed");
             }
 
@@ -265,38 +266,74 @@ class BlazingOpossumCipher {
 
             const decoder = new TextDecoder();
             return decoder.decode(processed);
-        } catch (error) {
-            console.error("Decryption error:", error);
+        } catch {
             throw new Error("Decryption failed");
         }
-    }
-
-    private deriveKey(password: string): Uint8Array {
-        // Simple key derivation (in a real implementation, use PBKDF2 or similar)
-        const encoder = new TextEncoder();
-        const data = encoder.encode(password);
-        const key = new Uint8Array(BlazingOpossumCipher.KEY_SIZE);
-
-        // Use a simple hash-like approach
-        for (let i = 0; i < key.length; i++) {
-            key[i] = data[i % data.length] ^ (i % 256);
-        }
-
-        return key;
     }
 }
 
 // Global cipher instance
 let cipher: BlazingOpossumCipher | null = null;
+let cipherPassword = "";
+let messageSendListener: MessageSendListener | null = null;
+
+function bytesToBase64(bytes: Uint8Array): string {
+    let binary = "";
+    for (const byte of bytes) {
+        binary += String.fromCharCode(byte);
+    }
+    return btoa(binary);
+}
+
+function base64ToBytes(value: string): Uint8Array {
+    return new Uint8Array(atob(value).split("").map(char => char.charCodeAt(0)));
+}
+
+function deriveKey(password: string): Uint8Array {
+    const passwordBytes = new TextEncoder().encode(password);
+    if (!passwordBytes.length) {
+        throw new Error("No encryption password set.");
+    }
+
+    const key = new Uint8Array(32);
+    for (let i = 0; i < key.length; i++) {
+        key[i] = passwordBytes[i % passwordBytes.length] ^ (i % 256);
+    }
+    return key;
+}
+
+function getCipher(password: string): BlazingOpossumCipher {
+    if (!cipher || cipherPassword !== password) {
+        cipher = new BlazingOpossumCipher(deriveKey(password));
+        cipherPassword = password;
+    }
+
+    return cipher;
+}
+
+function resetCipher() {
+    cipher = null;
+    cipherPassword = "";
+}
+
+function isEncryptedMessage(content: string) {
+    return content.startsWith(ENCRYPTED_PREFIX) && content.endsWith(ENCRYPTED_SUFFIX);
+}
+
+function getEncryptedPart(content: string) {
+    return content.slice(ENCRYPTED_PREFIX.length, -ENCRYPTED_SUFFIX.length);
+}
+
+function logInfo(...args: unknown[]) {
+    if (settings.store.enableLogging) logger.info(...args);
+}
+
+function logError(...args: unknown[]) {
+    if (settings.store.enableLogging) logger.error(...args);
+}
 
 // SVG icons for the button
-type IconProps = {
-    height?: number;
-    width?: number;
-    className?: string;
-};
-
-const EncryptionEnabledIcon: IconComponent = ({ height = 20, width = 20, className }: IconProps) => {
+const EncryptionEnabledIcon: IconComponent = ({ height = 20, width = 20, className }) => {
     return (
         <svg
             width={width}
@@ -309,7 +346,7 @@ const EncryptionEnabledIcon: IconComponent = ({ height = 20, width = 20, classNa
     );
 };
 
-const EncryptionDisabledIcon: IconComponent = ({ height = 20, width = 20, className }: IconProps) => {
+const EncryptionDisabledIcon: IconComponent = ({ height = 20, width = 20, className }) => {
     return (
         <svg
             width={width}
@@ -324,7 +361,7 @@ const EncryptionDisabledIcon: IconComponent = ({ height = 20, width = 20, classN
 
 // Chatbar button
 const EncryptionToggleButton: ChatBarButtonFactory = ({ channel, type }) => {
-    const { pluginActivated, encryptionEnabled } = settings.use(["pluginActivated", "encryptionEnabled"]);
+    const { pluginActivated, encryptionEnabled } = settings.use();
 
     const validChat = ["normal", "sidebar"].some(x => type.analyticsName === x);
 
@@ -339,7 +376,7 @@ const EncryptionToggleButton: ChatBarButtonFactory = ({ channel, type }) => {
                     settings.store.pluginActivated = true;
                     // Show confirmation
                     sendBotMessage(
-                        channel?.id ?? "",
+                        channel.id,
                         {
                             content: "🔐 Securecord Opossum plugin activated! Click again to toggle encryption."
                         }
@@ -360,7 +397,7 @@ const EncryptionToggleButton: ChatBarButtonFactory = ({ channel, type }) => {
 
                 // Show confirmation
                 sendBotMessage(
-                    channel?.id ?? "",
+                    channel.id,
                     {
                         content: `🔐 Encryption ${newValue ? "enabled" : "disabled"}!`
                     }
@@ -393,7 +430,7 @@ const settings = definePluginSettings({
     enableLogging: {
         type: OptionType.BOOLEAN,
         description: "Enable/disable console logs (for debugging)",
-        default: true
+        default: false
     }
 });
 
@@ -404,138 +441,89 @@ export default definePlugin({
     authors: [{ name: "irritably", id: 928787166916640838n }],
     settings,
     chatBarButton: {
+        icon: EncryptionEnabledIcon,
         render: EncryptionToggleButton
     },
 
     start() {
         // Add listener to encrypt messages before sending
-        const listener: MessageSendListener = async (_, message) => {
-            if (settings.store.pluginActivated && settings.store.encryptionEnabled && settings.store.encryptionPassword) {
-                // Initialize cipher if needed
-                if (!cipher) {
-                    const encoder = new TextEncoder();
-                    const passwordBytes = encoder.encode(settings.store.encryptionPassword);
-                    const key = new Uint8Array(32);
+        messageSendListener = async (channelId, message) => {
+            if (!settings.store.pluginActivated || !settings.store.encryptionEnabled) return;
+            if (!message.content || isEncryptedMessage(message.content)) return;
 
-                    // Derive key from password
-                    for (let i = 0; i < key.length; i++) {
-                        key[i] = passwordBytes[i % passwordBytes.length] ^ (i % 256);
-                    }
+            const password = settings.store.encryptionPassword;
+            if (!password) {
+                sendBotMessage(channelId, {
+                    content: "❌ No encryption password set in plugin settings."
+                });
+                return { cancel: true };
+            }
 
-                    cipher = new BlazingOpossumCipher(key);
-                }
-
-                // Encrypt message only if not already encrypted
-                if (!message.content.startsWith("🔒ENCRYPTED:") && !message.content.endsWith(":ENDLOCK")) {
-                    try {
-                        const encryptedMessage = cipher.encrypt(message.content, settings.store.encryptionPassword);
-                        // Replace message content with encrypted version
-                        message.content = `🔒ENCRYPTED:${encryptedMessage}:ENDLOCK`;
-
-                        if (settings.store.enableLogging) {
-                            console.log("Securecord BlazingOpossum: Message encrypted");
-                        }
-                    } catch (error) {
-                        console.error("Message encryption error:", error);
-                    }
-                }
+            try {
+                const encryptedMessage = getCipher(password).encrypt(message.content);
+                message.content = `${ENCRYPTED_PREFIX}${encryptedMessage}${ENCRYPTED_SUFFIX}`;
+                logInfo("Message encrypted.");
+            } catch (error) {
+                logError("Message encryption error:", error);
+                sendBotMessage(channelId, {
+                    content: "❌ Message encryption failed. The plaintext message was not sent."
+                });
+                return { cancel: true };
             }
         };
 
-        addMessagePreSendListener(listener);
-        // Save listener to remove it later
-        (this as any)._listener = listener;
-
-        console.log("Securecord BlazingOpossum: Plugin loaded successfully");
+        addMessagePreSendListener(messageSendListener);
+        logInfo("Plugin loaded successfully.");
     },
 
     stop() {
         // Remove listener when plugin is stopped
-        if ((this as any)._listener) {
-            removeMessagePreSendListener((this as any)._listener);
+        if (messageSendListener) {
+            removeMessagePreSendListener(messageSendListener);
+            messageSendListener = null;
         }
 
         // Clean up cipher
-        cipher = null;
-
-        console.log("Securecord BlazingOpossum: Plugin stopped");
+        resetCipher();
+        logInfo("Plugin stopped.");
     },
 
     flux: {
         async MESSAGE_CREATE({ optimistic, type, message, channelId }: IMessageCreate) {
             if (optimistic || type !== "MESSAGE_CREATE") return;
             if (message.state === "SENDING") return;
-            if (!message.content) return;
+            if (!message.content || !isEncryptedMessage(message.content)) return;
 
-            // Check if message is encrypted
-            if (message.content.startsWith("🔒ENCRYPTED:") && message.content.endsWith(":ENDLOCK")) {
-                if (settings.store.enableLogging) {
-                    console.log("Securecord BlazingOpossum: Received encrypted message from", message.author.username);
-                }
+            logInfo("Received encrypted message from", message.author.username);
 
-                // Initialize cipher if needed
-                if (!cipher) {
-                    const encoder = new TextEncoder();
-                    const passwordBytes = encoder.encode(settings.store.encryptionPassword);
-                    const key = new Uint8Array(32);
+            // Get password from settings
+            const password = settings.store.encryptionPassword;
 
-                    // Derive key from password
-                    for (let i = 0; i < key.length; i++) {
-                        key[i] = passwordBytes[i % passwordBytes.length] ^ (i % 256);
-                    }
-
-                    cipher = new BlazingOpossumCipher(key);
-                }
-
-                // Get password from settings
-                const password = settings.store.encryptionPassword;
-
-                if (!password) {
-                    if (settings.store.enableLogging) {
-                        console.log("Securecord BlazingOpossum: No password set");
-                    }
-                    return;
-                }
-
-                try {
-                    // Extract encrypted message (removing extra characters)
-                    const encryptedPart = message.content.substring(12, message.content.length - 8);
-
-                    if (settings.store.enableLogging) {
-                        console.log("Securecord BlazingOpossum: Extracted encrypted part:", encryptedPart);
-                        console.log("Securecord BlazingOpossum: Encrypted part length:", encryptedPart.length);
-                        console.log("Securecord BlazingOpossum: Password used:", password);
-                    }
-
-                    // Decode message using BlazingOpossum cipher
-                    const decryptedMessage = cipher.decrypt(encryptedPart, password);
-
-                    if (settings.store.enableLogging) {
-                        console.log("Securecord BlazingOpossum: Successfully decrypted message", decryptedMessage);
-                    }
-
-                    // Show decrypted message as bot message (Clyde)
-                    sendBotMessage(channelId, {
-                        content: `🔐 **Decrypted message from ${message.author.username}**: ${decryptedMessage}`
-                    });
-
-                    if (settings.store.enableLogging) {
-                        console.log("Securecord BlazingOpossum: Sent bot message with decrypted content");
-                    }
-                } catch (error) {
-                    console.error("Decryption error:", error);
-
-                    // Show error message
-                    sendBotMessage(channelId, {
-                        content: `🔒 Decryption error for message from ${message.author.username}. Details: ${(error as Error).message}`
-                    });
-                }
-
-                // Prevent display of original encrypted message
+            if (!password) {
+                logInfo("No password set.");
                 return;
-            } else {
-                // Don't log non-encrypted messages
-                return;
+            }
+
+            try {
+                // Extract encrypted message (removing extra characters)
+                const encryptedPart = getEncryptedPart(message.content);
+
+                // Decode message using BlazingOpossum cipher
+                const decryptedMessage = getCipher(password).decrypt(encryptedPart);
+
+                // Show decrypted message as bot message (Clyde)
+                sendBotMessage(channelId, {
+                    content: `🔐 **Decrypted message from ${message.author.username}**: ${decryptedMessage}`
+                });
+
+                logInfo("Sent bot message with decrypted content.");
+            } catch (error) {
+                logError("Decryption error:", error);
+
+                // Show error message
+                sendBotMessage(channelId, {
+                    content: `🔒 Decryption error for message from ${message.author.username}. Details: ${(error as Error).message}`
+                });
             }
         },
     },
@@ -550,12 +538,13 @@ export default definePlugin({
                 {
                     name: "encrypted-text",
                     description: "Paste the encrypted text (optional if replying to a message)",
-                    type: 3, // OptionType.STRING
+                    type: ApplicationCommandOptionType.STRING,
                     required: false
                 }
             ],
-            execute: async (args: any[], ctx: any) => {
-                const replyMessage = ctx.message?.referencedMessage;
+            execute: async (args, ctx) => {
+                const commandContext = ctx as DecryptCommandContext;
+                const replyMessage = commandContext.message?.referencedMessage;
                 const encryptedTextArg = args[0]?.value;
 
                 let messageContent: string | undefined;
@@ -574,25 +563,11 @@ export default definePlugin({
                 }
 
                 // Check if the message is encrypted
-                if (!messageContent?.startsWith("🔒ENCRYPTED:") || !messageContent?.endsWith(":ENDLOCK")) {
+                if (!isEncryptedMessage(messageContent)) {
                     sendBotMessage(ctx.channel.id, {
                         content: "❌ The message is not encrypted! Make sure it starts with 🔒ENCRYPTED: and ends with :ENDLOCK"
                     });
                     return;
-                }
-
-                // Initialize cipher if needed
-                if (!cipher) {
-                    const encoder = new TextEncoder();
-                    const passwordBytes = encoder.encode(settings.store.encryptionPassword);
-                    const key = new Uint8Array(32);
-
-                    // Derive key from password
-                    for (let i = 0; i < key.length; i++) {
-                        key[i] = passwordBytes[i % passwordBytes.length] ^ (i % 256);
-                    }
-
-                    cipher = new BlazingOpossumCipher(key);
                 }
 
                 // Get password from settings
@@ -607,19 +582,19 @@ export default definePlugin({
 
                 try {
                     // Extract encrypted message (removing extra characters)
-                    const encryptedPart = messageContent.substring(12, messageContent.length - 8);
+                    const encryptedPart = getEncryptedPart(messageContent);
 
                     // Decode message using BlazingOpossum cipher
-                    const decryptedMessage = cipher.decrypt(encryptedPart, password);
+                    const decryptedMessage = getCipher(password).decrypt(encryptedPart);
 
                     const authorName = replyMessage?.author?.username || "Unknown";
 
                     // Send as Clyde bot message
                     sendBotMessage(ctx.channel.id, {
-                        content: `🔐 **Decrypted message${replyMessage ? ` from ${authorName}` : ''}**: ${decryptedMessage}`
+                        content: `🔐 **Decrypted message${replyMessage ? ` from ${authorName}` : ""}**: ${decryptedMessage}`
                     });
                 } catch (error) {
-                    console.error("Decryption error:", error);
+                    logError("Decryption error:", error);
                     sendBotMessage(ctx.channel.id, {
                         content: `🔒 Decryption error: ${(error as Error).message}. Make sure you're using the correct password!`
                     });
