@@ -24,7 +24,10 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 <summary>Click to see the plugins added to Illegalcord</summary>
 
 - **Surveillance**: Illegalcord's new top-rated plugin that lets you perform OSINT and conduct MASS SURVEILLANCE on people and Discord servers.
-
+- **Kamidere Mutual Scanner**
+- **kamidere PresenceLab**
+- **Kamidere SendTrail**
+- **WebCord Hardened**
 - **Nitro Sniper**: | (https://github.com/neoarz/NitroSniper/tree/main)
 - **FakeMuteAndDeafen**
 - **BetterMic**
