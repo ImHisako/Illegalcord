@@ -184,7 +184,7 @@ type OpenPGP = {
 let openpgp: OpenPGP | null = null;
 let openpgpLoaded = false;
 let openpgpLoadPromise: Promise<void> | null = null;
-const logger = new Logger("VGP");
+const logger = new Logger("IGP");
 const PGP_MESSAGE_BEGIN = "-----BEGIN PGP MESSAGE-----";
 const PGP_MESSAGE_END = "-----END PGP MESSAGE-----";
 const PGP_MESSAGE_REGEX = /-----BEGIN PGP MESSAGE-----[\s\S]+?-----END PGP MESSAGE-----/;
@@ -332,20 +332,23 @@ interface StoredKey {
 
 class KeyManager {
     private keyCache: Map<string, StoredKey> = new Map();
+    private loaded = false;
 
-    constructor() {
-        this.loadKeys();
-    }
-
-    private loadKeys(): void {
+    loadKeys(): void {
         try {
             const stored = JSON.parse(settings.store.knownPublicKeys || "{}");
             this.keyCache = new Map(Object.entries(stored));
+            this.loaded = true;
             logger.info(`Loaded ${this.keyCache.size} known public keys`);
         } catch (err) {
             logger.error("Failed to load keys:", err);
             this.keyCache = new Map();
+            this.loaded = true;
         }
+    }
+
+    private ensureLoaded(): void {
+        if (!this.loaded) this.loadKeys();
     }
 
     private saveKeys(): void {
@@ -354,6 +357,7 @@ class KeyManager {
     }
 
     async importPublicKeyForUser(userId: string, armoredKey: string): Promise<StoredKey> {
+        this.ensureLoaded();
         await ensureOpenPGP();
         const pgp = requireOpenPGP();
         // Preprocess the key to handle single-line format
@@ -373,20 +377,24 @@ class KeyManager {
     }
 
     getPublicKeyForUser(userId: string): string | null {
+        this.ensureLoaded();
         return this.keyCache.get(userId)?.publicKey || null;
     }
 
     getAllKeysWithUsers(): Array<{ userId: string; key: StoredKey }> {
+        this.ensureLoaded();
         return Array.from(this.keyCache.entries()).map(([userId, key]) => ({ userId, key }));
     }
 
     removeKeyForUser(userId: string): boolean {
+        this.ensureLoaded();
         const had = this.keyCache.delete(userId);
         if (had) this.saveKeys();
         return had;
     }
 
     verifyKey(userId: string): boolean {
+        this.ensureLoaded();
         const stored = this.keyCache.get(userId);
         if (!stored) return false;
         stored.verified = true;
@@ -698,6 +706,10 @@ export default definePlugin({
     description: "Illegalcord PGP encryption.",
     authors: [{ name: "irritably", id: 928787166916640838n }],
     settings,
+
+    start() {
+        keyManager.loadKeys();
+    },
 
     renderChatBarButton: ChatBarIcon,
     decryptMessageIcon: () => <DecryptMessageIcon />,
