@@ -56,7 +56,6 @@ I plugin inclusi possono essere trovati [qui](https://equicord.org/plugins).
 - **GateawayLogger**
 - **InviteDefaults**
 - **OsintToolKit**
-- **VencordPerf**
 - **Ottimizzazioni di Hisako** (Attualmente instabile)
 - **BoosterCount** (https://github.com/Reathe/BoosterCount/tree/main)
 - **BadgeSelector** | (https://github.com/002-sans/VencordPlugins/tree/b8c7c98a50c0700f7389b0484e5659fe5ec0f99e/BadgesSelector)
