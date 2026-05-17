@@ -5,6 +5,7 @@
  */
 
 import { DATA_DIR } from "@main/utils/constants";
+import { shell } from "electron";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 
@@ -47,4 +48,9 @@ export async function readStalkerLog(_event: Electron.IpcMainInvokeEvent, userId
 
 export async function getStalkerDataDir(_event: Electron.IpcMainInvokeEvent): Promise<string> {
     return STALKER_DATA_DIR;
+}
+
+export async function openStalkerDataDir(_event: Electron.IpcMainInvokeEvent): Promise<string> {
+    await mkdir(STALKER_DATA_DIR, { recursive: true });
+    return shell.openPath(STALKER_DATA_DIR);
 }
