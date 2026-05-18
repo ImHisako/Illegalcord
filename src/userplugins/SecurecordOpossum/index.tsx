@@ -29,6 +29,15 @@ interface DecryptCommandContext extends CommandContext {
 const logger = new Logger("SecurecordOpossum");
 const ENCRYPTED_PREFIX = "🔒ENCRYPTED:";
 const ENCRYPTED_SUFFIX = ":ENDLOCK";
+const SECURITY_CONSTANTS = {
+    DEFAULT_MIN_PASSWORD_LENGTH: 12,
+    MAX_PASSWORD_LENGTH: 128,
+    MAX_DISCORD_MESSAGE_LENGTH: 2000,
+    DEFAULT_MAX_PLAINTEXT_BYTES: 1400,
+    MILLISECONDS_PER_MINUTE: 60000
+};
+const encoder = new TextEncoder();
+const specialCharacterPattern = /[^A-Za-z0-9]/;
 
 // BlazingOpossum Cipher - High-Performance, Post-Quantum Resilient Symmetric Cipher
 class BlazingOpossumCipher {
@@ -275,7 +284,12 @@ class BlazingOpossumCipher {
 // Global cipher instance
 let cipher: BlazingOpossumCipher | null = null;
 let cipherPassword = "";
+let failedAttempts = 0;
+let lockoutEndTime = 0;
+let lastDecryptionAttempt = 0;
 let messageSendListener: MessageSendListener | null = null;
+let autoLockTimer: ReturnType<typeof setTimeout> | null = null;
+let lastActivityChannelId: string | null = null;
 
 function bytesToBase64(bytes: Uint8Array): string {
     let binary = "";
@@ -290,7 +304,7 @@ function base64ToBytes(value: string): Uint8Array {
 }
 
 function deriveKey(password: string): Uint8Array {
-    const passwordBytes = new TextEncoder().encode(password);
+    const passwordBytes = encoder.encode(password);
     if (!passwordBytes.length) {
         throw new Error("No encryption password set.");
     }
@@ -316,6 +330,84 @@ function resetCipher() {
     cipherPassword = "";
 }
 
+function validatePassword(password: string): string[] {
+    const errors: string[] = [];
+
+    if (!password) {
+        errors.push("Password is required");
+        return errors;
+    }
+
+    const minLength = settings.store.strictPasswordPolicy
+        ? settings.store.minPasswordLength
+        : 1;
+
+    if (password.length < minLength) {
+        errors.push(`Password must be at least ${minLength} characters long`);
+    }
+
+    if (password.length > SECURITY_CONSTANTS.MAX_PASSWORD_LENGTH) {
+        errors.push(`Password must be no more than ${SECURITY_CONSTANTS.MAX_PASSWORD_LENGTH} characters long`);
+    }
+
+    if (!settings.store.strictPasswordPolicy) {
+        return errors;
+    }
+
+    if (!/[A-Z]/.test(password)) {
+        errors.push("Password must contain at least one uppercase letter");
+    }
+
+    if (!/[a-z]/.test(password)) {
+        errors.push("Password must contain at least one lowercase letter");
+    }
+
+    if (!/\d/.test(password)) {
+        errors.push("Password must contain at least one number");
+    }
+
+    if (!specialCharacterPattern.test(password)) {
+        errors.push("Password must contain at least one special character");
+    }
+
+    return errors;
+}
+
+function isRateLimited(): boolean {
+    if (!settings.store.maxFailedAttempts || !settings.store.lockoutMinutes) return false;
+
+    const now = Date.now();
+    const lockoutDuration = settings.store.lockoutMinutes * SECURITY_CONSTANTS.MILLISECONDS_PER_MINUTE;
+
+    if (lockoutEndTime > now) {
+        return true;
+    }
+
+    if (now - lastDecryptionAttempt > lockoutDuration) {
+        failedAttempts = 0;
+        lockoutEndTime = 0;
+    }
+
+    return false;
+}
+
+function recordFailedAttempt(): void {
+    if (!settings.store.maxFailedAttempts || !settings.store.lockoutMinutes) return;
+
+    failedAttempts++;
+    lastDecryptionAttempt = Date.now();
+
+    if (failedAttempts >= settings.store.maxFailedAttempts) {
+        lockoutEndTime = Date.now() + settings.store.lockoutMinutes * SECURITY_CONSTANTS.MILLISECONDS_PER_MINUTE;
+    }
+}
+
+function resetSecurityState(): void {
+    failedAttempts = 0;
+    lockoutEndTime = 0;
+    lastDecryptionAttempt = 0;
+}
+
 function isEncryptedMessage(content: string) {
     return content.startsWith(ENCRYPTED_PREFIX) && content.endsWith(ENCRYPTED_SUFFIX);
 }
@@ -330,6 +422,71 @@ function logInfo(...args: unknown[]) {
 
 function logError(...args: unknown[]) {
     if (settings.store.enableLogging) logger.error(...args);
+}
+
+function getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+function encryptOpossum(text: string, password: string): string {
+    const data = encoder.encode(text);
+    const validationErrors = validatePassword(password);
+
+    if (validationErrors.length) {
+        throw new Error(`Password validation failed: ${validationErrors.join(", ")}`);
+    }
+
+    if (settings.store.maxPlaintextBytes > 0 && data.length > settings.store.maxPlaintextBytes) {
+        throw new Error(`Message is too long to encrypt. Limit is ${settings.store.maxPlaintextBytes} bytes.`);
+    }
+
+    const encryptedMessage = getCipher(password).encrypt(text);
+    const wrappedMessage = `${ENCRYPTED_PREFIX}${encryptedMessage}${ENCRYPTED_SUFFIX}`;
+
+    if (wrappedMessage.length > SECURITY_CONSTANTS.MAX_DISCORD_MESSAGE_LENGTH) {
+        throw new Error("Encrypted message is too long for Discord.");
+    }
+
+    return encryptedMessage;
+}
+
+function decryptOpossum(encrypted: string, password: string): string {
+    const decryptedMessage = getCipher(password).decrypt(encrypted);
+    resetSecurityState();
+    return decryptedMessage;
+}
+
+function clearAutoLockTimer() {
+    if (!autoLockTimer) return;
+
+    clearTimeout(autoLockTimer);
+    autoLockTimer = null;
+}
+
+function scheduleAutoLock(channelId?: string) {
+    clearAutoLockTimer();
+
+    if (channelId) lastActivityChannelId = channelId;
+    if (!settings.store.pluginActivated || !settings.store.encryptionEnabled || settings.store.autoLockTimeout <= 0) return;
+
+    autoLockTimer = setTimeout(() => {
+        settings.store.encryptionEnabled = false;
+        logInfo("Encryption auto locked.");
+
+        if (settings.store.notifyOnAutoLock && lastActivityChannelId) {
+            sendBotMessage(lastActivityChannelId, {
+                content: "🔐 Encryption auto disabled after inactivity."
+            });
+        }
+    }, settings.store.autoLockTimeout * SECURITY_CONSTANTS.MILLISECONDS_PER_MINUTE);
+}
+
+function formatDecryptedMessage(message: Message | undefined, decryptedMessage: string) {
+    if (!message || !settings.store.showAuthorInDecryptedMessages) {
+        return `🔐 **Decrypted message**: ${decryptedMessage}`;
+    }
+
+    return `🔐 **Decrypted message from ${message.author.username}**: ${decryptedMessage}`;
 }
 
 // SVG icons for the button
@@ -375,12 +532,14 @@ const EncryptionToggleButton: ChatBarButtonFactory = ({ channel, type }) => {
                 onClick={() => {
                     settings.store.pluginActivated = true;
                     // Show confirmation
-                    sendBotMessage(
-                        channel.id,
-                        {
-                            content: "🔐 Securecord Opossum plugin activated! Click again to toggle encryption."
-                        }
-                    );
+                    if (settings.store.notifyOnToggle) {
+                        sendBotMessage(
+                            channel.id,
+                            {
+                                content: "🔐 Securecord Opossum plugin activated! Click again to toggle encryption."
+                            }
+                        );
+                    }
                 }}
             >
                 <EncryptionDisabledIcon />
@@ -394,14 +553,17 @@ const EncryptionToggleButton: ChatBarButtonFactory = ({ channel, type }) => {
             onClick={() => {
                 const newValue = !encryptionEnabled;
                 settings.store.encryptionEnabled = newValue;
+                scheduleAutoLock(channel.id);
 
                 // Show confirmation
-                sendBotMessage(
-                    channel.id,
-                    {
-                        content: `🔐 Encryption ${newValue ? "enabled" : "disabled"}!`
-                    }
-                );
+                if (settings.store.notifyOnToggle) {
+                    sendBotMessage(
+                        channel.id,
+                        {
+                            content: `🔐 Encryption ${newValue ? "enabled" : "disabled"}!${newValue ? "\n⚠️ Share your password only with trusted contacts." : ""}`
+                        }
+                    );
+                }
             }}
         >
             {encryptionEnabled ? <EncryptionEnabledIcon /> : <EncryptionDisabledIcon />}
@@ -413,23 +575,138 @@ const EncryptionToggleButton: ChatBarButtonFactory = ({ channel, type }) => {
 const settings = definePluginSettings({
     pluginActivated: {
         type: OptionType.BOOLEAN,
-        description: "Activate/deactivate the Securecord Opossum plugin",
-        default: false
+        description: "Activate Securecord Opossum.",
+        default: false,
+        onChange(newValue: boolean) {
+            if (!newValue) settings.store.encryptionEnabled = false;
+            scheduleAutoLock();
+        }
     },
     encryptionPassword: {
         type: OptionType.STRING,
-        description: "BlazingOpossum encryption password (shared with other users)",
+        description: "BlazingOpossum encryption password shared with trusted users.",
         default: "",
-        placeholder: "Enter shared password..."
+        placeholder: "Enter strong shared password...",
+        onChange(newValue: string) {
+            if (newValue) {
+                const errors = validatePassword(newValue);
+                if (errors.length) logInfo("Password validation failed.", errors.join(", "));
+            }
+
+            resetCipher();
+            resetSecurityState();
+        }
     },
     encryptionEnabled: {
         type: OptionType.BOOLEAN,
-        description: "Enable/disable message encryption",
+        description: "Encrypt outgoing messages.",
+        default: false,
+        onChange() {
+            scheduleAutoLock();
+        }
+    },
+    autoDecrypt: {
+        type: OptionType.BOOLEAN,
+        description: "Show decrypted Securecord Opossum messages automatically.",
+        default: true
+    },
+    strictPasswordPolicy: {
+        type: OptionType.BOOLEAN,
+        description: "Require uppercase, lowercase, number and special character in the password.",
+        default: true
+    },
+    minPasswordLength: {
+        type: OptionType.SLIDER,
+        description: "Minimum password length when strict policy is enabled.",
+        markers: [8, 12, 16, 20, 24, 32],
+        default: SECURITY_CONSTANTS.DEFAULT_MIN_PASSWORD_LENGTH,
+        stickToMarkers: true
+    },
+    maxPlaintextBytes: {
+        type: OptionType.NUMBER,
+        description: "Maximum plaintext size in bytes before encryption. Use 0 to disable.",
+        default: SECURITY_CONSTANTS.DEFAULT_MAX_PLAINTEXT_BYTES,
+        onChange(newValue: number) {
+            if (newValue < 0) settings.store.maxPlaintextBytes = 0;
+        }
+    },
+    blockUploadsWhileEncrypted: {
+        type: OptionType.BOOLEAN,
+        description: "Block file uploads while encryption is enabled.",
+        default: true
+    },
+    cancelOnEncryptionError: {
+        type: OptionType.BOOLEAN,
+        description: "Block plaintext sending when encryption fails.",
+        default: true
+    },
+    encryptEmptyMessages: {
+        type: OptionType.BOOLEAN,
+        description: "Encrypt blank or whitespace only messages.",
         default: false
+    },
+    maxFailedAttempts: {
+        type: OptionType.SLIDER,
+        description: "Failed decrypt attempts before lockout. Use 0 to disable.",
+        markers: [0, 3, 5, 8, 10],
+        default: 5,
+        stickToMarkers: true
+    },
+    lockoutMinutes: {
+        type: OptionType.SLIDER,
+        description: "Minutes to pause decrypt attempts after lockout. Use 0 to disable.",
+        markers: [0, 1, 5, 10, 30],
+        default: 5,
+        stickToMarkers: true
+    },
+    autoLockTimeout: {
+        type: OptionType.SLIDER,
+        description: "Auto-disable encryption after minutes of inactivity. Use 0 to disable.",
+        markers: [0, 5, 15, 30, 60, 240],
+        default: 30,
+        stickToMarkers: true,
+        onChange() {
+            scheduleAutoLock();
+        }
+    },
+    showAuthorInDecryptedMessages: {
+        type: OptionType.BOOLEAN,
+        description: "Include the sender name in decrypted Clyde messages.",
+        default: true
+    },
+    showDecryptErrors: {
+        type: OptionType.BOOLEAN,
+        description: "Show Clyde messages when decryption fails.",
+        default: true
+    },
+    showDetailedDecryptErrors: {
+        type: OptionType.BOOLEAN,
+        description: "Show detailed decrypt errors instead of a generic warning.",
+        default: false
+    },
+    notifyOnToggle: {
+        type: OptionType.BOOLEAN,
+        description: "Show a Clyde message when encryption is toggled.",
+        default: true
+    },
+    notifyOnEncrypt: {
+        type: OptionType.BOOLEAN,
+        description: "Show a Clyde message after encrypting an outgoing message.",
+        default: false
+    },
+    notifyOnEncryptionFailure: {
+        type: OptionType.BOOLEAN,
+        description: "Show a Clyde message when outgoing encryption fails.",
+        default: true
+    },
+    notifyOnAutoLock: {
+        type: OptionType.BOOLEAN,
+        description: "Show a Clyde message when auto lock disables encryption.",
+        default: true
     },
     enableLogging: {
         type: OptionType.BOOLEAN,
-        description: "Enable/disable console logs (for debugging)",
+        description: "Enable debug logs.",
         default: false
     }
 });
@@ -447,32 +724,57 @@ export default definePlugin({
 
     start() {
         // Add listener to encrypt messages before sending
-        messageSendListener = async (channelId, message) => {
+        messageSendListener = async (channelId, message, options) => {
             if (!settings.store.pluginActivated || !settings.store.encryptionEnabled) return;
-            if (!message.content || isEncryptedMessage(message.content)) return;
+            scheduleAutoLock(channelId);
 
-            const password = settings.store.encryptionPassword;
-            if (!password) {
+            if (settings.store.blockUploadsWhileEncrypted && options.uploads?.length) {
                 sendBotMessage(channelId, {
-                    content: "❌ No encryption password set in plugin settings."
+                    content: "❌ File uploads are not encrypted by Securecord Opossum and were blocked."
                 });
                 return { cancel: true };
             }
 
+            if (!message.content || isEncryptedMessage(message.content)) return;
+            if (!settings.store.encryptEmptyMessages && !message.content.trim()) return;
+
+            const password = settings.store.encryptionPassword;
+            if (!password) {
+                if (settings.store.notifyOnEncryptionFailure) {
+                    sendBotMessage(channelId, {
+                        content: "❌ No encryption password set in plugin settings."
+                    });
+                }
+                return { cancel: settings.store.cancelOnEncryptionError };
+            }
+
             try {
-                const encryptedMessage = getCipher(password).encrypt(message.content);
+                const encryptedMessage = encryptOpossum(message.content, password);
                 message.content = `${ENCRYPTED_PREFIX}${encryptedMessage}${ENCRYPTED_SUFFIX}`;
+
+                if (settings.store.notifyOnEncrypt) {
+                    sendBotMessage(channelId, {
+                        content: "🔐 Message encrypted."
+                    });
+                }
+
                 logInfo("Message encrypted.");
             } catch (error) {
-                logError("Message encryption error:", error);
-                sendBotMessage(channelId, {
-                    content: "❌ Message encryption failed. The plaintext message was not sent."
-                });
-                return { cancel: true };
+                const errorMessage = getErrorMessage(error);
+                logError("Message encryption error:", errorMessage);
+
+                if (settings.store.notifyOnEncryptionFailure) {
+                    sendBotMessage(channelId, {
+                        content: `❌ Message encryption failed. ${settings.store.cancelOnEncryptionError ? "The plaintext message was not sent." : "Check your password settings."}`
+                    });
+                }
+
+                return { cancel: settings.store.cancelOnEncryptionError };
             }
         };
 
         addMessagePreSendListener(messageSendListener);
+        scheduleAutoLock();
         logInfo("Plugin loaded successfully.");
     },
 
@@ -484,17 +786,30 @@ export default definePlugin({
         }
 
         // Clean up cipher
+        clearAutoLockTimer();
         resetCipher();
-        logInfo("Plugin stopped.");
+        resetSecurityState();
+        logInfo("Plugin stopped and security state reset.");
     },
 
     flux: {
         async MESSAGE_CREATE({ optimistic, type, message, channelId }: IMessageCreate) {
             if (optimistic || type !== "MESSAGE_CREATE") return;
             if (message.state === "SENDING") return;
+            if (!settings.store.pluginActivated || !settings.store.autoDecrypt) return;
             if (!message.content || !isEncryptedMessage(message.content)) return;
 
             logInfo("Received encrypted message from", message.author.username);
+
+            if (isRateLimited()) {
+                const remainingTime = Math.ceil((lockoutEndTime - Date.now()) / SECURITY_CONSTANTS.MILLISECONDS_PER_MINUTE);
+                if (settings.store.showDecryptErrors) {
+                    sendBotMessage(channelId, {
+                        content: `🔒 Too many failed decryption attempts. Try again in ${remainingTime} minutes.`
+                    });
+                }
+                return;
+            }
 
             // Get password from settings
             const password = settings.store.encryptionPassword;
@@ -509,21 +824,28 @@ export default definePlugin({
                 const encryptedPart = getEncryptedPart(message.content);
 
                 // Decode message using BlazingOpossum cipher
-                const decryptedMessage = getCipher(password).decrypt(encryptedPart);
+                const decryptedMessage = decryptOpossum(encryptedPart, password);
 
                 // Show decrypted message as bot message (Clyde)
                 sendBotMessage(channelId, {
-                    content: `🔐 **Decrypted message from ${message.author.username}**: ${decryptedMessage}`
+                    content: formatDecryptedMessage(message, decryptedMessage)
                 });
 
-                logInfo("Sent bot message with decrypted content.");
+                scheduleAutoLock(channelId);
+                logInfo("Sent decrypted message.");
             } catch (error) {
-                logError("Decryption error:", error);
+                const errorMessage = getErrorMessage(error);
+                recordFailedAttempt();
+                logError("Decryption error:", errorMessage);
 
                 // Show error message
-                sendBotMessage(channelId, {
-                    content: `🔒 Decryption error for message from ${message.author.username}. Details: ${(error as Error).message}`
-                });
+                if (settings.store.showDecryptErrors) {
+                    sendBotMessage(channelId, {
+                        content: settings.store.showDetailedDecryptErrors
+                            ? `🔒 Decryption failed for message from ${message.author.username}. ${errorMessage}`
+                            : `🔒 Decryption failed for message from ${message.author.username}. Check password or try again later.`
+                    });
+                }
             }
         },
     },
@@ -531,13 +853,13 @@ export default definePlugin({
     commands: [
         {
             name: "decrypt",
-            description: "Decrypt an encrypted message by replying to it or pasting the encrypted text",
+            description: "Decrypt an encrypted message by replying to it or pasting the encrypted text.",
             inputType: ApplicationCommandInputType.BUILT_IN,
             predicate: () => settings.store.pluginActivated,
             options: [
                 {
                     name: "encrypted-text",
-                    description: "Paste the encrypted text (optional if replying to a message)",
+                    description: "Paste the encrypted text. Optional if replying to a message.",
                     type: ApplicationCommandOptionType.STRING,
                     required: false
                 }
@@ -557,7 +879,7 @@ export default definePlugin({
                     messageContent = encryptedTextArg;
                 } else {
                     sendBotMessage(ctx.channel.id, {
-                        content: "❌ Please reply to an encrypted message or paste the encrypted text! Usage: `/decrypt [encrypted-text]`"
+                        content: "❌ Please reply to an encrypted message or paste the encrypted text. Usage: `/decrypt [encrypted-text]`."
                     });
                     return;
                 }
@@ -565,7 +887,15 @@ export default definePlugin({
                 // Check if the message is encrypted
                 if (!isEncryptedMessage(messageContent)) {
                     sendBotMessage(ctx.channel.id, {
-                        content: "❌ The message is not encrypted! Make sure it starts with 🔒ENCRYPTED: and ends with :ENDLOCK"
+                        content: "❌ The message is not encrypted. Make sure it starts with 🔒ENCRYPTED: and ends with :ENDLOCK."
+                    });
+                    return;
+                }
+
+                if (isRateLimited()) {
+                    const remainingTime = Math.ceil((lockoutEndTime - Date.now()) / SECURITY_CONSTANTS.MILLISECONDS_PER_MINUTE);
+                    sendBotMessage(ctx.channel.id, {
+                        content: `🔒 Too many failed decryption attempts. Try again in ${remainingTime} minutes.`
                     });
                     return;
                 }
@@ -575,7 +905,7 @@ export default definePlugin({
 
                 if (!password) {
                     sendBotMessage(ctx.channel.id, {
-                        content: "❌ No encryption password set in plugin settings!"
+                        content: "❌ No encryption password set in plugin settings."
                     });
                     return;
                 }
@@ -585,18 +915,21 @@ export default definePlugin({
                     const encryptedPart = getEncryptedPart(messageContent);
 
                     // Decode message using BlazingOpossum cipher
-                    const decryptedMessage = getCipher(password).decrypt(encryptedPart);
-
-                    const authorName = replyMessage?.author?.username || "Unknown";
+                    const decryptedMessage = decryptOpossum(encryptedPart, password);
 
                     // Send as Clyde bot message
                     sendBotMessage(ctx.channel.id, {
-                        content: `🔐 **Decrypted message${replyMessage ? ` from ${authorName}` : ""}**: ${decryptedMessage}`
+                        content: formatDecryptedMessage(replyMessage, decryptedMessage)
                     });
+                    scheduleAutoLock(ctx.channel.id);
                 } catch (error) {
-                    logError("Decryption error:", error);
+                    const errorMessage = getErrorMessage(error);
+                    recordFailedAttempt();
+                    logError("Decryption error:", errorMessage);
                     sendBotMessage(ctx.channel.id, {
-                        content: `🔒 Decryption error: ${(error as Error).message}. Make sure you're using the correct password!`
+                        content: settings.store.showDetailedDecryptErrors
+                            ? `🔒 Decryption failed. ${errorMessage}`
+                            : "🔒 Decryption failed. Check password or try again later."
                     });
                 }
             }
