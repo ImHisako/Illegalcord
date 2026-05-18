@@ -35,6 +35,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **StaffDetector**
 - **BigFileUpload**
 - **Stalker**
+- **FastGifPicker**
 - **MassMention**
 - **WebRTCLeakPrevent**
 - **AutoModBypass**
@@ -65,9 +66,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **GPU Binder** | (https://github.com/UnClide/vencord-gpubinder)
 - **stereoScreenshareAudio** | (https://github.com/nerdwave-nick/Vencord-Stereo-Fix/blob/main/src/plugins/stereoScreenshareAudio/index.ts)
 - **DiscordLock** | (https://github.com/vejcowski/DiscordLock/tree/main)
-- **KeepGifPickerOpen** | (https://github.com/pacxwheaa/KeepGifPickerOpen/tree/main)
 - **Opsec Plugin** | (https://github.com/ItzSolace/OpSec-Vencord/tree/main) | (We have a different version with italian support)
-- **DecibelLimiter** | (https://github.com/BashOnZsh/Bashcord/tree/main/src/userplugins/decibelLimiter)
 - **CrashHandlerEnhanched** | (https://github.com/Mifu999/Equicord-Userplugins/tree/main/userplugins/crashHandlerEnhanced)
 
 </details>
