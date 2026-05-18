@@ -35,6 +35,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **StaffDetector**
 - **BigFileUpload**
 - **Stalker**
+- **FastGifPicker**
 - **MassMention**
 - **WebRTCLeakPrevent**
 - **AutoModBypass**
