@@ -145,7 +145,7 @@ function launchGhostSource(): void {
 export default definePlugin({
     name: "GhostSelfbot",
     description: "Launch Ghost Selfbot (exe or source code) with optional auto-token fill from your current Discord session",
-    authors: [{ name: "Hisako", id: 928787166916640838n }],
+    authors: [{ name: "irritably", id: 928787166916640838n }],
     tags: ["Utility", "Customisation", "Utils"],
     enabledByDefault: false,
     settings,

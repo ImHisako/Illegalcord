@@ -399,7 +399,7 @@ export default definePlugin({
     name: "WebCordHardened",
     description: "Adds WebCord privacy hardening with network, permission, and WebRTC protections.",
     tags: ["Privacy", "Utility", "Voice"],
-    authors: [{ name: "Irritably", id: 928787166916640838n }],
+    authors: [{ name: "irritably", id: 928787166916640838n }],
     settings,
     startAt: StartAt.Init,
 

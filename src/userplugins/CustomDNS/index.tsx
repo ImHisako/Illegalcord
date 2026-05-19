@@ -398,7 +398,7 @@ export default definePlugin({
     name: "CustomDNS",
     description: "Resolve Discord hosts through DNS.SB, Quad9, or custom DNS servers.",
     tags: ["Privacy", "Utility"],
-    authors: [{ name: "Irritably", id: 928787166916640838n }],
+    authors: [{ name: "irritably", id: 928787166916640838n }],
     settings,
 
     start() {

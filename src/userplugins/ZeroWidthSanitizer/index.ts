@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { addMessagePreEditListener, addMessagePreSendListener, MessageEditListener, MessageSendListener, removeMessagePreEditListener, removeMessagePreSendListener } from "@api/MessageEvents";
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType } from "@utils/types";
-import { addMessagePreSendListener, addMessagePreEditListener, removeMessagePreSendListener, removeMessagePreEditListener, MessageSendListener, MessageEditListener } from "@api/MessageEvents";
-import { Toasts, showToast } from "@webpack/common";
+import { showToast, Toasts } from "@webpack/common";
 
 const settings = definePluginSettings({
     sanitizeOutgoing: {
@@ -55,7 +55,7 @@ export default definePlugin({
     name: "ZeroWidthSanitizer",
     description: "Removes invisible zero-width characters from messages to prevent fingerprinting and tracking",
     tags: ["Privacy", "Chat"],
-    authors: [{ name: "Irritably", id: 928787166916640838n }],
+    authors: [{ name: "irritably", id: 928787166916640838n }],
     settings,
 
     // Richiede l'API MessageEvents

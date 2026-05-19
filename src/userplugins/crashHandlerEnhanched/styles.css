@@ -1,0 +1,125 @@
+.vc-crash-handler-enhanced-modal {
+    overflow: hidden;
+}
+
+.vc-crash-handler-enhanced-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.vc-crash-handler-enhanced-icon-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    border: 1px solid var(--status-warning);
+    border-radius: var(--radius-sm, 8px);
+    color: var(--status-warning);
+    background: color-mix(in oklab, var(--status-warning) 16%, transparent);
+}
+
+.vc-crash-handler-enhanced-title {
+    margin: 0;
+}
+
+.vc-crash-handler-enhanced-text {
+    margin: 0;
+}
+
+.vc-crash-handler-enhanced-content {
+    display: grid;
+    gap: 12px;
+    padding-top: 4px;
+}
+
+.vc-crash-handler-enhanced-status,
+.vc-crash-handler-enhanced-report {
+    display: grid;
+    gap: 4px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm, 8px);
+    background: var(--background-secondary);
+}
+
+.vc-crash-handler-enhanced-status-recovered {
+    border-color: color-mix(in oklab, var(--status-positive) 56%, var(--border-subtle));
+}
+
+.vc-crash-handler-enhanced-status-danger {
+    border-color: color-mix(in oklab, var(--status-danger) 64%, var(--border-subtle));
+}
+
+.vc-crash-handler-enhanced-actions {
+    display: grid;
+    gap: 12px;
+}
+
+.vc-crash-handler-enhanced-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm, 8px);
+    background: var(--background-secondary-alt);
+}
+
+.vc-crash-handler-enhanced-action-copy,
+.vc-crash-handler-enhanced-settings-copy {
+    min-width: 0;
+}
+
+.vc-crash-handler-enhanced-action-button,
+.vc-crash-handler-enhanced-footer-button {
+    flex-shrink: 0;
+    gap: 8px;
+}
+
+.vc-crash-handler-enhanced-error {
+    max-height: 72px;
+    overflow: hidden;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.vc-crash-handler-enhanced-footer {
+    width: 100%;
+}
+
+.vc-crash-handler-enhanced-footer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.vc-crash-handler-enhanced-settings {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.vc-crash-handler-enhanced-settings-actions {
+    flex-shrink: 0;
+}
+
+@media (max-width: 520px) {
+    .vc-crash-handler-enhanced-action,
+    .vc-crash-handler-enhanced-settings {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .vc-crash-handler-enhanced-action-button,
+    .vc-crash-handler-enhanced-footer-button,
+    .vc-crash-handler-enhanced-footer-actions,
+    .vc-crash-handler-enhanced-settings-actions {
+        width: 100%;
+    }
+}

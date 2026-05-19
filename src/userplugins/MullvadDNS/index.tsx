@@ -362,7 +362,7 @@ export default definePlugin({
     name: "MullvadDNS",
     description: "Resolve Discord hosts through Mullvad DNS over HTTPS.",
     tags: ["Privacy", "Utility"],
-    authors: [{ name: "Irritably", id: 928787166916640838n }],
+    authors: [{ name: "irritably", id: 928787166916640838n }],
     settings,
 
     start() {

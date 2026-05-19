@@ -134,7 +134,7 @@ export default definePlugin({
     name: "IllegalcordAnnouncements",
     description: "Shows Illegalcord Telegram and GitHub announcements.",
     tags: ["Utility"],
-    authors: [{ name: "Hisako", id: 928787166916640838n }],
+    authors: [{ name: "irritably", id: 928787166916640838n }],
     required: true,
     enabledByDefault: true,
     settings,

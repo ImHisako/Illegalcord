@@ -833,7 +833,7 @@ export default definePlugin({
     name: "Surveillance",
     description: "Adds a local live event dashboard for selected users and servers.",
     tags: ["Friends", "Utility"],
-    authors: [{ name: "Hisako", id: 928787166916640838n }],
+    authors: [{ name: "irritably", id: 928787166916640838n }],
     enabledByDefault: false,
     settings,
     contextMenus: {
