@@ -5,9 +5,12 @@
  */
 
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
+import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { EyeIcon } from "@components/Icons";
+import pinDms from "@plugins/pinDms";
+import { isPinned } from "@plugins/pinDms/data";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel, Message } from "@vencord/discord-types";
@@ -65,6 +68,7 @@ const messageCtxPatch: NavContextMenuPatchCallback = (children, { message }: { m
 
 const userCtxPatch: NavContextMenuPatchCallback = (children, { channel }: UserContextProps) => {
     if (!channel?.isDM()) return;
+    if (isPluginEnabled(pinDms.name) && isPinned(channel.id)) return;
 
     const group = findGroupChildrenByChildId("close-dm", children);
     if (!group) return;
