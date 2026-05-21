@@ -1,10 +1,16 @@
-import { React, UserStore, GuildStore, GuildRoleStore, SearchableSelect, Checkbox, Button } from "@webpack/common";
-import { ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, openModal } from "@utils/modal";
-import { Guild } from "@vencord/discord-types";
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import type { Guild, RenderModalProps } from "@vencord/discord-types";
+import { Checkbox, GuildRoleStore, GuildStore, Modal, openModal,React, SearchableSelect, UserStore } from "@webpack/common";
+
 import { CloneOptions } from "../types";
 import { extractChannels } from "../utils/api";
 
-export const CloneModal = ({ props, guild, onClone }: { props: ModalProps; guild: Guild; onClone: (options: CloneOptions) => void; }) => {
+export const CloneModal = ({ props, guild, onClone }: { props: RenderModalProps; guild: Guild; onClone: (options: CloneOptions) => void; }) => {
     const [cloneChannels, setCloneChannels] = React.useState(true);
     const [cloneRoles, setCloneRoles] = React.useState(true);
     const [cloneOnboarding, setCloneOnboarding] = React.useState(true);
@@ -52,31 +58,31 @@ export const CloneModal = ({ props, guild, onClone }: { props: ModalProps; guild
             if (cloneRoles) deletingParts.push("roles");
             const deletingText = deletingParts.join(", ");
             props.onClose();
-            openModal((confirmProps: ModalProps) => (
-                <ModalRoot {...confirmProps}>
-                    <ModalHeader>
-                        <span style={{ color: "#f04747", fontSize: "20px", fontWeight: 600 }}>⚠️ Confirm Overwrite</span>
-                    </ModalHeader>
-                    <ModalContent>
-                        <div style={{ padding: "16px 0", fontSize: "14px", color: "#ffffff", lineHeight: 1.6 }}>
-                            <p>This will <strong style={{ color: "#f04747" }}>permanently delete</strong> all {deletingText} in <strong>{targetName}</strong> and replace them with data from <strong>{guild.name}</strong>.</p>
-                            <p style={{ marginTop: "12px", color: "#a0a3a6" }}>This action cannot be undone.</p>
-                        </div>
-                    </ModalContent>
-                    <ModalFooter>
-                        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-                            <Button color={Button.Colors.PRIMARY} onClick={() => confirmProps.onClose()}>
-                                Cancel
-                            </Button>
-                            <Button color={Button.Colors.RED} onClick={() => {
+            openModal(confirmProps => (
+                <Modal
+                    {...confirmProps}
+                    title={<span style={{ color: "#f04747", fontSize: "20px", fontWeight: 600 }}>⚠️ Confirm Overwrite</span>}
+                    actions={[
+                        {
+                            text: "Cancel",
+                            variant: "secondary",
+                            onClick: confirmProps.onClose
+                        },
+                        {
+                            text: "Delete & Overwrite",
+                            variant: "critical-primary",
+                            onClick: () => {
                                 onClone({ cloneChannels, cloneRoles, cloneOnboarding, cloneSystemFlags, resumeMode: false, targetGuildId });
                                 confirmProps.onClose();
-                            }}>
-                                Delete & Overwrite
-                            </Button>
-                        </div>
-                    </ModalFooter>
-                </ModalRoot>
+                            }
+                        }
+                    ]}
+                >
+                    <div style={{ padding: "16px 0", fontSize: "14px", color: "#ffffff", lineHeight: 1.6 }}>
+                        <p>This will <strong style={{ color: "#f04747" }}>permanently delete</strong> all {deletingText} in <strong>{targetName}</strong> and replace them with data from <strong>{guild.name}</strong>.</p>
+                        <p style={{ marginTop: "12px", color: "#a0a3a6" }}>This action cannot be undone.</p>
+                    </div>
+                </Modal>
             ));
         } else {
             onClone({ cloneChannels, cloneRoles, cloneOnboarding, cloneSystemFlags, resumeMode, targetGuildId });
@@ -85,12 +91,30 @@ export const CloneModal = ({ props, guild, onClone }: { props: ModalProps; guild
     };
 
     return (
-        <ModalRoot {...props}>
-            <ModalHeader>
-                <span style={{ color: "#fff", fontSize: "20px", fontWeight: 600 }}>Clone Server: {guild.name}</span>
-            </ModalHeader>
-            <ModalContent>
-                <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "8px 0", minHeight: "450px" }}>
+        <Modal
+            {...props}
+            title={<span style={{ color: "#fff", fontSize: "20px", fontWeight: 600 }}>Clone Server: {guild.name}</span>}
+            actionBarInput={!nothingSelected && (
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "rgba(88,101,242,0.1)", borderRadius: "8px", fontSize: "13px", color: "#b5bac1" }}>
+                    <span style={{ fontSize: "16px" }}>⏱️</span>
+                    <span>Estimated time: <strong style={{ color: "#fff" }}>{estimatedTime}</strong></span>
+                </div>
+            )}
+            actions={[
+                {
+                    text: "Cancel",
+                    variant: "secondary",
+                    onClick: props.onClose
+                },
+                {
+                    text: targetGuildId ? (resumeMode ? "Resume Clone" : "Overwrite & Clone") : "Create & Clone",
+                    variant: "primary",
+                    disabled: nothingSelected,
+                    onClick: handleClone
+                }
+            ]}
+        >
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "8px 0", minHeight: "450px" }}>
 
                     <div>
                         <span style={{ color: "#fff", fontSize: "14px", fontWeight: 600, marginBottom: "8px", display: "block" }}>Clone To:</span>
@@ -240,26 +264,7 @@ export const CloneModal = ({ props, guild, onClone }: { props: ModalProps; guild
                         );
                     })()}
 
-                </div>
-            </ModalContent>
-            <ModalFooter>
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px", width: "100%" }}>
-                    {!nothingSelected && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "rgba(88,101,242,0.1)", borderRadius: "8px", fontSize: "13px", color: "#b5bac1" }}>
-                            <span style={{ fontSize: "16px" }}>⏱️</span>
-                            <span>Estimated time: <strong style={{ color: "#fff" }}>{estimatedTime}</strong></span>
-                        </div>
-                    )}
-                    <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-                        <Button color={Button.Colors.PRIMARY} onClick={() => props.onClose()}>
-                            Cancel
-                        </Button>
-                        <Button color={Button.Colors.BRAND} onClick={handleClone} disabled={nothingSelected}>
-                            {targetGuildId ? (resumeMode ? "Resume Clone" : "Overwrite & Clone") : "Create & Clone"}
-                        </Button>
-                    </div>
-                </div>
-            </ModalFooter>
-        </ModalRoot>
+            </div>
+        </Modal>
     );
 };

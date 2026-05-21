@@ -30,7 +30,7 @@ import { ContextMenuApi, Menu, Toasts, UserStore } from "@webpack/common";
 
 import Plugins, { PluginMeta } from "~plugins";
 
-import { TrashCordDonorModal, EquicordDonorModal, EquicordTranslatorModal, IllegalcordDonorModal, VencordDonorModal } from "./modals";
+import { EquicordDonorModal, EquicordTranslatorModal, IllegalcordDonorModal, TrashCordDonorModal, VencordDonorModal } from "./modals";
 
 const CONTRIBUTOR_BADGE = "https://cdn.discordapp.com/emojis/1092089799109775453.png?size=64";
 const EQUICORD_CONTRIBUTOR_BADGE = "https://equicord.org/assets/favicon.png";
@@ -284,8 +284,8 @@ export default definePlugin({
             onContextMenu(event, badge) {
                 ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={badge} />);
             },
-            onClick() {
-                return IllegalcordDonorModal();
+            onClick(_event: React.MouseEvent, badge: ProfileBadge & BadgeUserArgs) {
+                return IllegalcordDonorModal(badge);
             },
         } satisfies ProfileBadge));
     },
@@ -305,8 +305,8 @@ export default definePlugin({
             onContextMenu(event, badge) {
                 ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={badge} />);
             },
-            onClick() {
-                return TrashCordDonorModal();
+            onClick(_event: React.MouseEvent, badge: ProfileBadge & BadgeUserArgs) {
+                return TrashCordDonorModal(badge);
             },
         } satisfies ProfileBadge));
     }

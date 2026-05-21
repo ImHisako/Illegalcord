@@ -6,21 +6,14 @@
 
 import { DataStore } from "@api/index";
 import { insertTextIntoChatInputBox } from "@utils/discord";
-import {
-    ModalContent,
-    ModalFooter,
-    ModalHeader,
-    ModalProps,
-    ModalRoot,
-    openModal,
-} from "@utils/modal";
-import { Button, ChannelStore, Forms, React, SelectedChannelStore, showToast, TextArea, Toasts, useEffect } from "@webpack/common";
+import type { RenderModalProps } from "@vencord/discord-types";
+import { ChannelStore, Forms, Modal, openModal, React, SelectedChannelStore, showToast, TextArea, Toasts, useEffect } from "@webpack/common";
 
 import { encrypt } from "./index";
 
 const localStorageKeysString = "gpgPublicKeys";
 
-function Modal(props: ModalProps) {
+function EncryptModal(props: RenderModalProps) {
     // If the user already entered the public key for the recipient he doesn't have to insert it again...
     let recipientId;
     try {
@@ -49,59 +42,48 @@ function Modal(props: ModalProps) {
     }, []);
 
     return (
-        <ModalRoot {...props}>
-            <ModalHeader>
-                <Forms.FormTitle tag="h4">PGP/GPG Message</Forms.FormTitle>
-            </ModalHeader>
+        <Modal
+            {...props}
+            title={<Forms.FormTitle tag="h4">PGP/GPG Message</Forms.FormTitle>}
+            actions={[{
+                text: "Send",
+                variant: "primary",
+                onClick: () => {
+                    try {
+                        void encrypt(message, pKey).then(encryptedMessage => {
+                            if (publicKeyDictChange) {
+                                DataStore.set(localStorageKeysString, JSON.stringify(publicKeys));
+                            }
 
-            <ModalContent>
-                <Forms.FormTitle tag="h5">Message</Forms.FormTitle>
-                <TextArea
-                    onChange={(e: string) => {
-                        setMessage(e);
-                    }}
-                />
-
-                <Forms.FormTitle tag="h5">Recipient public key</Forms.FormTitle>
-                <TextArea
-                    value={pKey}
-                    onChange={(e: string) => {
-                        setPublicKeys({ ...publicKeys, [recipientId]: e });
-                        setPublicKeyDictChange(true);
-                        setPKey(e);
-                    }}
-                />
-            </ModalContent>
-            <ModalFooter>
-                <Button
-                    color={Button.Colors.GREEN}
-                    onClick={() => {
-
-                        try {
-                            encrypt(message, pKey).then(encryptedMessage => {
-                                if (publicKeyDictChange) {
-                                    DataStore.set(localStorageKeysString, JSON.stringify(publicKeys));
-                                }
-
-                                insertTextIntoChatInputBox(encryptedMessage);
-                                props.onClose();
-                            });
-                        } catch {
+                            insertTextIntoChatInputBox(encryptedMessage);
                             props.onClose();
-                        }
-                    }}
-                >
-                    Send
-                </Button>
-            </ModalFooter>
-        </ModalRoot>
+                        });
+                    } catch {
+                        props.onClose();
+                    }
+                }
+            }]}
+        >
+            <Forms.FormTitle tag="h5">Message</Forms.FormTitle>
+            <TextArea
+                onChange={(e: string) => {
+                    setMessage(e);
+                }}
+            />
+
+            <Forms.FormTitle tag="h5">Recipient public key</Forms.FormTitle>
+            <TextArea
+                value={pKey}
+                onChange={(e: string) => {
+                    setPublicKeys({ ...publicKeys, [recipientId]: e });
+                    setPublicKeyDictChange(true);
+                    setPKey(e);
+                }}
+            />
+        </Modal>
     );
 }
 
-export function buildModal(): any {
-    try {
-        openModal(props => <Modal {...props} />);
-    } catch {
-        return;
-    }
+export function buildModal() {
+    openModal(props => <EncryptModal {...props} />);
 }

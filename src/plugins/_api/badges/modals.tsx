@@ -176,15 +176,22 @@ export function EquicordTranslatorModal() {
     ));
 }
 
-export function IllegalcordDonorModal() {
-    const modalKey = openModal(props => (
+interface DonorBadgeModalProps {
+    description?: string;
+    iconSrc?: string;
+}
+
+export function IllegalcordDonorModal(badge: DonorBadgeModalProps) {
+    openModal(props => (
         <ErrorBoundary noop onError={() => {
-            closeModal(modalKey);
+            props.onClose();
             VencordNative.native.openExternal("https://github.com/sponsors/ImHisako");
         }}>
-            <ModalRoot {...props}>
-                <ModalHeader>
-                    <HeadingPrimary
+            <Modal
+                {...props}
+                title={
+                    <Heading
+                        tag="h2"
                         style={{
                             width: "100%",
                             textAlign: "center",
@@ -195,58 +202,47 @@ export function IllegalcordDonorModal() {
                             <Heart />
                             Illegalcord Supporter
                         </Flex>
-                    </HeadingPrimary>
-                </ModalHeader>
-                <ModalContent>
-                    <Flex justifyContent="center" style={{ padding: "1em" }}>
-                        <img
-                            role="presentation"
-                            src="https://i.pinimg.com/1200x/6d/3e/c6/6d3ec68907cf668ff3e346e766ffc06d.jpg"
-                            alt=""
-                            style={{ margin: "auto", maxWidth: "100px", maxHeight: "100px" }}
-                        />
-                    </Flex>
+                    </Heading>
+                }
+            >
+                <div>
+                    {badge.iconSrc && (
+                        <Flex justifyContent="center" style={{ padding: "1em" }}>
+                            <img
+                                role="presentation"
+                                src={badge.iconSrc}
+                                alt=""
+                                style={{ margin: "auto", maxWidth: "100px", maxHeight: "100px" }}
+                            />
+                        </Flex>
+                    )}
                     <div style={{ padding: "1em" }}>
-                        <Paragraph>
-                            This badge is a special perk for Illegalcord Supporters
-                        </Paragraph>
+                        {badge.description && (
+                            <Paragraph>
+                                {badge.description}
+                            </Paragraph>
+                        )}
                         <Paragraph className={Margins.top20}>
                             Thank you for supporting Illegalcord development! Your contribution helps keep this project alive and thriving.
                         </Paragraph>
                     </div>
-                </ModalContent>
-                <ModalFooter>
-                    <Flex justifyContent="center" style={{ width: "100%" }}>
-                        {/* wgf */}
-                        <button
-                            onClick={() => props.onClose()}
-                            style={{
-                                backgroundColor: "var(--button-secondary-background)",
-                                color: "var(--text-normal)",
-                                border: "none",
-                                padding: "8px 16px",
-                                borderRadius: "4px",
-                                cursor: "pointer"
-                            }}
-                        >
-                            Close
-                        </button>
-                    </Flex>
-                </ModalFooter>
-            </ModalRoot>
+                </div>
+            </Modal>
         </ErrorBoundary>
     ));
 }
 
-export function TrashCordDonorModal() {
-    const modalKey = openModal(props => (
+export function TrashCordDonorModal(badge: DonorBadgeModalProps) {
+    openModal(props => (
         <ErrorBoundary noop onError={() => {
-            closeModal(modalKey);
+            props.onClose();
             VencordNative.native.openExternal("https://github.com/sponsors/zFrxncesck1");
         }}>
-            <ModalRoot {...props}>
-                <ModalHeader>
-                    <HeadingPrimary
+            <Modal
+                {...props}
+                title={
+                    <Heading
+                        tag="h2"
                         style={{
                             width: "100%",
                             textAlign: "center",
@@ -257,45 +253,32 @@ export function TrashCordDonorModal() {
                             <Heart />
                             TrashCord Supporter
                         </Flex>
-                    </HeadingPrimary>
-                </ModalHeader>
-                <ModalContent>
-                    <Flex justifyContent="center" style={{ padding: "1em" }}>
-                        <img
-                            role="presentation"
-                            src="https://media2.giphy.com/media/v1.Y2lkPTZjMDliOTUydjAyZGR0eHVuZHI4YTJybWVqNmZncHY4ZG5odnppOHFtNmZtOTRtMSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/JQ9Tascg0eD33yAIm5/giphy.gif"
-                            alt=""
-                            style={{ margin: "auto", maxWidth: "100px", maxHeight: "100px" }}
-                        />
-                    </Flex>
+                    </Heading>
+                }
+            >
+                <div>
+                    {badge.iconSrc && (
+                        <Flex justifyContent="center" style={{ padding: "1em" }}>
+                            <img
+                                role="presentation"
+                                src={badge.iconSrc}
+                                alt=""
+                                style={{ margin: "auto", maxWidth: "100px", maxHeight: "100px" }}
+                            />
+                        </Flex>
+                    )}
                     <div style={{ padding: "1em" }}>
-                        <Paragraph>
-                            This badge is a special perk for TrashCord Supporters
-                        </Paragraph>
+                        {badge.description && (
+                            <Paragraph>
+                                {badge.description}
+                            </Paragraph>
+                        )}
                         <Paragraph className={Margins.top20}>
                             Thank you for supporting TrashCord development! Your contribution helps keep this project alive and thriving.
                         </Paragraph>
                     </div>
-                </ModalContent>
-                <ModalFooter>
-                    <Flex justifyContent="center" style={{ width: "100%" }}>
-                        {/* wgf */}
-                        <button
-                            onClick={() => props.onClose()}
-                            style={{
-                                backgroundColor: "var(--button-secondary-background)",
-                                color: "var(--text-normal)",
-                                border: "none",
-                                padding: "8px 16px",
-                                borderRadius: "4px",
-                                cursor: "pointer"
-                            }}
-                        >
-                            Close
-                        </button>
-                    </Flex>
-                </ModalFooter>
-            </ModalRoot>
+                </div>
+            </Modal>
         </ErrorBoundary>
     ));
 }

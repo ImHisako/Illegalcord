@@ -16,9 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import React from "react";
+import type { ComponentProps } from "react";
 
-export interface SettingsModalRowProps extends Pick<React.ComponentProps<"div">,
+export interface SettingsModalRowProps extends Pick<ComponentProps<"div">,
     | "children"
     | "style"> {
     gap?: string;
@@ -26,6 +26,6 @@ export interface SettingsModalRowProps extends Pick<React.ComponentProps<"div">,
 
 export const SettingsModalCardRow = ({ children, style, gap }: SettingsModalRowProps) => {
     return (
-        <div style={{ display: "flex", gap: gap ?? "1em", ...style }}>{children}</div>
+        <div style={{ display: "inline-flex", gap: gap ?? "1em", ...style }}>{children}</div>
     );
 };

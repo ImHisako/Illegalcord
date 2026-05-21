@@ -12,8 +12,8 @@ import { SettingsTab, wrapTab } from "@components/settings";
 import { copyToClipboard } from "@utils/clipboard";
 import { classNameFactory } from "@utils/css";
 import { classes } from "@utils/misc";
-import { ModalCloseButton, ModalContent, ModalHeader, type ModalProps, ModalRoot, ModalSize, openModal } from "@utils/modal";
-import { ChannelStore, GuildStore, React, Select, TextInput, Toasts, useEffect, useMemo, UserStore, useState, useStateFromStores } from "@webpack/common";
+import type { RenderModalProps } from "@vencord/discord-types";
+import { ChannelStore, GuildStore, Modal, openModal, React, Select, TextInput, Toasts, useEffect, useMemo, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 import { addServerTarget, getServerTargets, getTargets, removeServerTarget, removeTarget, setTargets, settings, subscribeServerTargets, subscribeTargets } from "..";
 import { clearEvents, getEvents, loadEvents, subscribe } from "../store";
@@ -120,7 +120,7 @@ function DetailField({ label, value, wide, preserve }: { label: string; value?: 
     );
 }
 
-const EventDetailsModal = ErrorBoundary.wrap(function EventDetailsModal({ event, modalProps }: { event: SurveillanceEvent; modalProps: ModalProps; }) {
+const EventDetailsModal = ErrorBoundary.wrap(function EventDetailsModal({ event, modalProps }: { event: SurveillanceEvent; modalProps: RenderModalProps; }) {
     const channel = event.channelId ? ChannelStore.getChannel(event.channelId) : undefined;
     const guild = event.guildId ? GuildStore.getGuild(event.guildId) : undefined;
     const metadata = Object.entries(event.metadata ?? {}).filter(([, value]) => value != null);
@@ -137,12 +137,12 @@ const EventDetailsModal = ErrorBoundary.wrap(function EventDetailsModal({ event,
     };
 
     return (
-        <ModalRoot {...modalProps} size={ModalSize.MEDIUM}>
-            <ModalHeader>
-                <HeadingPrimary className={cl("modal-title")}>Event Details</HeadingPrimary>
-                <ModalCloseButton onClick={modalProps.onClose} />
-            </ModalHeader>
-            <ModalContent className={cl("modal-content")}>
+        <Modal
+            {...modalProps}
+            size="md"
+            title={<HeadingPrimary className={cl("modal-title")}>Event Details</HeadingPrimary>}
+        >
+            <div className={cl("modal-content")}>
                 <div className={cl("modal-grid")}>
                     <DetailField label="Type" value={typeLabels[event.type]} />
                     <DetailField label="Time" value={formatTime(event.timestamp)} />
@@ -171,8 +171,8 @@ const EventDetailsModal = ErrorBoundary.wrap(function EventDetailsModal({ event,
                     <button className={cl("action")} onClick={copyEvent}>Copy Event JSON</button>
                 </div>
                 <div className={cl("modal-meta")}>Event ID: {event.id}</div>
-            </ModalContent>
-        </ModalRoot>
+            </div>
+        </Modal>
     );
 }, { noop: true });
 

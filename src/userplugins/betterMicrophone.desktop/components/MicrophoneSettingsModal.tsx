@@ -19,6 +19,9 @@
 import { Card } from "@components/Card";
 import { Flex } from "@components/Flex";
 import { Switch } from "@components/Switch";
+import { SelectOption } from "@vencord/discord-types";
+import { Forms, Select, Slider, TextInput, useEffect, useState } from "@webpack/common";
+
 import { MicrophoneProfile, MicrophoneStore } from "../../betterMicrophone.desktop/stores";
 import {
     ProfilableStore,
@@ -31,9 +34,6 @@ import {
     validateTextInputNumber
 } from "../../philsPluginLibrary";
 import { Styles } from "../../philsPluginLibrary/styles";
-import { ModalSize } from "@utils/modal";
-import { SelectOption } from "@vencord/discord-types";
-import { Forms, Select, Slider, TextInput, useEffect, useState } from "@webpack/common";
 
 const simpleVoiceBitrates: readonly SelectOption[] = [
     {
@@ -285,7 +285,7 @@ export const MicrophoneSettingsModal = (props: MicrophoneSettingsModalProps) => 
 
     return (
         <SettingsModal
-            size={simpleMode ? ModalSize.DYNAMIC : ModalSize.DYNAMIC}
+            size="lg"
             title="Microphone Settings"
             closeButtonName="Apply"
             footerContent={
@@ -300,7 +300,7 @@ export const MicrophoneSettingsModal = (props: MicrophoneSettingsModalProps) => 
             }}
         >
             {simpleMode
-                ? <div style={{ width: "30em", display: "flex", flexDirection: "column", gap: "1em" }}>
+                ? <div style={{ display: "inline-flex", flexDirection: "column", gap: "1em" }}>
                     <SettingsModalCardRow>
                         {settingsCardVoiceBitrateSimple}
                         {settingsCardChannelsSimple}
@@ -311,10 +311,12 @@ export const MicrophoneSettingsModal = (props: MicrophoneSettingsModalProps) => 
                         </SettingsModalCardRow>
                     }
                 </div>
-                : <div style={{ display: "flex", flexDirection: "column", width: "50em", gap: "1em", maxHeight: "30em" }}>
+                : <div style={{ display: "inline-flex", flexDirection: "column", gap: "1em" }}>
                     <SettingsModalCardRow>
                         {settingsCardFreq}
                         {settingsCardRate}
+                    </SettingsModalCardRow>
+                    <SettingsModalCardRow>
                         {settingsCardPacsize}
                         {settingsCardChannels}
                     </SettingsModalCardRow>

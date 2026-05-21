@@ -9,8 +9,9 @@ import { BaseText } from "@components/BaseText";
 import { Button } from "@components/Button";
 import { Card } from "@components/Card";
 import { Flex } from "@components/Flex";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
-import { React, useEffect, useMemo, useRef, useState } from "@webpack/common";
+import { React, useEffect, useMemo, useRef, UserSettingsActionCreators, useState } from "@webpack/common";
 import type { ElementType, MutableRefObject, ReactElement, ReactNode, Ref, SyntheticEvent } from "react";
 
 const PREVIEW_CACHE_LIMIT = 500;
@@ -24,6 +25,7 @@ const STATS_REFRESH_MS = 1000;
 const TRANSPARENT_IMAGE_SRC = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
 const RETRY_PARAM = "fast_gif_retry";
 const GIF_EXTENSION_RE = /\.gif(?:$|[?#])/i;
+const logger = new Logger("FastGifPicker");
 
 type PreviewMode = "webp" | "static" | "hover" | "original";
 
@@ -115,6 +117,7 @@ const statItems = [
 let activeLoads = 0;
 let activeBackgroundPreloads = 0;
 let discordMediaHosts: Set<string> | undefined;
+let favoritePreloadTimer: ReturnType<typeof setTimeout> | undefined;
 
 function clearCaches() {
     previewUrlCache.clear();
@@ -163,7 +166,10 @@ const settings = definePluginSettings({
             { label: "Still until hover", value: "hover" },
             { label: "Original URL", value: "original" }
         ] as const,
-        onChange: clearCaches
+        onChange: () => {
+            clearCaches();
+            scheduleFavoritePreload();
+        }
     },
     maxConcurrentLoads: {
         type: OptionType.SLIDER,
@@ -184,6 +190,12 @@ const settings = definePluginSettings({
         description: "Preload every GIF preview the picker knows about in the background.",
         default: false
     },
+    preloadFavoritesOnStart: {
+        type: OptionType.BOOLEAN,
+        description: "Preload favorite GIF previews in the background when the plugin starts. This can use extra bandwidth.",
+        default: false,
+        onChange: () => scheduleFavoritePreload()
+    },
     backgroundPreloadConcurrency: {
         type: OptionType.SLIDER,
         description: "How many background GIF previews may preload at the same time.",
@@ -193,7 +205,7 @@ const settings = definePluginSettings({
     },
     backgroundPreloadLimit: {
         type: OptionType.SLIDER,
-        description: "Maximum GIF previews to preload from each picker update. Set to 0 for no limit.",
+        description: "Maximum GIF previews to preload from each background batch. Set to 0 for no limit.",
         markers: [0, 50, 100, 250, 500, 1000],
         default: DEFAULT_BACKGROUND_PRELOAD_LIMIT,
         stickToMarkers: true
@@ -233,7 +245,16 @@ export default definePlugin({
         }
     ],
 
+    start() {
+        scheduleFavoritePreload();
+    },
+
     stop() {
+        if (favoritePreloadTimer) {
+            clearTimeout(favoritePreloadTimer);
+            favoritePreloadTimer = undefined;
+        }
+
         activeLoads = 0;
         activeBackgroundPreloads = 0;
         clearCaches();
@@ -266,8 +287,7 @@ export default definePlugin({
                 continue;
             }
 
-            queueBackgroundPreload(getPreloadSrc(src));
-            preloaded++;
+            if (queueBackgroundPreload(getPreloadSrc(src))) preloaded++;
         }
 
         return gifs;
@@ -570,8 +590,62 @@ function getRetryCount() {
     return settings.store.retryCount ?? DEFAULT_RETRY_COUNT;
 }
 
+function scheduleFavoritePreload() {
+    if (favoritePreloadTimer) {
+        clearTimeout(favoritePreloadTimer);
+        favoritePreloadTimer = undefined;
+    }
+
+    if (!settings.store.preloadFavoritesOnStart) return;
+
+    favoritePreloadTimer = setTimeout(() => {
+        favoritePreloadTimer = undefined;
+        preloadFavoriteGifs();
+    }, 1000);
+}
+
+function preloadFavoriteGifs() {
+    if (!settings.store.preloadFavoritesOnStart) return;
+
+    let preloaded = 0;
+    const limit = getBackgroundPreloadLimit();
+
+    for (const src of getFavoriteGifUrls()) {
+        if (limit > 0 && preloaded >= limit) {
+            bumpStat("preloadLimitSkips");
+            continue;
+        }
+
+        if (queueBackgroundPreload(getPreloadSrc(src), true)) preloaded++;
+    }
+}
+
+function getFavoriteGifUrls() {
+    try {
+        const actions: unknown = UserSettingsActionCreators.FrecencyUserSettingsActionCreators;
+        if (!actions || typeof actions !== "object" || !("getCurrentValue" in actions)) return [];
+
+        const { getCurrentValue } = actions as { getCurrentValue?: unknown; };
+        if (typeof getCurrentValue !== "function") return [];
+
+        const currentValue: unknown = getCurrentValue();
+        if (!currentValue || typeof currentValue !== "object" || !("favoriteGifs" in currentValue)) return [];
+
+        const { favoriteGifs } = currentValue as { favoriteGifs?: unknown; };
+        if (!favoriteGifs || typeof favoriteGifs !== "object" || !("gifs" in favoriteGifs)) return [];
+
+        const { gifs } = favoriteGifs as { gifs?: unknown; };
+        if (!gifs || typeof gifs !== "object") return [];
+
+        return Object.keys(gifs).filter(shouldOptimizeSrc);
+    } catch (err) {
+        logger.debug("Failed to read favorite GIFs.", err);
+        return [];
+    }
+}
+
 function rememberLoadedUrl(src: string) {
-    if (!settings.store.rememberLoadedPreviews && !settings.store.preloadAllInBackground) return;
+    if (!settings.store.rememberLoadedPreviews && !settings.store.preloadAllInBackground && !settings.store.preloadFavoritesOnStart) return;
 
     loadedPreviewUrls.add(src);
 
@@ -603,13 +677,14 @@ function subscribePreviewLoad(src: string, listener: () => void) {
     };
 }
 
-function queueBackgroundPreload(src: string) {
-    if (!settings.store.preloadAllInBackground || loadedPreviewUrls.has(src) || backgroundPreloadQueued.has(src)) return;
+function queueBackgroundPreload(src: string, force = false) {
+    if ((!force && !settings.store.preloadAllInBackground) || loadedPreviewUrls.has(src) || backgroundPreloadQueued.has(src)) return false;
 
     bumpStat("backgroundQueued");
     backgroundPreloadQueued.add(src);
     backgroundPreloadQueue.push(src);
     pumpBackgroundPreloads();
+    return true;
 }
 
 function pumpBackgroundPreloads() {

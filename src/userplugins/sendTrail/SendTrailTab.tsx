@@ -19,9 +19,8 @@ import { Switch } from "@components/Switch";
 import { classNameFactory } from "@utils/css";
 import { Margins } from "@utils/margins";
 import { sleep } from "@utils/misc";
-import { closeModal, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "@utils/modal";
-import type { User } from "@vencord/discord-types";
-import { Alerts, ChannelStore, IconUtils, MessageActions, NavigationRouter, React, Select, TextInput, Toasts, UserStore, UserUtils, useStateFromStores } from "@webpack/common";
+import type { RenderModalProps, User } from "@vencord/discord-types";
+import { Alerts, ChannelStore, IconUtils, MessageActions, Modal, NavigationRouter, openModal, React, Select, TextInput, Toasts, UserStore, UserUtils, useStateFromStores } from "@webpack/common";
 
 import { BRAND_ICON_DATA_URL, BRAND_NAME } from "../_kamidereCompat/branding";
 import { removeKamidereRuntimeTask, upsertKamidereRuntimeTask } from "../_kamidereCompat/runtimeActivity";
@@ -411,7 +410,7 @@ function SendTrailConfigModal({
     close,
     records,
 }: {
-    modalProps: ModalProps;
+    modalProps: RenderModalProps;
     close(): void;
     records: SentTrailRecord[];
 }) {
@@ -515,13 +514,17 @@ function SendTrailConfigModal({
     }, [dmUserIds, resolvedDmUsers]);
 
     return (
-        <ModalRoot {...modalProps} size={ModalSize.MEDIUM}>
-            <ModalHeader separator={false}>
-                <BaseText size="lg" weight="semibold" style={{ flexGrow: 1 }}>Purge Config</BaseText>
-                <ModalCloseButton onClick={close} />
-            </ModalHeader>
-
-            <ModalContent className={cl("config-modal")}>
+        <Modal
+            {...modalProps}
+            size="md"
+            title={<BaseText size="lg" weight="semibold">Purge Config</BaseText>}
+            actions={[{
+                text: "Close",
+                variant: "secondary",
+                onClick: close
+            }]}
+        >
+            <div className={cl("config-modal")}>
                 <Paragraph className={cl("config-copy")}>
                     These rules decide what the `Purge` action is allowed to delete. Protected direct messages stay in Send Trail until you change the config.
                 </Paragraph>
@@ -663,12 +666,8 @@ function SendTrailConfigModal({
                         ))}
                     </div>
                 )}
-            </ModalContent>
-
-            <ModalFooter>
-                <Button variant="secondary" onClick={close}>Close</Button>
-            </ModalFooter>
-        </ModalRoot>
+            </div>
+        </Modal>
     );
 }
 
@@ -1162,10 +1161,10 @@ function SendTrailTab() {
     }, []);
 
     const openConfigModal = React.useCallback(() => {
-        const modalKey = openModal(modalProps => (
+        openModal(modalProps => (
             <SendTrailConfigModal
                 modalProps={modalProps}
-                close={() => closeModal(modalKey)}
+                close={modalProps.onClose}
                 records={records}
             />
         ));

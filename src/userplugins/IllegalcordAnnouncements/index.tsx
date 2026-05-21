@@ -10,11 +10,11 @@ import { definePluginSettings } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
 import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
-import { Flex } from "@components/Flex";
 import { GithubIcon, OpenExternalIcon } from "@components/Icons";
 import { classNameFactory } from "@utils/css";
-import { CloseButton, closeModal, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import definePlugin, { OptionType } from "@utils/types";
+import type { RenderModalProps } from "@vencord/discord-types";
+import { closeModal, Modal, openModal } from "@webpack/common";
 
 const TELEGRAM_URL = "https://t.me/Illegalcord";
 const GITHUB_URL = "https://github.com/ImHisako/Illegalcord";
@@ -31,7 +31,7 @@ const settings = definePluginSettings({
 });
 
 interface AnnouncementModalProps {
-    modalProps: ModalProps;
+    modalProps: RenderModalProps;
 }
 
 function openExternal(url: string) {
@@ -45,20 +45,26 @@ function IllegalcordAnnouncementModal({ modalProps }: AnnouncementModalProps) {
     };
 
     return (
-        <ModalRoot {...modalProps} size={ModalSize.MEDIUM} className={cl("modal")}>
-            <ModalHeader separator={false} className={cl("header")}>
-                <div className={cl("header-content")}>
-                    <BaseText tag="h2" size="lg" weight="semibold" className={cl("title")}>
-                        Illegalcord Updates
-                    </BaseText>
-                    <BaseText tag="p" size="sm" color="text-muted" className={cl("description")}>
-                        Join the Telegram for updates, announcements, issue notices, and a direct place to contact the Illegalcord maintainer.
-                    </BaseText>
-                </div>
-                <CloseButton onClick={modalProps.onClose} />
-            </ModalHeader>
-
-            <ModalContent className={cl("content")}>
+        <Modal
+            {...modalProps}
+            size="md"
+            title={<BaseText tag="h2" size="lg" weight="semibold" className={cl("title")}>Illegalcord Updates</BaseText>}
+            subtitle="Join the Telegram for updates, announcements, issue notices, and a direct place to contact the Illegalcord maintainer."
+            actions={[
+                {
+                    text: "Do not show again",
+                    variant: "secondary",
+                    onClick: dismissForever
+                },
+                {
+                    text: "Continue",
+                    variant: "primary",
+                    onClick: modalProps.onClose
+                }
+            ]}
+        >
+            <div className={cl("modal")}>
+            <div className={cl("content")}>
                 <div className={cl("actions")}>
                     <section className={cl("action")}>
                         <div>
@@ -86,19 +92,9 @@ function IllegalcordAnnouncementModal({ modalProps }: AnnouncementModalProps) {
                         </Button>
                     </section>
                 </div>
-            </ModalContent>
-
-            <ModalFooter separator={false}>
-                <Flex justifyContent="flex-end" flexWrap="wrap" gap="8px" className={cl("footer")}>
-                    <Button variant="secondary" onClick={dismissForever}>
-                        Do not show again
-                    </Button>
-                    <Button onClick={modalProps.onClose}>
-                        Continue
-                    </Button>
-                </Flex>
-            </ModalFooter>
-        </ModalRoot>
+            </div>
+            </div>
+        </Modal>
     );
 }
 

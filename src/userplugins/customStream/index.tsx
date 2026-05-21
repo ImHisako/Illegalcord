@@ -21,11 +21,10 @@ import { DataStore } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { ImageIcon } from "@components/Icons";
-import { Alerts } from "@webpack/common";
-import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import definePlugin, { OptionType } from "@utils/types";
+import type { RenderModalProps } from "@vencord/discord-types";
 import { findComponentByCodeLazy } from "@webpack";
-import { Button, Menu, React, showToast, Text, Toasts, UserStore, useState, useEffect, useRef } from "@webpack/common";
+import { Alerts, Button, Menu, Modal, openModal, React, showToast, Text, Toasts, useEffect, useRef,UserStore, useState } from "@webpack/common";
 
 // Компонент кнопки в панели
 const PanelButton = findComponentByCodeLazy(".GREEN,positionKeyStemOverride:");
@@ -37,7 +36,7 @@ const DATASTORE_KEY_PROFILES = "CustomStreamTopQ_Profiles";
 const DATASTORE_KEY_ACTIVE_PROFILE = "CustomStreamTopQ_ActiveProfile";
 const MAX_IMAGES = 50;
 const MAX_IMAGES_PER_PROFILE = 50;
-const MAX_PROFILES = 5;  // Maximum number of profiles allowed
+const MAX_PROFILES = 5; // Maximum number of profiles allowed
 const DEFAULT_PROFILE_ID = "default";
 
 // Структура профиля
@@ -50,7 +49,7 @@ interface Profile {
 }
 
 // Кэш для профилей
-let profiles: Map<string, Profile> = new Map();
+const profiles: Map<string, Profile> = new Map();
 let activeProfileId: string = DEFAULT_PROFILE_ID;
 
 // Кэш для изображений в памяти (для обратной совместимости)
@@ -360,7 +359,7 @@ async function moveImage(fromIndex: number, toIndex: number): Promise<void> {
     if (fromIndex < 0 || fromIndex >= profile.images.length) return;
     if (toIndex < 0 || toIndex >= profile.images.length) return;
 
-    // Простой swap 
+    // Простой swap
     [profile.images[fromIndex], profile.images[toIndex]] = [profile.images[toIndex], profile.images[fromIndex]];
     [profile.dataUris[fromIndex], profile.dataUris[toIndex]] = [profile.dataUris[toIndex], profile.dataUris[fromIndex]];
 
@@ -431,7 +430,7 @@ async function processImage(blob: Blob): Promise<Blob> {
 
             // Discord использует JPEG для превью стримов
             // Качество 0.7 для уменьшения размера (Discord ограничивает ~100KB)
-            canvas.toBlob((newBlob) => {
+            canvas.toBlob(newBlob => {
                 if (newBlob) {
                     resolve(newBlob);
                 } else {
@@ -449,7 +448,7 @@ async function processImage(blob: Blob): Promise<Blob> {
     });
 }
 
-function ImagePickerModal({ rootProps }: { rootProps: any; }) {
+function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
     // Сохраняем исходные значения для отката
     const initialSettingsRef = useRef({
         enabled: settings.store.replaceEnabled,
@@ -693,7 +692,7 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
         e.stopPropagation();
         setIsDragging(false);
 
-        const files = e.dataTransfer.files;
+        const { files } = e.dataTransfer;
         if (files.length > 0) {
             await handleDroppedFiles(files);
         }
@@ -705,7 +704,7 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
         input.accept = "image/png,image/jpeg,image/webp";
         input.multiple = multiple;
         input.onchange = async (e: any) => {
-            const files = e.target.files;
+            const { files } = e.target;
             if (!files?.length) return;
 
             // Проверяем лимит для текущего профиля
@@ -886,7 +885,28 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
     const nextIndex = getNextIndex();
 
     return (
-        <ModalRoot {...rootProps} size={ModalSize.LARGE}>
+        <Modal
+            {...rootProps}
+            size="lg"
+            title="Stream Preview"
+            actionBarInput={
+                <Text variant="text-xs/normal" style={{ color: "var(--text-muted)" }}>
+                    📁 {profiles.get(currentProfileId)?.name || "Default"}: {images.length} / {MAX_IMAGES_PER_PROFILE} images
+                </Text>
+            }
+            actions={[
+                {
+                    text: "Cancel",
+                    variant: "secondary",
+                    onClick: handleCancel
+                },
+                {
+                    text: "Save",
+                    variant: "primary",
+                    onClick: handleSave
+                }
+            ]}
+        >
             {/* Полноэкранный просмотр изображения */}
             {previewImage && (
                 <div
@@ -943,19 +963,12 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
                 </div>
             )}
 
-            <ModalHeader>
-                <Text variant="heading-lg/semibold" style={{ flexGrow: 1 }}>
-                    Stream Preview
-                </Text>
-                <ModalCloseButton onClick={handleCancel} />
-            </ModalHeader>
-            <ModalContent>
-                <div
-                    style={{ padding: "20px", position: "relative" }}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                >
+            <div
+                style={{ padding: "20px", position: "relative" }}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+            >
 
                     {/* Оверлей для drag & drop файлов - только верх до галереи */}
                     {isDragging && draggedIndex === null && (
@@ -1277,7 +1290,7 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
                                                 borderLeft: "1px solid rgba(255,255,255,0.3)"
                                             }}>
                                                 <button
-                                                    onClick={(e) => {
+                                                    onClick={e => {
                                                         e.stopPropagation();
                                                         setEditingProfileId(profile.id);
                                                         setEditingProfileName(profile.name);
@@ -1304,7 +1317,7 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
                                                 </button>
                                                 {canDelete && (
                                                     <button
-                                                        onClick={(e) => {
+                                                        onClick={e => {
                                                             e.stopPropagation();
                                                             handleDeleteProfile(profile.id);
                                                         }}
@@ -1581,10 +1594,10 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
                                         key={index}
                                         draggable
                                         onClick={() => handleSelectCurrent(index)}
-                                        onDragStart={(e) => handleImageDragStart(e, index)}
-                                        onDragOver={(e) => handleImageDragOver(e, index)}
+                                        onDragStart={e => handleImageDragStart(e, index)}
+                                        onDragOver={e => handleImageDragOver(e, index)}
                                         onDragLeave={handleImageDragLeave}
-                                        onDrop={(e) => handleImageDrop(e, index)}
+                                        onDrop={e => handleImageDrop(e, index)}
                                         onDragEnd={handleImageDragEnd}
                                         style={{
                                             position: "relative",
@@ -1679,7 +1692,7 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
                                         }}>
                                             {/* Полноэкранный просмотр */}
                                             <button
-                                                onClick={(e) => {
+                                                onClick={e => {
                                                     e.stopPropagation();
                                                     setPreviewImage(src);
                                                 }}
@@ -1706,7 +1719,7 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
                                             </button>
                                             {/* Скачать */}
                                             <button
-                                                onClick={(e) => {
+                                                onClick={e => {
                                                     e.stopPropagation();
                                                     const a = document.createElement("a");
                                                     a.href = src;
@@ -1736,7 +1749,7 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
                                             </button>
                                             {/* Удалить */}
                                             <button
-                                                onClick={(e) => {
+                                                onClick={e => {
                                                     e.stopPropagation();
                                                     handleDelete(index);
                                                 }}
@@ -1831,40 +1844,13 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
                             Images stored locally • Limit: {MAX_IMAGES_PER_PROFILE} images per profile
                         </Text>
                     </div>
-                </div>
-            </ModalContent>
-            <ModalFooter>
-                <div style={{ display: "flex", gap: "12px", width: "100%", justifyContent: "space-between", alignItems: "center" }}>
-                    <Text variant="text-xs/normal" style={{ color: "var(--text-muted)" }}>
-                        📁 {profiles.get(currentProfileId)?.name || "Default"}: {images.length} / {MAX_IMAGES_PER_PROFILE} images
-                    </Text>
-                    <div style={{ display: "flex", gap: "10px" }}>
-                        <Button
-                            onClick={handleCancel}
-                            style={{
-                                padding: "10px 20px"
-                            }}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            color={Button.Colors.GREEN}
-                            onClick={handleSave}
-                            style={{
-                                padding: "10px 24px"
-                            }}
-                        >
-                            ✓ Save
-                        </Button>
-                    </div>
-                </div>
-            </ModalFooter>
-        </ModalRoot>
+            </div>
+        </Modal>
     );
 }
 
 function openImagePicker() {
-    openModal((props: any) => <ImagePickerModal rootProps={props} />);
+    openModal(props => <ImagePickerModal rootProps={props} />);
 }
 
 // Иконка для кнопки панели с бейджем количества
@@ -1949,7 +1935,7 @@ function formatFileSize(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// Кнопка в панели аккаунта 
+// Кнопка в панели аккаунта
 function StreamPreviewPanelButton(props: { nameplate?: any; }) {
     const [imageCount, setImageCount] = useState(0);
     const [isEnabled, setIsEnabled] = useState(settings.store.replaceEnabled);
@@ -1968,7 +1954,7 @@ function StreamPreviewPanelButton(props: { nameplate?: any; }) {
             setIsRandom(settings.store.slideshowRandom);
             setCurrentIndex(currentSlideIndex);
             setStreamActive(isStreamActive);
-            // Обновляем превью РЕАЛЬНОЙ картинки на стриме 
+            // Обновляем превью РЕАЛЬНОЙ картинки на стриме
             setCurrentImageUri(actualStreamImageUri);
         };
 

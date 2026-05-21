@@ -7,13 +7,12 @@
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
+import { classNameFactory } from "@utils/css";
 import { openUserProfile } from "@utils/discord";
 import { Logger } from "@utils/Logger";
-import { closeModal, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import definePlugin from "@utils/types";
-import { findByPropsLazy, findComponentByCodeLazy } from "@webpack";
-import { FluxDispatcher, GuildMemberStore, Menu, PresenceStore, ScrollerThin, Text, useEffect, UserStore, useStateFromStores } from "@webpack/common";
-import { classNameFactory } from "@utils/css";
+import { findByPropsLazy } from "@webpack";
+import { FluxDispatcher, GuildMemberStore, Menu, Modal, openModal, ScrollerThin, Text, useEffect, UserStore, useStateFromStores } from "@webpack/common";
 
 const cl = classNameFactory("bc-");
 
@@ -23,21 +22,15 @@ async function openViewBoosters(guild: string) {
     logger.info("Viewing boosters for guild", guild);
     const boosters = await fetchBoosters(getToken(), guild);
     logger.info(boosters);
-    const key = openModal(props => (
+    openModal(props => (
         <ErrorBoundary>
-            <ModalRoot {...props} size={ModalSize.LARGE}>
-                <ModalHeader>
-                    <Text variant="heading-lg/semibold" style={{ flexGrow: 1 }}>Boosters</Text>
-                    <ModalCloseButton onClick={() => closeModal(key)} />
-                </ModalHeader>
-                <ModalContent>
-                    <UserList guildId={guild} boosters={boosters} />
-                </ModalContent >
-                <ModalFooter>
-                    <Flex cellSpacing={10}>
-                    </Flex>
-                </ModalFooter>
-            </ModalRoot >
+            <Modal
+                {...props}
+                size="lg"
+                title={<Text variant="heading-lg/semibold">Boosters</Text>}
+            >
+                <UserList guildId={guild} boosters={boosters} />
+            </Modal>
         </ErrorBoundary >
     ));
 }
@@ -115,7 +108,6 @@ async function fetchBoosters(authorization: string, guildId: string) {
     return boosters;
 }
 
-
 function UserList({ guildId, boosters }: { guildId: string, boosters: any; }) {
     const missing = [] as string[];
     const members = [] as string[];
@@ -150,7 +142,7 @@ function UserList({ guildId, boosters }: { guildId: string, boosters: any; }) {
             {members.map(id => {
                 const user = UserStore.getUser(id);
                 if (!user) {
-                    logger.info('No user');
+                    logger.info("No user");
                     return null;
                 }
 
@@ -188,13 +180,12 @@ function UserList({ guildId, boosters }: { guildId: string, boosters: any; }) {
     );
 }
 
-
 function BoostIcon() {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" fill="white" stroke="white" width="18" height="18" viewBox="0 0 24 24" id="level-2-discord-boost">
-            <path fill="#000" fill-rule="evenodd" d="M11.68 1.616a.5.5 0 0 1 .64 0l6 5A.5.5 0 0 1 18.5 7v10a.5.5 0 0 1-.18.384l-6 5a.5.5 0 0 1-.64 0l-6-5A.5.5 0 0 1 5.5 17V7a.5.5 0 0 1 .18-.384l6-5ZM6.5 7.234v9.532l5.5 4.583 5.5-4.583V7.234L12 2.651 6.5 7.234Z" clip-rule="evenodd"></path>
-            <path fill="#000" fill-rule="evenodd" d="M11.662 5.631a.5.5 0 0 1 .676 0l3 2.75a.5.5 0 0 1 .162.369v6.5a.5.5 0 0 1-.162.369l-3 2.75a.5.5 0 0 1-.676 0l-3-2.75a.5.5 0 0 1-.162-.369v-6.5a.5.5 0 0 1 .162-.369l3-2.75ZM9.5 8.97v6.06l2.5 2.292 2.5-2.292V8.97L12 6.678 9.5 8.97Z" clip-rule="evenodd"></path>
-            <path fill="#000" fill-rule="evenodd" d="M12.5 2.5V6h-1V2.5h1ZM6.224 6.553l3 1.5-.448.894-3-1.5.448-.894Zm12 .894-3 1.5-.448-.894 3-1.5.448.894ZM5.776 16.553l3-1.5.448.894-3 1.5-.448-.894Zm12 .894-3-1.5.448-.894 3 1.5-.448.894ZM11.5 21.5V18h1v3.5h-1Z" clip-rule="evenodd"></path>
+            <path fill="#000" fillRule="evenodd" d="M11.68 1.616a.5.5 0 0 1 .64 0l6 5A.5.5 0 0 1 18.5 7v10a.5.5 0 0 1-.18.384l-6 5a.5.5 0 0 1-.64 0l-6-5A.5.5 0 0 1 5.5 17V7a.5.5 0 0 1 .18-.384l6-5ZM6.5 7.234v9.532l5.5 4.583 5.5-4.583V7.234L12 2.651 6.5 7.234Z" clipRule="evenodd"></path>
+            <path fill="#000" fillRule="evenodd" d="M11.662 5.631a.5.5 0 0 1 .676 0l3 2.75a.5.5 0 0 1 .162.369v6.5a.5.5 0 0 1-.162.369l-3 2.75a.5.5 0 0 1-.676 0l-3-2.75a.5.5 0 0 1-.162-.369v-6.5a.5.5 0 0 1 .162-.369l3-2.75ZM9.5 8.97v6.06l2.5 2.292 2.5-2.292V8.97L12 6.678 9.5 8.97Z" clipRule="evenodd"></path>
+            <path fill="#000" fillRule="evenodd" d="M12.5 2.5V6h-1V2.5h1ZM6.224 6.553l3 1.5-.448.894-3-1.5.448-.894Zm12 .894-3 1.5-.448-.894 3-1.5.448.894ZM5.776 16.553l3-1.5.448.894-3 1.5-.448-.894Zm12 .894-3-1.5.448-.894 3 1.5-.448.894ZM11.5 21.5V18h1v3.5h-1Z" clipRule="evenodd"></path>
         </svg>
     );
 }

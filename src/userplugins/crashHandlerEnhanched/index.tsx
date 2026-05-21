@@ -30,13 +30,12 @@ import { CopyIcon, OpenExternalIcon, WarningIcon } from "@components/Icons";
 import { classNameFactory } from "@utils/css";
 import { copyWithToast } from "@utils/discord";
 import { Logger } from "@utils/Logger";
-import { closeAllModals } from "@utils/modal";
 import { relaunch } from "@utils/native";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import { maybePromptToUpdate } from "@utils/updater";
 import type { RenderModalProps } from "@vencord/discord-types";
 import { filters, findBulk, proxyLazyWebpack } from "@webpack";
-import { closeModal, DraftType, ExpressionPickerStore, FluxDispatcher, Modal, NavigationRouter, openModal, SelectedChannelStore } from "@webpack/common";
+import { closeAllModals, closeModal, DraftType, ExpressionPickerStore, FluxDispatcher, Modal, NavigationRouter, openModal, SelectedChannelStore } from "@webpack/common";
 
 import type * as NativeModule from "./native";
 
