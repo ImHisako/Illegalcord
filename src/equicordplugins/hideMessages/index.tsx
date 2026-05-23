@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import "./styles.css";
+
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
@@ -12,6 +14,7 @@ import { EyeIcon } from "@components/Icons";
 import pinDms from "@plugins/pinDms";
 import { isPinned } from "@plugins/pinDms/data";
 import { EquicordDevs } from "@utils/constants";
+import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel, Message } from "@vencord/discord-types";
 import { ChannelStore, Clickable, FluxDispatcher, Menu, Tooltip } from "@webpack/common";
@@ -24,6 +27,7 @@ interface PrivateChannelsListInstance {
     forceUpdate(callback?: () => void): void;
 }
 
+const cl = classNameFactory("vc-hide-messages-");
 const hiddenDmIds = new Set<string>();
 let privateChannelsListInstance: PrivateChannelsListInstance | null = null;
 let showHiddenDms = false;
@@ -146,6 +150,7 @@ export default definePlugin({
                 {tooltipProps => (
                     <Clickable
                         {...tooltipProps}
+                        className={cl("eye")}
                         role="button"
                         tabIndex={0}
                         aria-label={label}
@@ -158,7 +163,7 @@ export default definePlugin({
                             notifyHiddenDmsUpdate();
                         }}
                     >
-                        <EyeIcon width={18} height={18} />
+                        <EyeIcon width={14} height={14} />
                     </Clickable>
                 )}
             </Tooltip>
