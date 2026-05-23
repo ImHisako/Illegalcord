@@ -19,8 +19,11 @@ import { closeModal, Modal, openModal } from "@webpack/common";
 const TELEGRAM_URL = "https://t.me/Illegalcord";
 const GITHUB_URL = "https://github.com/ImHisako/Illegalcord";
 const cl = classNameFactory("vc-illegalcord-announcements-");
+const DISCORD_LOCK_UNLOCKED_EVENT = "vencord-discordlock-unlocked";
 
 let hasOpened = false;
+let pendingOpen = false;
+let pendingForceOpen = false;
 
 const settings = definePluginSettings({
     showStartupModal: {
@@ -36,6 +39,23 @@ interface AnnouncementModalProps {
 
 function openExternal(url: string) {
     VencordNative.native.openExternal(url);
+}
+
+function isDiscordLockActive() {
+    return document.documentElement.dataset.discordLockActive === "true" || document.getElementById("vcl-overlay") != null;
+}
+
+function deferUntilDiscordUnlock(force: boolean) {
+    pendingForceOpen ||= force;
+    if (pendingOpen) return;
+
+    pendingOpen = true;
+    window.addEventListener(DISCORD_LOCK_UNLOCKED_EVENT, () => {
+        const forceOpen = pendingForceOpen;
+        pendingOpen = false;
+        pendingForceOpen = false;
+        openIllegalcordAnnouncementModal(forceOpen);
+    }, { once: true });
 }
 
 function IllegalcordAnnouncementModal({ modalProps }: AnnouncementModalProps) {
@@ -117,6 +137,10 @@ const SafeIllegalcordAnnouncementSettings = ErrorBoundary.wrap(IllegalcordAnnoun
 
 export function openIllegalcordAnnouncementModal(force = false) {
     if (!force && (!settings.store.showStartupModal || hasOpened)) return;
+    if (isDiscordLockActive()) {
+        deferUntilDiscordUnlock(force);
+        return;
+    }
 
     hasOpened = true;
     const modalKey = openModal(modalProps => (

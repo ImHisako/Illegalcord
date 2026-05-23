@@ -18,12 +18,22 @@ const listeners = new Set<() => void>();
 let events: SurveillanceEvent[] = [];
 let loaded = false;
 let loading: Promise<SurveillanceEvent[]> | undefined;
+let notifyQueued = false;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
-const notify = () => {
+const flushNotify = () => {
+    notifyQueued = false;
+
     for (const listener of listeners) {
         listener();
     }
+};
+
+const notify = () => {
+    if (notifyQueued) return;
+
+    notifyQueued = true;
+    void Promise.resolve().then(flushNotify);
 };
 
 export const subscribe = (listener: () => void) => {

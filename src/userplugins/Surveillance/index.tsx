@@ -21,11 +21,15 @@ import type { MessageSnapshot, SurveillanceEvent, SurveillanceEventType, Surveil
 const SETTINGS_ENTRY_KEY = "illegalcord_surveillance";
 const NOTIFICATION_COLOR = "#5865f2";
 const MESSAGE_PREVIEW_LIMIT = 220;
+const MESSAGE_CACHE_LIMIT = 1000;
 const TYPING_COOLDOWN = 15_000;
+const TYPING_CACHE_LIMIT = 2000;
 const MEMBER_JOIN_FRESHNESS = 300_000;
 
 let targets: string[] = [];
 let serverTargets: string[] = [];
+let targetIds = new Set<string>();
+let serverTargetIds = new Set<string>();
 const targetListeners = new Set<() => void>();
 const serverTargetListeners = new Set<() => void>();
 const messageCache = new Map<string, MessageSnapshot>();
@@ -97,12 +101,14 @@ const voiceStateLabels: Array<[VoiceStateFlag, string, string]> = [
 
 const updateTargets = (value: string): string[] => {
     targets = [...new Set(value.match(/\d+/g) ?? [])];
+    targetIds = new Set(targets);
     targetListeners.forEach(listener => listener());
     return targets;
 };
 
 const updateServerTargets = (value: string): string[] => {
     serverTargets = [...new Set(value.match(/\d+/g) ?? [])];
+    serverTargetIds = new Set(serverTargets);
     serverTargetListeners.forEach(listener => listener());
     return serverTargets;
 };
@@ -256,14 +262,14 @@ const shouldIgnoreUser = (userId: string, user?: User) =>
     settings.store.ignoreBots && isBotUser(userId, user);
 
 const shouldTrackUser = (userId: string) => {
-    if (!targets.includes(userId)) return false;
+    if (!targetIds.has(userId)) return false;
     if (shouldIgnoreUser(userId)) return false;
     if (settings.store.trackSelf) return true;
     return !isCurrentUser(userId);
 };
 
 const shouldTrackServer = (guildId?: string) =>
-    guildId != null && serverTargets.includes(guildId);
+    guildId != null && serverTargetIds.has(guildId);
 
 const getScope = (userId: string, guildId?: string): SurveillanceScope | undefined => {
     if (shouldIgnoreUser(userId)) return;
@@ -314,7 +320,7 @@ const getChannelEventInfo = (event: ChannelFluxEvent): ChannelInfo => {
 const rememberServerUser = (userId: string, guildId?: string) => {
     if (isCurrentUser(userId)) return;
     if (shouldIgnoreUser(userId)) return;
-    if (!guildId || !serverTargets.includes(guildId)) return;
+    if (!guildId || !serverTargetIds.has(guildId)) return;
 
     let guildIds = seenServerUsers.get(userId);
     if (!guildIds) {
@@ -327,7 +333,7 @@ const rememberServerUser = (userId: string, guildId?: string) => {
     if (!lastStatuses.has(userId)) {
         const statuses = PresenceStore.getState()?.statuses ?? {};
         lastStatuses.set(userId, statuses[userId] ?? "offline");
-        lastActivities.set(userId, getActivityMap(userId));
+        if (settings.store.logActivities) lastActivities.set(userId, getActivityMap(userId));
     }
 };
 
@@ -336,7 +342,7 @@ const getSeenServerGuildId = (userId: string) => {
     if (!guildIds) return undefined;
 
     for (const guildId of guildIds) {
-        if (serverTargets.includes(guildId)) return guildId;
+        if (serverTargetIds.has(guildId)) return guildId;
     }
 };
 
@@ -362,6 +368,23 @@ const notify = (event: SurveillanceEvent) => {
         color: NOTIFICATION_COLOR,
         icon: user?.getAvatarURL(),
     });
+};
+
+const rememberMessage = (messageId: string, snapshot: MessageSnapshot) => {
+    messageCache.set(messageId, snapshot);
+
+    if (messageCache.size <= MESSAGE_CACHE_LIMIT) return;
+
+    const oldest = messageCache.keys().next();
+    if (!oldest.done) messageCache.delete(oldest.value);
+};
+
+const pruneTypingCooldowns = (now: number) => {
+    if (typingCooldowns.size <= TYPING_CACHE_LIMIT) return;
+
+    for (const [key, lastTypedAt] of typingCooldowns) {
+        if (now - lastTypedAt > TYPING_COOLDOWN) typingCooldowns.delete(key);
+    }
 };
 
 const addEvent = (entry: Omit<SurveillanceEvent, "id" | "timestamp">) => {
@@ -446,19 +469,27 @@ const getActivityMap = (userId: string) => {
 
 const seedPresence = () => {
     const statuses = PresenceStore.getState()?.statuses ?? {};
+    const { logActivities } = settings.store;
+
     lastStatuses = new Map();
     lastActivities = new Map();
 
     for (const userId of getPresenceUserIds()) {
         lastStatuses.set(userId, statuses[userId] ?? "offline");
-        lastActivities.set(userId, getActivityMap(userId));
+        if (logActivities) lastActivities.set(userId, getActivityMap(userId));
     }
 };
 
 const handlePresenceChange = () => {
+    const { logActivities, logStatus } = settings.store;
+    if (!logActivities && !logStatus) return;
+
+    const userIds = getPresenceUserIds();
+    if (!userIds.size) return;
+
     const statuses = PresenceStore.getState()?.statuses ?? {};
 
-    for (const userId of getPresenceUserIds()) {
+    for (const userId of userIds) {
         const guildId = getSeenServerGuildId(userId);
         const scope = getScope(userId, guildId);
         if (!scope) continue;
@@ -468,14 +499,14 @@ const handlePresenceChange = () => {
         const previousStatus = lastStatuses.get(userId) ?? "offline";
         const currentStatus = statuses[userId] ?? "offline";
 
-        if (settings.store.logStatus && previousStatus !== currentStatus) {
+        if (logStatus && previousStatus !== currentStatus) {
             addUserEvent("status", userId, `Status changed from ${previousStatus} to ${currentStatus}.`, { scope, ...guildInfo });
         }
 
-        const previousActivities = lastActivities.get(userId) ?? new Map<string, string>();
-        const currentActivities = getActivityMap(userId);
+        if (logActivities) {
+            const previousActivities = lastActivities.get(userId) ?? new Map<string, string>();
+            const currentActivities = getActivityMap(userId);
 
-        if (settings.store.logActivities) {
             for (const [key, activity] of currentActivities) {
                 const previousActivity = previousActivities.get(key);
 
@@ -492,10 +523,11 @@ const handlePresenceChange = () => {
             for (const [key, activity] of previousActivities) {
                 if (!currentActivities.has(key)) addUserEvent("activity_stop", userId, `Stopped ${activity}.`, { scope, ...guildInfo });
             }
+
+            lastActivities.set(userId, currentActivities);
         }
 
         lastStatuses.set(userId, currentStatus);
-        lastActivities.set(userId, currentActivities);
     }
 };
 
@@ -559,7 +591,7 @@ const logMessage = (message: Message) => {
 
     const content = settings.store.captureMessageContent ? preview(message.content) : undefined;
 
-    messageCache.set(message.id, {
+    rememberMessage(message.id, {
         userId: author.id,
         username: author.username,
         channelId: message.channel_id,
@@ -599,7 +631,7 @@ const logMessageUpdate = (message: Message) => {
     const content = settings.store.captureMessageContent ? preview(message.content) : undefined;
     const previousContent = previousMessage?.content;
 
-    messageCache.set(message.id, {
+    rememberMessage(message.id, {
         userId: message.author.id,
         username: message.author.username,
         channelId: message.channel_id,
@@ -679,6 +711,7 @@ const logTyping = (userId: string, channelId: string) => {
     if (now - lastTypedAt < TYPING_COOLDOWN) return;
 
     typingCooldowns.set(key, now);
+    pruneTypingCooldowns(now);
     rememberServerUser(userId, info.guildId);
     addUserEvent("typing", userId, "Started typing.", info);
 };
@@ -812,7 +845,7 @@ const logRoleEvent = (type: "role_create" | "role_delete" | "role_update", event
 const patchUserContext: NavContextMenuPatchCallback = (children, { user }: UserContextProps) => {
     if (!settings.store.addContextMenu || !user) return;
 
-    const tracked = targets.includes(user.id);
+    const tracked = targetIds.has(user.id);
     const group = findGroupChildrenByChildId("apps", children) ?? children;
     let index = group.findLastIndex(child => child?.props?.id === "ignore");
     if (index < 0) index = group.length - 1;

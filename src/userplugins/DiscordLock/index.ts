@@ -6,7 +6,11 @@
 
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType } from "@utils/types";
-import { UserStore, FluxDispatcher } from "@webpack/common";
+import { ChannelStore, FluxDispatcher, IconUtils, UserStore } from "@webpack/common";
+
+const OVERLAY_ID = "vcl-overlay";
+const LOCKED_EVENT = "vencord-discordlock-locked";
+const UNLOCKED_EVENT = "vencord-discordlock-unlocked";
 
 const settings = definePluginSettings({
     password: {
@@ -67,6 +71,7 @@ let domObserver: MutationObserver | null = null;
 let keyGuard: ((e: KeyboardEvent) => void) | null = null;
 let focusGuard: ((e: FocusEvent) => void) | null = null;
 let inactiveTimer: ReturnType<typeof setTimeout> | null = null;
+let loadLockListener: (() => void) | null = null;
 
 // tracks what's already been unlocked this session
 const unlockedGuilds = new Set<string>();
@@ -111,7 +116,9 @@ function lockFull() {
 
 function lock() {
     unbindActivity();
-    if (!document.getElementById("vcl-overlay")) createOverlay();
+    setLockState(true);
+    if (!document.getElementById(OVERLAY_ID)) createOverlay();
+    else bringOverlayToFront();
 }
 
 function unlock() {
@@ -129,10 +136,27 @@ function unlock() {
     if (overlay) {
         overlay.style.transition = "opacity 0.28s ease";
         overlay.style.opacity = "0";
-        setTimeout(() => { overlay?.remove(); overlay = null; }, 300);
+        setTimeout(() => {
+            overlay?.remove();
+            overlay = null;
+            setLockState(false);
+        }, 300);
+    } else {
+        setLockState(false);
     }
 
     bindActivity();
+}
+
+function setLockState(locked: boolean) {
+    if (locked) {
+        document.documentElement.dataset.discordLockActive = "true";
+        window.dispatchEvent(new CustomEvent(LOCKED_EVENT));
+        return;
+    }
+
+    delete document.documentElement.dataset.discordLockActive;
+    window.dispatchEvent(new CustomEvent(UNLOCKED_EVENT));
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────
@@ -166,33 +190,62 @@ function onChannelSelect({ guildId, channelId }: { guildId?: string; channelId?:
 
     // DM lock
     if (!guildId && channelId) {
-        try {
-            const { ChannelStore } = require("@webpack/common") as any;
-            const channel = ChannelStore?.getChannel?.(channelId);
+        const channel = ChannelStore.getChannel(channelId);
 
-            if (channel?.isDM?.() || channel?.isGroupDM?.()) {
-                const recipientId = channel.recipients?.[0];
-                if (recipientId && parseIds(settings.store.lockedUsers).has(recipientId)) {
-                    if (once && unlockedUsers.has(recipientId)) return;
-                    pendingUserId = recipientId;
-                    lock();
-                }
+        if (channel?.isDM?.() || channel?.isGroupDM?.()) {
+            const recipientId = channel.recipients?.[0];
+            if (recipientId && parseIds(settings.store.lockedUsers).has(recipientId)) {
+                if (once && unlockedUsers.has(recipientId)) return;
+                pendingUserId = recipientId;
+                lock();
             }
-        } catch { /* ChannelStore not ready */ }
+        }
     }
 }
 
 // ─── User ─────────────────────────────────────────────────────────────
 
 function getUserAssets() {
-    const user = UserStore?.getCurrentUser?.() as any;
+    const user = UserStore.getCurrentUser();
     if (!user) return { avatarUrl: "", username: "User" };
 
-    const avatarUrl = user.avatar
-        ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.webp?size=128`
-        : `https://cdn.discordapp.com/embed/avatars/${Number(BigInt(user.id) % 6n)}.png`;
+    const avatarUrl = IconUtils.getUserAvatarURL(user, false, 128);
 
     return { avatarUrl, username: user.globalName || user.username || "User" };
+}
+
+function escapeHtml(text: string) {
+    return text.replace(/[&<>"']/g, char => {
+        switch (char) {
+            case "&":
+                return "&amp;";
+            case "<":
+                return "&lt;";
+            case ">":
+                return "&gt;";
+            case "\"":
+                return "&quot;";
+            default:
+                return "&#39;";
+        }
+    });
+}
+
+function focusInput() {
+    const input = overlay?.querySelector<HTMLInputElement>("#vcl-input");
+    if (!input) return;
+
+    requestAnimationFrame(() => input.focus());
+}
+
+function bringOverlayToFront() {
+    if (!overlay) return;
+
+    if (overlay.parentElement !== document.body || document.body.lastElementChild !== overlay) {
+        document.body.appendChild(overlay);
+    }
+
+    focusInput();
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────
@@ -213,6 +266,8 @@ function injectStyles(blur: number) {
             position:                fixed;
             inset:                   0;
             z-index:                 2147483647;
+            pointer-events:          auto;
+            isolation:               isolate;
             display:                 flex;
             flex-direction:          column;
             align-items:             center;
@@ -362,11 +417,11 @@ function createOverlay() {
     const hint = settings.store.hint?.trim();
 
     overlay = document.createElement("div");
-    overlay.id = "vcl-overlay";
+    overlay.id = OVERLAY_ID;
 
     overlay.innerHTML = `
-        <div id="vcl-avatar" style="background-image:url('${avatarUrl}')"></div>
-        <p id="vcl-username">${username}</p>
+        <div id="vcl-avatar" style="background-image:url('${escapeHtml(avatarUrl)}')"></div>
+        <p id="vcl-username">${escapeHtml(username)}</p>
         <p id="vcl-sub">Enter password to unlock</p>
 
         <div id="vcl-input-wrap">
@@ -380,7 +435,7 @@ function createOverlay() {
             <span id="vcl-error-msg"></span>
         </div>
 
-        ${hint ? `<p id="vcl-hint"><i class="fa-regular fa-lightbulb"></i> ${hint}</p>` : ""}
+        ${hint ? `<p id="vcl-hint"><i class="fa-regular fa-lightbulb"></i> ${escapeHtml(hint)}</p>` : ""}
     `;
 
     document.body.appendChild(overlay);
@@ -440,22 +495,25 @@ function createOverlay() {
     document.addEventListener("keydown", keyGuard, true);
 
     focusGuard = (e: FocusEvent) => {
-        if (!overlay || e.target === input) return;
+        if (!overlay || overlay.contains(e.target as Node)) return;
         e.stopImmediatePropagation();
-        requestAnimationFrame(() => input.focus());
+        focusInput();
     };
     document.addEventListener("focusin", focusGuard, true);
 
     overlay.addEventListener("contextmenu", e => { if (e.target !== input) e.preventDefault(); });
     overlay.addEventListener("mousedown", e => { if (e.target === overlay) { e.preventDefault(); input.focus(); } });
 
-    setTimeout(() => input.focus(), 140);
+    setTimeout(focusInput, 140);
 
     domObserver = new MutationObserver(() => {
-        if (!document.getElementById("vcl-overlay") && overlay) {
+        if (!document.getElementById(OVERLAY_ID) && overlay) {
             document.body.appendChild(overlay);
-            requestAnimationFrame(() => input.focus());
+            focusInput();
+            return;
         }
+
+        bringOverlayToFront();
     });
     domObserver.observe(document.body, { childList: true });
 }
@@ -472,12 +530,20 @@ export default definePlugin({
     start() {
         FluxDispatcher.subscribe("CHANNEL_SELECT", onChannelSelect);
         if (document.readyState === "complete") lockFull();
-        else window.addEventListener("load", lockFull, { once: true });
+        else {
+            loadLockListener = lockFull;
+            window.addEventListener("load", loadLockListener, { once: true });
+        }
     },
 
     stop() {
         FluxDispatcher.unsubscribe("CHANNEL_SELECT", onChannelSelect);
         unbindActivity();
+
+        if (loadLockListener) {
+            window.removeEventListener("load", loadLockListener);
+            loadLockListener = null;
+        }
 
         domObserver?.disconnect();
         domObserver = null;
@@ -487,6 +553,7 @@ export default definePlugin({
 
         overlay?.remove();
         overlay = null;
+        setLockState(false);
 
         document.getElementById("vcl-styles")?.remove();
         document.getElementById("vcl-fa")?.remove();

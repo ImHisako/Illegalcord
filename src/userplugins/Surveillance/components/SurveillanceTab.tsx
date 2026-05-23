@@ -13,20 +13,24 @@ import { copyToClipboard } from "@utils/clipboard";
 import { classNameFactory } from "@utils/css";
 import { classes } from "@utils/misc";
 import type { RenderModalProps } from "@vencord/discord-types";
-import { ChannelStore, GuildStore, Modal, openModal, React, Select, TextInput, Toasts, useEffect, useMemo, UserStore, useState, useStateFromStores } from "@webpack/common";
+import { ChannelStore, GuildStore, Modal, openModal, React, TextInput, Toasts, useEffect, useMemo, UserStore, useState, useStateFromStores } from "@webpack/common";
 
-import { addServerTarget, getServerTargets, getTargets, removeServerTarget, removeTarget, setTargets, settings, subscribeServerTargets, subscribeTargets } from "..";
+import { addServerTarget, getServerTargets, getTargets, removeServerTarget, removeTarget, setServerTargets, setTargets, settings, subscribeServerTargets, subscribeTargets } from "..";
 import { clearEvents, getEvents, loadEvents, subscribe } from "../store";
 import type { SurveillanceEvent, SurveillanceEventType } from "../types";
 
 type EventFilter = "all" | "activity" | "message" | "presence" | "reaction" | "server" | "typing" | "voice";
+type SurveillancePage = "user" | "server";
 
-interface GuildOption {
-    label: string;
-    value: string;
+interface CachedUser {
+    id: string;
+    username: string;
+    globalName?: string | null;
 }
 
-const EVENT_PAGE_SIZE = 250;
+const EVENT_PAGE_SIZE = 100;
+const SEARCH_RESULT_LIMIT = 30;
+const TARGET_LIST_LIMIT = 50;
 const cl = classNameFactory("vc-surveillance-");
 
 const filterOptions: Array<{ label: string; value: EventFilter; }> = [
@@ -38,6 +42,11 @@ const filterOptions: Array<{ label: string; value: EventFilter; }> = [
     { label: "Voice", value: "voice" },
     { label: "Activities", value: "activity" },
     { label: "Typing", value: "typing" },
+];
+
+const pageOptions: Array<{ label: string; value: SurveillancePage; }> = [
+    { label: "User Surveillance", value: "user" },
+    { label: "Server Surveillance", value: "server" },
 ];
 
 const typeLabels: Record<SurveillanceEventType, string> = {
@@ -70,6 +79,32 @@ const typeLabels: Record<SurveillanceEventType, string> = {
     voice_move: "Voice",
     voice_update: "Voice",
 };
+
+const getBadgeClass = (type: SurveillanceEventType) => {
+    if (type.startsWith("activity_")) return cl("event-play");
+    if (type === "message_delete") return cl("event-deleted");
+    return cl(`event-${type}`);
+};
+
+const isCachedUser = (value: unknown): value is CachedUser => {
+    if (typeof value !== "object" || value == null) return false;
+
+    const user = value as Record<string, unknown>;
+    return typeof user.id === "string" && typeof user.username === "string";
+};
+
+const getCachedUsers = () => {
+    const users = UserStore.getUsers?.();
+    if (typeof users !== "object" || users == null) return [];
+
+    return Object.values(users).filter(isCachedUser);
+};
+
+const areStringArraysEqual = (first: string[], second: string[]) =>
+    first.length === second.length && first.every((value, index) => value === second[index]);
+
+const eventMatchesPage = (event: SurveillanceEvent, page: SurveillancePage) =>
+    page === "server" ? event.scope === "server" : event.scope !== "server";
 
 const eventMatchesFilter = (event: SurveillanceEvent, filter: EventFilter) => {
     if (filter === "all") return true;
@@ -202,6 +237,32 @@ function ServerPill({ guildId }: { guildId: string; }) {
     );
 }
 
+function UserSearchResult({ user, onAdd }: { user: CachedUser; onAdd(userId: string): void; }) {
+    return (
+        <button className={cl("search-result")} onClick={() => onAdd(user.id)} type="button">
+            <span>
+                <strong>{user.globalName ?? user.username}</strong>
+                <small>{user.username}</small>
+            </span>
+            <span className={cl("target-id")}>{user.id}</span>
+        </button>
+    );
+}
+
+function ServerSearchResult({ guildId, onAdd }: { guildId: string; onAdd(guildId: string): void; }) {
+    const guild = GuildStore.getGuild(guildId);
+
+    return (
+        <button className={cl("search-result")} onClick={() => onAdd(guildId)} type="button">
+            <span>
+                <strong>{guild?.name ?? guildId}</strong>
+                <small>Server</small>
+            </span>
+            <span className={cl("target-id")}>{guildId}</span>
+        </button>
+    );
+}
+
 function Stat({ label, value }: { label: string; value: number; }) {
     return (
         <div className={cl("stat")}>
@@ -220,8 +281,8 @@ function EventRow({ event }: { event: SurveillanceEvent; }) {
     ].filter(Boolean).join(" / ");
 
     return (
-        <button className={cl("event-row")} onClick={() => openEventModal(event)} type="button">
-            <div className={classes(cl("event-badge"), cl(`event-${event.type}`))}>
+        <button className={classes(cl("event-row"), event.type.startsWith("activity_") && cl("event-row-compact"))} onClick={() => openEventModal(event)} type="button">
+            <div className={classes(cl("event-badge"), getBadgeClass(event.type))}>
                 {typeLabels[event.type]}
             </div>
             <div className={cl("event-main")}>
@@ -244,18 +305,25 @@ function EventRow({ event }: { event: SurveillanceEvent; }) {
 
 function SurveillanceTab() {
     const [events, setEvents] = useState<SurveillanceEvent[]>(getEvents());
+    const [page, setPage] = useState<SurveillancePage>("user");
     const [targets, setLocalTargets] = useState(getTargets());
     const [serverTargets, setLocalServerTargets] = useState(getServerTargets());
     const [targetInput, setTargetInput] = useState("");
+    const [userSearch, setUserSearch] = useState("");
+    const [serverSearch, setServerSearch] = useState("");
+    const [collapsedPages, setCollapsedPages] = useState<Record<SurveillancePage, boolean>>({
+        server: false,
+        user: false,
+    });
     const [query, setQuery] = useState("");
     const [filter, setFilter] = useState<EventFilter>("all");
     const [visibleEventCount, setVisibleEventCount] = useState(EVENT_PAGE_SIZE);
-    const guilds = useStateFromStores([GuildStore], () => GuildStore.getGuildsArray());
+    const guildIds = useStateFromStores([GuildStore], () => GuildStore.getGuildsArray().map(guild => guild.id), [], areStringArraysEqual);
 
     useEffect(() => {
-        void loadEvents(settings.store.maxEvents).then(() => setEvents([...getEvents()]));
+        void loadEvents(settings.store.maxEvents).then(() => setEvents(getEvents()));
 
-        const unsubscribeEvents = subscribe(() => setEvents([...getEvents()]));
+        const unsubscribeEvents = subscribe(() => setEvents(getEvents()));
         const unsubscribeTargets = subscribeTargets(() => setLocalTargets([...getTargets()]));
         const unsubscribeServerTargets = subscribeServerTargets(() => setLocalServerTargets([...getServerTargets()]));
 
@@ -268,12 +336,20 @@ function SurveillanceTab() {
 
     useEffect(() => {
         setVisibleEventCount(EVENT_PAGE_SIZE);
-        return () => undefined;
-    }, [filter, query]);
+    }, [filter, page, query]);
+
+    const targetIds = useMemo(() => new Set(targets), [targets]);
+    const serverTargetIds = useMemo(() => new Set(serverTargets), [serverTargets]);
+    const targetPanelCollapsed = collapsedPages[page];
+
+    const scopedEvents = useMemo(() =>
+        events.filter(event => eventMatchesPage(event, page)),
+        [events, page]
+    );
 
     const filteredEvents = useMemo(() =>
-        events.filter(event => eventMatchesFilter(event, filter) && eventMatchesQuery(event, query)),
-        [events, filter, query]
+        scopedEvents.filter(event => eventMatchesFilter(event, filter) && eventMatchesQuery(event, query)),
+        [filter, query, scopedEvents]
     );
 
     const visibleEvents = useMemo(() =>
@@ -281,20 +357,145 @@ function SurveillanceTab() {
         [filteredEvents, visibleEventCount]
     );
 
-    const stats = useMemo(() => ({
-        events: events.length,
-        users: new Set(events.map(event => event.userId)).size,
-        guilds: new Set(events.map(event => event.guildId).filter(Boolean)).size,
-        channels: new Set(events.map(event => event.channelId).filter(Boolean)).size,
-    }), [events]);
+    const stats = useMemo(() => {
+        const users = new Set<string>();
+        const guilds = new Set<string>();
+        const channels = new Set<string>();
 
-    const guildOptions = useMemo<GuildOption[]>(() =>
-        guilds
-            .filter(guild => !serverTargets.includes(guild.id))
-            .map(guild => ({ label: guild.name, value: guild.id }))
-            .sort((a, b) => a.label.localeCompare(b.label)),
-        [guilds, serverTargets]
-    );
+        for (const event of scopedEvents) {
+            users.add(event.userId);
+            if (event.guildId) guilds.add(event.guildId);
+            if (event.channelId) channels.add(event.channelId);
+        }
+
+        return {
+            events: scopedEvents.length,
+            users: users.size,
+            guilds: guilds.size,
+            channels: channels.size,
+        };
+    }, [scopedEvents]);
+
+    const userSearchResults = useMemo(() => {
+        const search = userSearch.trim().toLowerCase();
+        if (page !== "user" || targetPanelCollapsed || !search) return { matches: [], total: 0 };
+
+        const matches: CachedUser[] = [];
+        let total = 0;
+
+        for (const user of getCachedUsers()) {
+            if (targetIds.has(user.id)) continue;
+            if (
+                !user.id.includes(search)
+                && !user.username.toLowerCase().includes(search)
+                && !user.globalName?.toLowerCase().includes(search)
+            ) continue;
+
+            total++;
+            if (matches.length < SEARCH_RESULT_LIMIT) matches.push(user);
+        }
+
+        return { matches, total };
+    }, [page, targetIds, targetPanelCollapsed, userSearch]);
+
+    const serverSearchResults = useMemo(() => {
+        const search = serverSearch.trim().toLowerCase();
+        if (page !== "server" || targetPanelCollapsed) return { matches: [], total: 0 };
+
+        const matches: string[] = [];
+        let total = 0;
+
+        for (const guildId of guildIds) {
+            if (serverTargetIds.has(guildId)) continue;
+
+            const guild = GuildStore.getGuild(guildId);
+            const guildName = guild?.name ?? guildId;
+            if (search && !guildId.includes(search) && !guildName.toLowerCase().includes(search)) continue;
+
+            total++;
+            if (matches.length < SEARCH_RESULT_LIMIT) matches.push(guildId);
+        }
+
+        return { matches, total };
+    }, [guildIds, page, serverSearch, serverTargetIds, targetPanelCollapsed]);
+
+    const userMatches = userSearchResults.matches;
+    const serverMatches = serverSearchResults.matches;
+
+    const selectedPageLabel = page === "server" ? "server" : "user";
+
+    const addUserTarget = (userId: string) => {
+        setTargets([...targets, userId]);
+        toast("User target added.");
+    };
+
+    const addVisibleUsers = () => {
+        if (!userMatches.length) {
+            toast("No users to add.", Toasts.Type.FAILURE);
+            return;
+        }
+
+        setTargets([...targets, ...userMatches.map(user => user.id)]);
+        toast("Visible users added.");
+    };
+
+    const addVisibleServers = () => {
+        if (!serverMatches.length) {
+            toast("No servers to add.", Toasts.Type.FAILURE);
+            return;
+        }
+
+        setServerTargets([...serverTargets, ...serverMatches]);
+        toast("Visible servers added.");
+    };
+
+    const addServer = (guildId: string) => {
+        addServerTarget(guildId);
+        toast("Server target added.");
+    };
+
+    const clearPageTargets = () => {
+        if (page === "server") {
+            setServerTargets([]);
+            toast("Server targets cleared.");
+            return;
+        }
+
+        setTargets([]);
+        toast("User targets cleared.");
+    };
+
+    const pageTargetCount = page === "server" ? serverTargets.length : targets.length;
+
+    const pageHeading = page === "server" ? "Server Surveillance" : "User Surveillance";
+
+    const pageEmpty = page === "server" ? "No server events." : "No user events.";
+
+    const targetEmpty = page === "server" ? "No server targets." : "No user targets.";
+
+    const targetLabel = page === "server" ? "Servers" : "Users";
+
+    const targetCount = page === "server" ? serverTargets.length : targets.length;
+
+    const resultCount = page === "server" ? serverMatches.length : userMatches.length;
+
+    const totalAvailable = page === "server" ? serverSearchResults.total : userSearchResults.total;
+
+    const searchPlaceholder = page === "server" ? "Search servers by name or ID..." : "Search cached users by name or ID...";
+
+    const shownTargets = targets.slice(0, TARGET_LIST_LIMIT);
+
+    const shownServerTargets = serverTargets.slice(0, TARGET_LIST_LIMIT);
+
+    const hiddenTargetCount = targetCount - (page === "server" ? shownServerTargets.length : shownTargets.length);
+
+    const toggleTargetPanel = () => {
+        setCollapsedPages(current => ({ ...current, [page]: !current[page] }));
+    };
+
+    const showSearchHint = page === "user" && !userSearch.trim();
+
+    const searchMeta = `${resultCount} shown${totalAvailable > SEARCH_RESULT_LIMIT ? ` of ${totalAvailable}` : ""}`;
 
     const addInputTargets = () => {
         const ids = targetInput.match(/\d+/g) ?? [];
@@ -334,6 +535,24 @@ function SurveillanceTab() {
                     </div>
                 </div>
 
+                <div className={cl("page-tabs")}>
+                    {pageOptions.map(option => {
+                        const count = option.value === "server" ? serverTargets.length : targets.length;
+
+                        return (
+                            <button
+                                key={option.value}
+                                className={classes(cl("page-tab"), page === option.value && cl("page-tab-active"))}
+                                onClick={() => setPage(option.value)}
+                                type="button"
+                            >
+                                <span>{option.label}</span>
+                                <small>{count} targets</small>
+                            </button>
+                        );
+                    })}
+                </div>
+
                 <div className={cl("stats")}>
                     <Stat label="Events" value={stats.events} />
                     <Stat label="Users" value={stats.users} />
@@ -341,45 +560,83 @@ function SurveillanceTab() {
                     <Stat label="Channels" value={stats.channels} />
                 </div>
 
-                <div className={cl("target-grid")}>
-                    <section className={cl("panel")}>
-                        <HeadingTertiary>Person Surveillance</HeadingTertiary>
-                        <div className={cl("target-input")}>
-                            <TextInput value={targetInput} placeholder="Discord user IDs..." onChange={setTargetInput} />
-                            <button className={cl("action")} onClick={addInputTargets}>Add</button>
+                <section className={cl("panel")}>
+                    <div className={cl("section-head")}>
+                        <HeadingTertiary>{pageHeading}</HeadingTertiary>
+                        <div className={cl("actions")}>
+                            <button className={cl("action")} onClick={toggleTargetPanel}>
+                                {targetPanelCollapsed ? "Open" : "Close"}
+                            </button>
+                            {targetPanelCollapsed ? null : (
+                                <button className={cl("action")} disabled={!resultCount} onClick={page === "server" ? addVisibleServers : addVisibleUsers}>
+                                    Add visible
+                                </button>
+                            )}
+                            <button className={classes(cl("action"), cl("danger"))} disabled={!pageTargetCount} onClick={clearPageTargets}>
+                                Clear {targetLabel}
+                            </button>
                         </div>
-                        <div className={cl("target-list")}>
-                            {targets.length ? targets.map(userId => (
-                                <TargetPill key={userId} userId={userId} />
-                            )) : <span className={cl("empty")}>No person targets.</span>}
-                        </div>
-                    </section>
+                    </div>
 
-                    <section className={cl("panel")}>
-                        <HeadingTertiary>Server Surveillance</HeadingTertiary>
-                        <div className={cl("server-select")}>
-                            <Select
-                                placeholder="Select a server..."
-                                options={guildOptions}
-                                maxVisibleItems={8}
-                                closeOnSelect={true}
-                                select={addServerTarget}
-                                isSelected={value => serverTargets.includes(value)}
-                                serialize={value => value}
-                            />
+                    {targetPanelCollapsed ? (
+                        <div className={cl("collapsed-summary")}>
+                            {targetCount} selected {selectedPageLabel} targets.
                         </div>
-                        <div className={cl("target-list")}>
-                            {serverTargets.length ? serverTargets.map(guildId => (
-                                <ServerPill key={guildId} guildId={guildId} />
-                            )) : <span className={cl("empty")}>No server targets.</span>}
-                        </div>
-                    </section>
-                </div>
+                    ) : (
+                        <>
+                            {page === "user" ? (
+                                <>
+                                    <div className={cl("target-input")}>
+                                        <TextInput value={targetInput} placeholder="Discord user IDs..." onChange={setTargetInput} />
+                                        <button className={cl("action")} onClick={addInputTargets}>Add IDs</button>
+                                    </div>
+                                    <div className={cl("target-input")}>
+                                        <TextInput value={userSearch} placeholder={searchPlaceholder} onChange={setUserSearch} />
+                                    </div>
+                                    <div className={cl("search-meta")}>{showSearchHint ? "Type a username or user ID to search cached users." : searchMeta}</div>
+                                    {showSearchHint ? null : (
+                                        <div className={cl("search-results")}>
+                                            {userMatches.length ? userMatches.map(user => (
+                                                <UserSearchResult key={user.id} user={user} onAdd={addUserTarget} />
+                                            )) : <span className={cl("empty")}>No users found.</span>}
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <>
+                                    <div className={cl("target-input")}>
+                                        <TextInput value={serverSearch} placeholder={searchPlaceholder} onChange={setServerSearch} />
+                                    </div>
+                                    <div className={cl("search-meta")}>{searchMeta}</div>
+                                    <div className={cl("search-results")}>
+                                        {serverMatches.length ? serverMatches.map(guildId => (
+                                            <ServerSearchResult key={guildId} guildId={guildId} onAdd={addServer} />
+                                        )) : <span className={cl("empty")}>No servers found.</span>}
+                                    </div>
+                                </>
+                            )}
+
+                            <div className={cl("target-summary")}>
+                                <strong>{targetCount} selected {selectedPageLabel} targets</strong>
+                                <div className={cl("target-list")}>
+                                    {page === "server"
+                                        ? serverTargets.length ? shownServerTargets.map(guildId => (
+                                            <ServerPill key={guildId} guildId={guildId} />
+                                        )) : <span className={cl("empty")}>{targetEmpty}</span>
+                                        : targets.length ? shownTargets.map(userId => (
+                                            <TargetPill key={userId} userId={userId} />
+                                        )) : <span className={cl("empty")}>{targetEmpty}</span>}
+                                    {hiddenTargetCount > 0 ? <span className={cl("empty")}>{hiddenTargetCount} more hidden.</span> : null}
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </section>
 
                 <section className={cl("panel")}>
                     <div className={cl("timeline-head")}>
-                        <HeadingTertiary>Timeline</HeadingTertiary>
-                        <TextInput value={query} placeholder="Search events..." onChange={setQuery} />
+                        <HeadingTertiary>{pageHeading} Timeline</HeadingTertiary>
+                        <TextInput value={query} placeholder={`Search ${selectedPageLabel} events...`} onChange={setQuery} />
                     </div>
                     <div className={cl("filters")}>
                         {filterOptions.map(option => (
@@ -395,7 +652,7 @@ function SurveillanceTab() {
                     <div className={cl("timeline")}>
                         {visibleEvents.length ? visibleEvents.map(event => (
                             <EventRow key={event.id} event={event} />
-                        )) : <div className={cl("empty")}>No events.</div>}
+                        )) : <div className={cl("empty")}>{pageEmpty}</div>}
                     </div>
                     {filteredEvents.length > visibleEvents.length ? (
                         <div className={cl("timeline-footer")}>

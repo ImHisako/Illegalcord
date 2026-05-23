@@ -14,20 +14,22 @@ import { PluginCard } from "@components/settings/tabs/plugins/PluginCard";
 import { ChangeList } from "@utils/ChangeList";
 import { classNameFactory } from "@utils/css";
 import { useForceUpdater } from "@utils/react";
-import { RenderModalProps } from "@vencord/discord-types";
+import type { RenderModalProps } from "@vencord/discord-types";
 import { findComponentByCodeLazy } from "@webpack";
 import { closeModal, Modal, openModal, Tooltip, useMemo } from "@webpack/common";
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import Plugins from "~plugins";
 
 import { getNewPlugins, getNewSettings, KnownPluginSettingsMap, writeKnownSettings } from "./knownSettings";
 
 const cl = classNameFactory("vc-new-plugins-");
+const DISCORD_LOCK_UNLOCKED_EVENT = "vencord-discordlock-unlocked";
 
 const Checkbox = findComponentByCodeLazy('"data-toggleable-component":"checkbox');
 
 let hasSeen = false;
+let pendingOpen = false;
 
 interface ModalComponentProps {
     modalProps: RenderModalProps;
@@ -155,10 +157,34 @@ function NewPluginsModal({ modalProps, newPlugins, newSettings }: ModalComponent
     );
 }
 
+function isDiscordLockActive() {
+    return document.documentElement.dataset.discordLockActive === "true" || document.getElementById("vcl-overlay") != null;
+}
+
+function deferUntilDiscordUnlock() {
+    if (pendingOpen) return;
+
+    pendingOpen = true;
+    window.addEventListener(DISCORD_LOCK_UNLOCKED_EVENT, () => {
+        pendingOpen = false;
+        void openNewPluginsModal();
+    }, { once: true });
+}
+
 export async function openNewPluginsModal() {
+    if (isDiscordLockActive()) {
+        deferUntilDiscordUnlock();
+        return;
+    }
+
     const newPlugins = await getNewPlugins();
     const newSettings = await getNewSettings();
     if ((newPlugins.size || newSettings.size) && !hasSeen) {
+        if (isDiscordLockActive()) {
+            deferUntilDiscordUnlock();
+            return;
+        }
+
         hasSeen = true;
         const modalKey = openModal(modalProps => (
             <ErrorBoundary noop onError={() => closeModal(modalKey)}>
