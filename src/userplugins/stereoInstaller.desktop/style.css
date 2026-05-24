@@ -1,0 +1,109 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+.vc-stereo-installer-warning {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    margin-bottom: 16px;
+    border: 1px solid var(--status-warning);
+    border-radius: 8px;
+    background: var(--background-secondary);
+}
+
+.vc-stereo-installer-warning-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.vc-stereo-installer-root {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.vc-stereo-installer-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.vc-stereo-installer-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.vc-stereo-installer-select-grid {
+    display: grid;
+    gap: 10px;
+}
+
+.vc-stereo-installer-select-row {
+    display: grid;
+    grid-template-columns: minmax(170px, 0.4fr) minmax(220px, 1fr);
+    gap: 12px;
+    align-items: center;
+}
+
+.vc-stereo-installer-select-row span {
+    color: var(--header-primary);
+    font-weight: 600;
+}
+
+.vc-stereo-installer-method2-note {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--status-warning);
+    border-radius: 8px;
+    background: var(--background-secondary);
+}
+
+.vc-stereo-installer-info {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 8px;
+    background: var(--background-secondary);
+}
+
+.vc-stereo-installer-info-line {
+    display: grid;
+    grid-template-columns: minmax(90px, 0.22fr) minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+}
+
+.vc-stereo-installer-info-line span {
+    color: var(--header-secondary);
+    font-weight: 600;
+}
+
+.vc-stereo-installer-info-line code {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--text-normal);
+}
+
+.vc-stereo-installer-status {
+    color: var(--header-secondary);
+}
+
+.vc-stereo-installer-log {
+    max-height: 240px;
+    padding: 12px;
+    overflow: auto;
+    white-space: pre-wrap;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 8px;
+    background: var(--background-tertiary);
+    color: var(--text-normal);
+}
