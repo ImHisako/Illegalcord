@@ -28,6 +28,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **kamidere PresenceLab**
 - **Kamidere SendTrail**
 - **WebCord Hardened**
+- **StereoInstaller** More Methods!
 - **Nitro Sniper**: | (https://github.com/neoarz/NitroSniper/tree/main)
 - **FakeMuteAndDeafen**
 - **BetterMic**
