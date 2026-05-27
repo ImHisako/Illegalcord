@@ -298,7 +298,6 @@ export const settings = definePluginSettings({
                 onClick={() => Alerts.show({
                     title: "Clear Logs",
                     body: "Are you sure you want to clear all logs?",
-                    // @ts-expect-error not typed
                     confirmVariant: "critical-primary",
                     confirmText: "Clear",
                     cancelText: "Cancel",

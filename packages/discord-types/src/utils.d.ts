@@ -58,6 +58,7 @@ export interface Alerts {
         confirmColor?: string;
         cancelText?: string;
         confirmText?: string;
+        confirmVariant?: string;
         secondaryConfirmText?: string;
         onCancel?(): void;
         onConfirm?(): void;

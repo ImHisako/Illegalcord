@@ -36,7 +36,7 @@ export default definePlugin({
 
     renderButtons(props: { nameplate?: any; }) {
         return Vencord.Api.UserArea._renderButtons({
-            nameplate: props.nameplate,
+            nameplate: !this.shouldHideNameplate() ? props.nameplate : null,
             iconForeground: accountClasses.iconForeground,
             hideTooltips: this.shouldHideTooltips()
         });
@@ -44,5 +44,9 @@ export default definePlugin({
 
     shouldHideTooltips() {
         return isPluginEnabled(declutter.name) && declutter.settings.store.removeButtonTooltips;
+    },
+
+    shouldHideNameplate() {
+        return isPluginEnabled(declutter.name) && declutter.settings.store.removeNameplate;
     }
 });

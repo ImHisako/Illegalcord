@@ -135,7 +135,6 @@ export function LogsModal({ modalProps, initalQuery }: Props) {
                         title: "Clear Logs",
                         body: `Are you sure you want to clear ${messages.length} logs`,
                         confirmText: "Clear",
-                        // @ts-expect-error not typed
                         confirmVariant: "critical-primary",
                         cancelText: "Cancel",
                         onConfirm: async () => {
@@ -151,7 +150,6 @@ export function LogsModal({ modalProps, initalQuery }: Props) {
                         title: "Clear Logs",
                         body: "Are you sure you want to clear all the logs",
                         confirmText: "Clear",
-                        // @ts-expect-error not typed
                         confirmVariant: "critical-primary",
                         cancelText: "Cancel",
                         onConfirm: async () => {
