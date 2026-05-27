@@ -9,6 +9,7 @@ import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
+import type { CommandArgument, CommandContext } from "@vencord/discord-types";
 import { findByPropsLazy } from "@webpack";
 
 const logger = new Logger("GhostSelfbot");
@@ -35,7 +36,7 @@ const settings = definePluginSettings({
     launchOnEnable: {
         type: OptionType.BOOLEAN,
         description: "Launch Ghost immediately when the plugin is enabled",
-        default: true
+        default: false
     },
     launchMode: {
         type: OptionType.SELECT,
@@ -48,7 +49,7 @@ const settings = definePluginSettings({
     },
     autoInstallRequirements: {
         type: OptionType.BOOLEAN,
-        description: "Automatically install Python requirements (requirements.txt) when launching source code",
+        description: "Automatically install Python requirements after downloading the source code",
         default: true
     },
     autoFillToken: {
@@ -86,10 +87,30 @@ const settings = definePluginSettings({
     }
 });
 
-function launchGhostExe(): void {
+function getErrorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error ? error.message : fallback;
+}
+
+async function ensureGhostInstalled(): Promise<boolean> {
+    const result = await Native.installGhostPayloads(false);
+
+    if (result.success) return true;
+
+    showNotification({
+        title: "Ghost Selfbot",
+        body: result.error || "Failed to download Ghost from GitHub releases.",
+        color: "#ED4245"
+    });
+
+    return false;
+}
+
+async function launchGhostExe(): Promise<void> {
     try {
+        if (!await ensureGhostInstalled()) return;
+
         const token = settings.store.autoFillToken ? getCurrentDiscordToken() : null;
-        Native.launchGhostExe(
+        await Native.launchGhostExe(
             settings.store.autoFillToken,
             token,
             settings.store.nitroWebhookUrl || "",
@@ -102,22 +123,24 @@ function launchGhostExe(): void {
             body: "Ghost.exe launched successfully",
             color: "#5865F2"
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         logger.error("Failed to launch Ghost.exe:", error);
         showNotification({
             title: "Ghost Selfbot",
-            body: error.message || "Failed to launch Ghost.exe",
+            body: getErrorMessage(error, "Failed to launch Ghost.exe"),
             color: "#ED4245"
         });
     }
 }
 
-function launchGhostSource(): void {
+async function launchGhostSource(): Promise<void> {
     const pythonPath = settings.store.pythonPath || "python";
 
     try {
+        if (!await ensureGhostInstalled()) return;
+
         const token = settings.store.autoFillToken ? getCurrentDiscordToken() : null;
-        Native.launchGhostSource(
+        await Native.launchGhostSource(
             settings.store.autoFillToken,
             settings.store.autoInstallRequirements,
             pythonPath,
@@ -132,11 +155,11 @@ function launchGhostSource(): void {
             body: "Ghost source code launched successfully",
             color: "#5865F2"
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         logger.error("Failed to launch Ghost source:", error);
         showNotification({
             title: "Ghost Selfbot",
-            body: error.message || "Failed to launch Ghost source. Check Python path.",
+            body: getErrorMessage(error, "Failed to launch Ghost source. Check Python path."),
             color: "#ED4245"
         });
     }
@@ -146,7 +169,7 @@ export default definePlugin({
     name: "GhostSelfbot",
     description: "Launch Ghost Selfbot (exe or source code) with optional auto-token fill from your current Discord session",
     authors: [{ name: "irritably", id: 928787166916640838n }],
-    tags: ["Utility", "Customisation", "Utils"],
+    tags: ["Utility", "Customisation"],
     enabledByDefault: false,
     settings,
 
@@ -155,7 +178,7 @@ export default definePlugin({
             name: "ghost",
             description: "Launch Ghost Selfbot",
             inputType: ApplicationCommandInputType.BUILT_IN,
-            execute: async (_args: any[], ctx: any) => {
+            execute: async (_args: CommandArgument[], ctx: CommandContext) => {
                 if (settings.store.showTokenWarning) {
                     const token = getCurrentDiscordToken();
                     if (token && settings.store.autoFillToken) {
@@ -166,24 +189,52 @@ export default definePlugin({
                 }
 
                 if (settings.store.launchMode === "exe") {
-                    launchGhostExe();
+                    await launchGhostExe();
                 } else {
-                    launchGhostSource();
+                    await launchGhostSource();
                 }
+            }
+        },
+        {
+            name: "ghost-download",
+            description: "Download Ghost from the latest GitHub release",
+            inputType: ApplicationCommandInputType.BUILT_IN,
+            execute: async (_args: CommandArgument[], ctx: CommandContext) => {
+                sendBotMessage(ctx.channel.id, {
+                    content: "📦 Downloading Ghost from GitHub releases..."
+                });
+
+                const result = await Native.installGhostPayloads(false);
+
+                sendBotMessage(ctx.channel.id, {
+                    content: result.success
+                        ? result.downloaded
+                            ? `✅ **Ghost ${result.version ?? "latest"} downloaded successfully.**`
+                            : "✅ **Ghost is already installed.**"
+                        : `❌ **Failed to download Ghost.** ${result.error ?? "Check the console for details."}`
+                });
             }
         },
         {
             name: "ghost-install",
             description: "Install Ghost Selfbot Python requirements manually",
             inputType: ApplicationCommandInputType.BUILT_IN,
-            execute: async (_args: any[], ctx: any) => {
+            execute: async (_args: CommandArgument[], ctx: CommandContext) => {
                 const pythonPath = settings.store.pythonPath || "python";
 
                 sendBotMessage(ctx.channel.id, {
                     content: "📦 Installing Ghost Python requirements... This may take a moment."
                 });
 
-                if (Native.installRequirements(pythonPath)) {
+                const installResult = await Native.installGhostPayloads(false);
+                if (!installResult.success) {
+                    sendBotMessage(ctx.channel.id, {
+                        content: `❌ **Failed to download Ghost.** ${installResult.error ?? "Check the console for details."}`
+                    });
+                    return;
+                }
+
+                if (await Native.installRequirements(pythonPath)) {
                     sendBotMessage(ctx.channel.id, {
                         content: "✅ **Requirements installed successfully!** You can now launch Ghost from source code."
                     });
@@ -198,9 +249,9 @@ export default definePlugin({
             name: "ghost-check",
             description: "Check Ghost Selfbot setup (Python, requirements, files)",
             inputType: ApplicationCommandInputType.BUILT_IN,
-            execute: async (_args: any[], ctx: any) => {
+            execute: async (_args: CommandArgument[], ctx: CommandContext) => {
                 const pythonPath = settings.store.pythonPath || "python";
-                const status = Native.checkGhostSetup(pythonPath);
+                const status = await Native.checkGhostSetup(pythonPath);
 
                 let statusMessage = "🔍 **Ghost Selfbot Setup Check:**\n\n";
 
@@ -220,6 +271,9 @@ export default definePlugin({
                     ? "✅ **requirements.txt:** Found\n"
                     : "❌ **requirements.txt:** Not found\n";
 
+                if (!status.ghostExeFound || !status.ghostSourceFound)
+                    statusMessage += "\nRun `/ghost-download` to download Ghost from the latest GitHub release.\n";
+
                 sendBotMessage(ctx.channel.id, { content: statusMessage });
             }
         }
@@ -227,14 +281,14 @@ export default definePlugin({
 
     start() {
         logger.log("Ghost Selfbot plugin loaded.");
-        logger.log("Commands available: /ghost, /ghost-install, /ghost-check");
+        logger.log("Commands available: /ghost, /ghost-download, /ghost-install, /ghost-check");
 
         if (settings.store.launchOnEnable) {
             logger.log("Launching Ghost Selfbot immediately...");
             if (settings.store.launchMode === "exe") {
-                launchGhostExe();
+                void launchGhostExe();
             } else {
-                launchGhostSource();
+                void launchGhostSource();
             }
         }
 
@@ -242,9 +296,9 @@ export default definePlugin({
             setTimeout(() => {
                 logger.log("Auto-launching Ghost Selfbot on startup...");
                 if (settings.store.launchMode === "exe") {
-                    launchGhostExe();
+                    void launchGhostExe();
                 } else {
-                    launchGhostSource();
+                    void launchGhostSource();
                 }
             }, 5000);
         }

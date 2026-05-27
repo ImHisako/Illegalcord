@@ -16,12 +16,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { findGroupChildrenByChildId, type NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
+import { MainSettingsIcon } from "@components/Icons";
 import { Devs } from "@utils/constants";
 import { getIntlMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
 import { findComponentByCodeLazy } from "@webpack";
-import { ChannelRTCStore, UserStore } from "@webpack/common";
+import { ChannelRTCStore, Menu, showToast, Toasts, UserStore } from "@webpack/common";
 
 import { PluginInfo } from "../betterScreenshare.desktop/constants";
 import { openScreenshareModal } from "../betterScreenshare.desktop/modals";
@@ -60,6 +62,37 @@ interface StreamFramerateOption {
     label: string;
 }
 
+interface StreamContextProps {
+    stream: {
+        ownerId: string;
+    };
+}
+
+interface QuickQualityPreset {
+    label: string;
+    width: number;
+    height: number;
+    framerate: number;
+    videoBitrate: number;
+}
+
+const quickQualityPresets = [
+    { label: "Balanced 720p60", width: 1280, height: 720, framerate: 60, videoBitrate: 2500 },
+    { label: "Sharp 1080p60", width: 1920, height: 1080, framerate: 75, videoBitrate: 5000 },
+    { label: "High 1440p60", width: 2560, height: 1440, framerate: 144, videoBitrate: 10000 },
+] satisfies QuickQualityPreset[];
+
+const quickResolutions = [
+    { label: "480p", width: 720, height: 480 },
+    { label: "720p", width: 1280, height: 720 },
+    { label: "1080p", width: 1920, height: 1080 },
+    { label: "1440p", width: 2560, height: 1440 },
+    { label: "2160p", width: 3840, height: 2160 },
+] as const;
+
+const quickFramerates = [15, 30, 60, 120, 144, 165, 240] as const;
+const quickBitrates = [2500, 5000, 7500, 10000] as const;
+
 function isStreamQualityOptions(opts: unknown): opts is StreamQualityOptions {
     return typeof opts === "object" && opts !== null && !Array.isArray(opts);
 }
@@ -79,6 +112,171 @@ function screenshareSettingsButton() {
         />
     );
 }
+
+function refreshActiveScreenshareOptions() {
+    const plugin = BetterScreenshare;
+    const { screensharePatcher, screenshareAudioPatcher } = plugin;
+
+    if (screensharePatcher) {
+        screensharePatcher.forceUpdateTransportationOptions();
+        if (screensharePatcher.hasActiveDesktopSource()) {
+            screensharePatcher.forceUpdateDesktopEncodingOptions();
+            screensharePatcher.forceUpdateDesktopSourceOptions();
+        }
+    }
+
+    if (screenshareAudioPatcher)
+        screenshareAudioPatcher.forceUpdateTransportationOptions();
+}
+
+function notifyQuickSettingsChange(label: string) {
+    refreshActiveScreenshareOptions();
+    showToast(`BetterScreenshare: ${label} applied.`, Toasts.Type.SUCCESS);
+}
+
+function applyQualityPreset(preset: QuickQualityPreset) {
+    const store = screenshareStore.get();
+
+    store.setWidth(preset.width);
+    store.setHeight(preset.height);
+    store.setResolutionEnabled(true);
+    store.setFramerate(preset.framerate);
+    store.setFramerateEnabled(true);
+    store.setVideoBitrate(preset.videoBitrate);
+    store.setVideoBitrateEnabled(true);
+    notifyQuickSettingsChange(preset.label);
+}
+
+function applyResolution(width?: number, height?: number) {
+    const store = screenshareStore.get();
+
+    store.setWidth(width);
+    store.setHeight(height);
+    store.setResolutionEnabled(width !== undefined && height !== undefined);
+    notifyQuickSettingsChange(width && height ? `${height}p` : "Default resolution");
+}
+
+function applyFramerate(framerate?: number) {
+    const store = screenshareStore.get();
+
+    store.setFramerate(framerate);
+    store.setFramerateEnabled(framerate !== undefined);
+    notifyQuickSettingsChange(framerate ? `${framerate} FPS` : "Default framerate");
+}
+
+function applyVideoBitrate(videoBitrate?: number) {
+    const store = screenshareStore.get();
+
+    store.setVideoBitrate(videoBitrate);
+    store.setVideoBitrateEnabled(videoBitrate !== undefined);
+    notifyQuickSettingsChange(videoBitrate ? `${videoBitrate} kbps` : "Default bitrate");
+}
+
+const streamContextPatch: NavContextMenuPatchCallback = (children, props: StreamContextProps) => {
+    const user = UserStore.getCurrentUser();
+    if (!user || props.stream.ownerId !== user.id) return;
+
+    const { currentProfile } = screenshareStore.get();
+    const menuItem = (
+        <Menu.MenuItem
+            id="better-screenshare-settings"
+            label="BetterScreenshare"
+            icon={MainSettingsIcon}
+        >
+            <Menu.MenuItem id="better-screenshare-quality" label="Quality Preset">
+                {quickQualityPresets.map(preset => (
+                    <Menu.MenuRadioItem
+                        key={preset.label}
+                        id={`better-screenshare-quality-${preset.height}-${preset.framerate}`}
+                        group="better-screenshare-quality"
+                        label={preset.label}
+                        checked={
+                            currentProfile.resolutionEnabled === true &&
+                            currentProfile.framerateEnabled === true &&
+                            currentProfile.videoBitrateEnabled === true &&
+                            currentProfile.width === preset.width &&
+                            currentProfile.height === preset.height &&
+                            currentProfile.framerate === preset.framerate &&
+                            currentProfile.videoBitrate === preset.videoBitrate
+                        }
+                        action={() => applyQualityPreset(preset)}
+                    />
+                ))}
+            </Menu.MenuItem>
+            <Menu.MenuItem id="better-screenshare-resolution" label="Resolution">
+                <Menu.MenuRadioItem
+                    id="better-screenshare-resolution-default"
+                    group="better-screenshare-resolution"
+                    label="Discord default"
+                    checked={currentProfile.resolutionEnabled !== true}
+                    action={() => applyResolution()}
+                />
+                {quickResolutions.map(({ label, width, height }) => (
+                    <Menu.MenuRadioItem
+                        key={label}
+                        id={`better-screenshare-resolution-${height}`}
+                        group="better-screenshare-resolution"
+                        label={label}
+                        checked={currentProfile.resolutionEnabled === true && currentProfile.width === width && currentProfile.height === height}
+                        action={() => applyResolution(width, height)}
+                    />
+                ))}
+            </Menu.MenuItem>
+            <Menu.MenuItem id="better-screenshare-framerate" label="Framerate">
+                <Menu.MenuRadioItem
+                    id="better-screenshare-framerate-default"
+                    group="better-screenshare-framerate"
+                    label="Discord default"
+                    checked={currentProfile.framerateEnabled !== true}
+                    action={() => applyFramerate()}
+                />
+                {quickFramerates.map(framerate => (
+                    <Menu.MenuRadioItem
+                        key={framerate}
+                        id={`better-screenshare-framerate-${framerate}`}
+                        group="better-screenshare-framerate"
+                        label={`${framerate} FPS`}
+                        checked={currentProfile.framerateEnabled === true && currentProfile.framerate === framerate}
+                        action={() => applyFramerate(framerate)}
+                    />
+                ))}
+            </Menu.MenuItem>
+            <Menu.MenuItem id="better-screenshare-bitrate" label="Video Bitrate">
+                <Menu.MenuRadioItem
+                    id="better-screenshare-bitrate-default"
+                    group="better-screenshare-bitrate"
+                    label="Discord default"
+                    checked={currentProfile.videoBitrateEnabled !== true}
+                    action={() => applyVideoBitrate()}
+                />
+                {quickBitrates.map(videoBitrate => (
+                    <Menu.MenuRadioItem
+                        key={videoBitrate}
+                        id={`better-screenshare-bitrate-${videoBitrate}`}
+                        group="better-screenshare-bitrate"
+                        label={`${videoBitrate} kbps`}
+                        checked={currentProfile.videoBitrateEnabled === true && currentProfile.videoBitrate === videoBitrate}
+                        action={() => applyVideoBitrate(videoBitrate)}
+                    />
+                ))}
+            </Menu.MenuItem>
+            <Menu.MenuSeparator />
+            <Menu.MenuItem
+                id="better-screenshare-advanced-settings"
+                label="Advanced Settings"
+                action={openScreenshareModal}
+            />
+        </Menu.MenuItem>
+    );
+
+    const group = findGroupChildrenByChildId(["fullscreen", "popout"], children);
+    if (group) {
+        group.push(menuItem);
+        return;
+    }
+
+    children.push(<Menu.MenuSeparator />, <Menu.MenuGroup>{menuItem}</Menu.MenuGroup>);
+};
 
 function patchStreamQuality(opts: StreamQualityOptions) {
     if (!screenshareStore) return opts;
@@ -219,7 +417,7 @@ function patchChannelRTCStore() {
     };
 }
 
-export default definePlugin({
+const BetterScreenshare = definePlugin({
     name: "BetterScreenshare",
     description: "This plugin allows you to further customize your screen sharing.",
     tags: ["Voice", "Customisation"],
@@ -289,6 +487,9 @@ export default definePlugin({
             default: true,
         }
     }),
+    contextMenus: {
+        "stream-context": streamContextPatch
+    },
     start(): void {
         initScreenshareStore();
         initScreenshareAudioStore();
@@ -316,3 +517,5 @@ export default definePlugin({
     patchStreamSubmitOptions,
     screenshareSettingsButton
 });
+
+export default BetterScreenshare;

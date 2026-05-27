@@ -18,6 +18,7 @@ interface VoiceStateStoreShape {
     addChangeListener(listener: () => void): void;
     removeChangeListener(listener: () => void): void;
     getVoiceStateForUser(userId: string): VoiceStateData | undefined;
+    getVoiceStatesForChannel(channelId: string): Record<string, VoiceStateData> | undefined;
 }
 
 type VoiceStateFlag = "deaf" | "mute" | "selfDeaf" | "selfMute" | "selfStream" | "selfVideo" | "suppress";
@@ -72,6 +73,19 @@ const getGuildName = (channelId: string | undefined): string | undefined => {
     return GuildStore.getGuild(channel.guild_id)?.name;
 };
 
+const getVoiceUsers = (channelId: string | undefined, userId: string): string => {
+    if (!channelId) return "No one else";
+
+    const users = Object.values(VoiceStateStore.getVoiceStatesForChannel(channelId) ?? {})
+        .filter(state => state.userId !== userId)
+        .map(state => {
+            const user = UserStore.getUser(state.userId);
+            return `@${user?.username ?? "Unknown user"} | ${state.userId}`;
+        });
+
+    return users.length ? users.join(", ") : "No one else";
+};
+
 const getVoiceStateChanges = (previousState: VoiceStateData, currentState: VoiceStateData): string[] => {
     const changes: string[] = [];
 
@@ -94,7 +108,7 @@ const logVoiceEvent = (userId: string, username: string, action: "voice_join" | 
         userId,
         username,
         action,
-        details,
+        details: `${details} People in voice: ${getVoiceUsers(channelId, userId)}.`,
         channelName: channel?.name,
         guildName: getGuildName(channelId),
         metadata: {

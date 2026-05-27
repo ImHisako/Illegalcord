@@ -9,11 +9,12 @@ import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
 import { LogIcon } from "@components/Icons";
 import SettingsPlugin from "@plugins/_core/settings";
+import { LazyComponent } from "@utils/lazyReact";
 import { removeFromArray } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Activity, Channel, Guild, GuildMember, Message, OnlineStatus, Role, User } from "@vencord/discord-types";
 import { ActivityType } from "@vencord/discord-types/enums";
-import { ChannelStore, GuildStore, Menu, PresenceStore, SettingsRouter, UserStore } from "@webpack/common";
+import { ChannelStore, GuildStore, Menu, PresenceStore, SettingsRouter, UserStore, VoiceStateStore } from "@webpack/common";
 
 import { recordEvent, trimEvents } from "./store";
 import type { MessageSnapshot, SurveillanceEvent, SurveillanceEventType, SurveillanceScope, VoiceState, VoiceStateFlag } from "./types";
@@ -36,8 +37,11 @@ const messageCache = new Map<string, MessageSnapshot>();
 const previousVoiceStates = new Map<string, VoiceState>();
 const typingCooldowns = new Map<string, number>();
 const seenServerUsers = new Map<string, Set<string>>();
+const SurveillanceTab = LazyComponent(() => require("./components/SurveillanceTab").default);
 let lastStatuses = new Map<string, OnlineStatus>();
 let lastActivities = new Map<string, Map<string, string>>();
+let presenceStartTimer: ReturnType<typeof setTimeout> | undefined;
+let presenceTrackingStarted = false;
 
 interface UserContextProps {
     user?: User;
@@ -294,6 +298,22 @@ const getChannelInfo = (channelId: string | undefined): ChannelInfo => {
     };
 };
 
+const getVoiceUsers = (channelId: string | undefined, userId: string): string => {
+    if (!channelId) return "No one else";
+
+    const users = Object.values(VoiceStateStore.getVoiceStatesForChannel(channelId) ?? {})
+        .filter(state => state.userId !== userId)
+        .map(state => {
+            const user = UserStore.getUser(state.userId);
+            return `@${user?.username ?? "Unknown user"} | ${state.userId}`;
+        });
+
+    return users.length ? users.join(", ") : "No one else";
+};
+
+const withVoiceUsers = (details: string, channelId: string | undefined, userId: string) =>
+    `${details} People in voice: ${getVoiceUsers(channelId, userId)}.`;
+
 const getGuildInfo = (guildId: string | undefined): Pick<SurveillanceEvent, "guildId" | "guildName"> => {
     const guild = guildId ? GuildStore.getGuild(guildId) : undefined;
 
@@ -480,6 +500,27 @@ const seedPresence = () => {
     }
 };
 
+const startPresenceTracking = () => {
+    presenceStartTimer = undefined;
+    if (presenceTrackingStarted) return;
+
+    seedPresence();
+    PresenceStore.addChangeListener(handlePresenceChange);
+    presenceTrackingStarted = true;
+};
+
+const stopPresenceTracking = () => {
+    if (presenceStartTimer) {
+        clearTimeout(presenceStartTimer);
+        presenceStartTimer = undefined;
+    }
+
+    if (!presenceTrackingStarted) return;
+
+    PresenceStore.removeChangeListener(handlePresenceChange);
+    presenceTrackingStarted = false;
+};
+
 const handlePresenceChange = () => {
     const { logActivities, logStatus } = settings.store;
     if (!logActivities && !logStatus) return;
@@ -557,21 +598,21 @@ const handleVoiceState = (state: VoiceState) => {
     if (oldChannelId !== channelId) {
         if (!oldChannelId && channelId) {
             const channelInfo = getChannelInfo(channelId);
-            addUserEvent("voice_join", userId, `Joined voice channel ${channelInfo.channelName ?? "Unknown channel"}.`, channelInfo);
+            addUserEvent("voice_join", userId, withVoiceUsers(`Joined voice channel ${channelInfo.channelName ?? "Unknown channel"}.`, channelId, userId), channelInfo);
         } else if (oldChannelId && !channelId) {
             const channelInfo = getChannelInfo(oldChannelId);
-            addUserEvent("voice_leave", userId, `Left voice channel ${channelInfo.channelName ?? "Unknown channel"}.`, channelInfo);
+            addUserEvent("voice_leave", userId, withVoiceUsers(`Left voice channel ${channelInfo.channelName ?? "Unknown channel"}.`, oldChannelId, userId), channelInfo);
         } else if (oldChannelId && channelId) {
             const oldChannel = getChannelInfo(oldChannelId).channelName ?? "Unknown channel";
             const channelInfo = getChannelInfo(channelId);
-            addUserEvent("voice_move", userId, `Moved from ${oldChannel} to ${channelInfo.channelName ?? "Unknown channel"}.`, channelInfo);
+            addUserEvent("voice_move", userId, withVoiceUsers(`Moved from ${oldChannel} to ${channelInfo.channelName ?? "Unknown channel"}.`, channelId, userId), channelInfo);
         }
     }
 
     if (previousState && channelId && oldChannelId === channelId) {
         const changes = getVoiceChanges(previousState, state);
         if (changes.length) {
-            addUserEvent("voice_update", userId, `Voice state changed: ${changes.join(", ")}.`, getChannelInfo(channelId));
+            addUserEvent("voice_update", userId, withVoiceUsers(`Voice state changed: ${changes.join(", ")}.`, channelId, userId), getChannelInfo(channelId));
         }
     }
 
@@ -879,21 +920,20 @@ export default definePlugin({
     start() {
         updateTargets(settings.store.targets);
         updateServerTargets(settings.store.serverTargets);
-        seedPresence();
-        PresenceStore.addChangeListener(handlePresenceChange);
+        presenceStartTimer = setTimeout(startPresenceTracking, 3_000);
 
         if (!SettingsPlugin.customEntries.some(entry => entry.key === SETTINGS_ENTRY_KEY)) {
             SettingsPlugin.customEntries.push({
                 key: SETTINGS_ENTRY_KEY,
                 title: "Surveillance",
-                Component: require("./components/SurveillanceTab").default,
+                Component: SurveillanceTab,
                 Icon: LogIcon,
             });
         }
     },
 
     stop() {
-        PresenceStore.removeChangeListener(handlePresenceChange);
+        stopPresenceTracking();
         removeFromArray(SettingsPlugin.customEntries, entry => entry.key === SETTINGS_ENTRY_KEY);
         previousVoiceStates.clear();
         messageCache.clear();

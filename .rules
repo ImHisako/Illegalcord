@@ -35,8 +35,6 @@
 
 Does NOT get merged:
 
-- Selfbots, automation of user actions, client state spoofing, API abuse.
-- Plugins requiring user-supplied API keys or untrusted third-party endpoints.
 - Plugins targeting specific third-party bots. Official Discord apps are fine.
 - CSS-only plugins that just hide/restyle UI.
 - Functionality trivial via built-in plugins or Discord itself.
@@ -265,14 +263,6 @@ replace: "$self.exampleWrap({ children: $& })"
   start() { intervalId = setInterval(tick, 30_000); }
   stop()  { if (intervalId !== undefined) { clearInterval(intervalId); intervalId = undefined; } }
   ```
-
-## Storage
-
-- Persistent state: `DataStore` from `@api/DataStore` (idb-backed). Never `localStorage`/`sessionStorage`/`indexedDB`.
-- Plain settings: `definePluginSettings`. Internal hidden state: `withPrivateSettings<T>()`.
-- DataStore API: `get`, `set`, `setMany`, `getMany`, `update`, `del`, `delMany`, `clear`, `keys`, `values`, `entries`, `createStore` (custom namespace).
-- Namespace keys with plugin name: `` await DataStore.get(`MyPlugin_key`) `` or `createStore("MyPlugin", "store")`.
-- Never store tokens, message content, or other user data in keys readable by other plugins.
 
 ## Network
 

@@ -8,12 +8,15 @@ import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
+import { chooseFile } from "@utils/web";
 import { findStoreLazy } from "@webpack";
 import {
+    Button,
     ChannelStore,
     GuildMemberStore,
     GuildRoleStore,
     GuildStore,
+    IconUtils,
     PermissionsBits,
     React,
     Toasts,
@@ -25,6 +28,8 @@ const SelectedChannelStore = findStoreLazy("SelectedChannelStore");
 const PermissionStore = findStoreLazy("PermissionStore");
 const logger = new Logger("StaffDetector");
 const currentChannelStaff = new Set<string>();
+const emptyIdSet = new Set<string>();
+const idSetCache = new Map<string, Set<string>>();
 let currentVoiceChannelId: string | null = null;
 
 const DEFAULT_SOUND_URLS = {
@@ -36,6 +41,40 @@ const CUSTOM_DEFAULT_URLS = {
     join: "https://github.com/zFrxncesck1/zFrxncesck1/raw/refs/heads/main/host/sounds/trollface-smile.mp3",
     leave: "https://github.com/zFrxncesck1/zFrxncesck1/raw/refs/heads/main/host/sounds/death-note-light-yagami-is-sus.mp3",
 };
+
+type AudioDataKey = "customJoinSoundData" | "customLeaveSoundData";
+type AudioNameKey = "customJoinSoundDataName" | "customLeaveSoundDataName";
+type StaffPermissionSetting =
+    | "adminPermission"
+    | "manageGuildPermission"
+    | "manageChannelsPermission"
+    | "manageRolesPermission"
+    | "manageNicknamesPermission"
+    | "manageMessagesPermission"
+    | "kickMembersPermission"
+    | "banMembersPermission"
+    | "moderateMembersPermission"
+    | "moveMembersPermission"
+    | "muteMembersPermission"
+    | "deafenMembersPermission";
+type PermissionBitName =
+    | "ADMINISTRATOR"
+    | "MANAGE_GUILD"
+    | "MANAGE_CHANNELS"
+    | "MANAGE_ROLES"
+    | "MANAGE_NICKNAMES"
+    | "MANAGE_MESSAGES"
+    | "KICK_MEMBERS"
+    | "BAN_MEMBERS"
+    | "MODERATE_MEMBERS"
+    | "MOVE_MEMBERS"
+    | "MUTE_MEMBERS"
+    | "DEAFEN_MEMBERS";
+
+const audioNameKeys = {
+    customJoinSoundData: "customJoinSoundDataName",
+    customLeaveSoundData: "customLeaveSoundDataName",
+} satisfies Record<AudioDataKey, AudioNameKey>;
 
 const C = {
     notif: "#ef5350",
@@ -55,56 +94,72 @@ function SettingsSep({ title, color = "#9c67ff" }: { title: string; color?: stri
     );
 }
 
-function AudioUploadButton({ label, dataKey }: { label: string; dataKey: "customJoinSoundData" | "customLeaveSoundData"; }) {
+function readFileAsDataUri(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (typeof reader.result === "string") {
+                resolve(reader.result);
+                return;
+            }
+
+            reject(new Error("Selected file could not be read as audio data."));
+        };
+        reader.onerror = () => reject(reader.error ?? new Error("Selected file could not be read."));
+        reader.readAsDataURL(file);
+    });
+}
+
+function AudioUploadButton({ label, dataKey }: { label: string; dataKey: AudioDataKey; }) {
+    const nameKey = audioNameKeys[dataKey];
     const [filename, setFilename] = React.useState<string>(() => {
-        const d = settings.store[dataKey];
-        return d ? (settings.store[dataKey + "Name" as "customJoinSoundDataName" | "customLeaveSoundDataName"] || "Uploaded") : "";
+        const data = settings.store[dataKey];
+        return data ? (settings.store[nameKey] || "Uploaded") : "";
     });
 
-    function handleClick() {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = "audio/*";
-        input.onchange = () => {
-            const file = input.files?.[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = () => {
-                const dataUri = reader.result as string;
-                (settings.store as any)[dataKey] = dataUri;
-                (settings.store as any)[dataKey + "Name"] = file.name;
-                setFilename(file.name);
-            };
-            reader.readAsDataURL(file);
-        };
-        input.click();
+    async function handleClick() {
+        const file = await chooseFile("audio/*");
+        if (!file) return;
+
+        try {
+            settings.store[dataKey] = await readFileAsDataUri(file);
+            settings.store[nameKey] = file.name;
+            setFilename(file.name);
+        } catch (error) {
+            Toasts.show({
+                message: "Could not load that audio file.",
+                id: Toasts.genId(),
+                type: Toasts.Type.FAILURE,
+            });
+            if (settings.store.enableLogs) logger.error("StaffDetector: audio upload failed:", error);
+        }
     }
 
     function handleClear() {
-        (settings.store as any)[dataKey] = "";
-        (settings.store as any)[dataKey + "Name"] = "";
+        settings.store[dataKey] = "";
+        settings.store[nameKey] = "";
         setFilename("");
     }
 
     return (
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-            <button
-                onClick={handleClick}
-                style={{
-                    padding: "4px 12px", borderRadius: 6, border: `1px solid ${C.sounds}66`,
-                    background: `${C.sounds}18`, color: C.sounds, fontSize: 12, fontWeight: 700,
-                    cursor: "pointer",
-                }}
+            <Button
+                color={Button.Colors.PRIMARY}
+                size={Button.Sizes.SMALL}
+                onClick={() => void handleClick()}
             >
                 {label}
-            </button>
+            </Button>
             {filename
                 ? <>
                     <span style={{ fontSize: 11, color: "#9e9e9e", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{filename}</span>
-                    <button
+                    <Button
+                        color={Button.Colors.RED}
+                        size={Button.Sizes.SMALL}
                         onClick={handleClear}
-                        style={{ background: "none", border: "none", color: "#757575", cursor: "pointer", fontSize: 13, padding: "0 4px", lineHeight: 1 }}
-                    >✕</button>
+                    >
+                        Clear
+                    </Button>
                 </>
                 : <span style={{ fontSize: 11, color: "#5a4a6a" }}>No file uploaded</span>
             }
@@ -268,20 +323,39 @@ const settings = definePluginSettings({
     deafenMembersPermission: { type: OptionType.BOOLEAN, default: true, description: "Deafen Members" },
 });
 
-function parseIds(raw: string): string[] {
-    if (!raw) return [];
-    const out: string[] = [];
-    const parts = raw.split(/[\s,;|]+/);
-    for (let i = 0; i < parts.length; i++) {
-        const s = parts[i].replace(/^-+|-+$/g, "").trim();
-        if (/^\d{5,}$/.test(s)) out.push(s);
+const permChecks = [
+    ["adminPermission", "ADMINISTRATOR"],
+    ["manageGuildPermission", "MANAGE_GUILD"],
+    ["manageChannelsPermission", "MANAGE_CHANNELS"],
+    ["manageRolesPermission", "MANAGE_ROLES"],
+    ["manageNicknamesPermission", "MANAGE_NICKNAMES"],
+    ["manageMessagesPermission", "MANAGE_MESSAGES"],
+    ["kickMembersPermission", "KICK_MEMBERS"],
+    ["banMembersPermission", "BAN_MEMBERS"],
+    ["moderateMembersPermission", "MODERATE_MEMBERS"],
+    ["moveMembersPermission", "MOVE_MEMBERS"],
+    ["muteMembersPermission", "MUTE_MEMBERS"],
+    ["deafenMembersPermission", "DEAFEN_MEMBERS"],
+] satisfies Array<[StaffPermissionSetting, PermissionBitName]>;
+
+function parseIdSet(raw: string): Set<string> {
+    if (!raw) return emptyIdSet;
+
+    const cached = idSetCache.get(raw);
+    if (cached) return cached;
+
+    const ids = new Set<string>();
+    for (const match of raw.matchAll(/\d{5,}/g)) {
+        ids.add(match[0]);
     }
-    return out;
+
+    idSetCache.set(raw, ids);
+    return ids;
 }
 
 function isUserExplicitlyIncluded(userId: string): boolean {
-    const inc = parseIds(settings.store.userIncludeIds);
-    return inc.length > 0 && inc.includes(userId);
+    const includedUsers = parseIdSet(settings.store.userIncludeIds);
+    return includedUsers.size > 0 && includedUsers.has(userId);
 }
 
 function isServerAllowedForUser(guildId: string, userId: string): boolean {
@@ -289,79 +363,23 @@ function isServerAllowedForUser(guildId: string, userId: string): boolean {
     const mode = settings.store.serverFilterMode;
     if (mode === "none") return true;
     if (mode === "include") {
-        const inc = parseIds(settings.store.serverIncludeIds);
-        return !inc.length || inc.includes(guildId);
+        const includedServers = parseIdSet(settings.store.serverIncludeIds);
+        return includedServers.size === 0 || includedServers.has(guildId);
     }
     if (mode === "exclude") {
-        const exc = parseIds(settings.store.serverExcludeIds);
-        return !exc.length || !exc.includes(guildId);
+        const excludedServers = parseIdSet(settings.store.serverExcludeIds);
+        return excludedServers.size === 0 || !excludedServers.has(guildId);
     }
     return true;
 }
 
-function isUserTracked(userId: string): boolean {
-    const inc = parseIds(settings.store.userIncludeIds);
-    if (inc.length && !inc.includes(userId)) return false;
-    const exc = parseIds(settings.store.userExcludeIds);
-    return !exc.length || !exc.includes(userId);
-}
-
 function shouldFlag(userId: string, guildId: string): boolean {
-    const exc = parseIds(settings.store.userExcludeIds);
-    if (exc.length && exc.includes(userId)) return false;
+    const excludedUsers = parseIdSet(settings.store.userExcludeIds);
+    if (excludedUsers.size > 0 && excludedUsers.has(userId)) return false;
     if (isUserExplicitlyIncluded(userId)) return true;
-    const inc = parseIds(settings.store.userIncludeIds);
-    if (inc.length && !inc.includes(userId)) return false;
+    const includedUsers = parseIdSet(settings.store.userIncludeIds);
+    if (includedUsers.size > 0 && !includedUsers.has(userId)) return false;
     return isUserStaff(userId, guildId);
-}
-
-function memberHasPerm(guildId: string, userId: string, perm: bigint): boolean {
-    const guild = GuildStore.getGuild(guildId);
-    if (!guild) return false;
-    if (guild.ownerId === userId) return true;
-
-    const member = GuildMemberStore.getMember(guildId, userId);
-    if (!member?.roles?.length) return false;
-
-    const sortedRoles = GuildRoleStore.getSortedRoles(guildId);
-    if (!sortedRoles || sortedRoles.length === 0) return false;
-
-    const userRoleIds = new Set(member.roles);
-
-    for (let i = 0; i < sortedRoles.length; i++) {
-        const role = sortedRoles[i];
-        if (!role || !role.id || !userRoleIds.has(role.id)) continue;
-
-        const perms = BigInt(role.permissions);
-        if ((perms & PermissionsBits.ADMINISTRATOR) !== 0n) return true;
-        if ((perms & perm) !== 0n) return true;
-    }
-
-    const everyoneRole = GuildRoleStore.getRole(guildId, guildId);
-    if (everyoneRole) {
-        const perms = BigInt(everyoneRole.permissions);
-        if ((perms & PermissionsBits.ADMINISTRATOR) !== 0n) return true;
-        if ((perms & perm) !== 0n) return true;
-    }
-
-    return false;
-}
-
-function getPermChecks(): Array<[keyof typeof settings.store, bigint]> {
-    return [
-        ["adminPermission", PermissionsBits.ADMINISTRATOR],
-        ["manageGuildPermission", PermissionsBits.MANAGE_GUILD],
-        ["manageChannelsPermission", PermissionsBits.MANAGE_CHANNELS],
-        ["manageRolesPermission", PermissionsBits.MANAGE_ROLES],
-        ["manageNicknamesPermission", PermissionsBits.MANAGE_NICKNAMES],
-        ["manageMessagesPermission", PermissionsBits.MANAGE_MESSAGES],
-        ["kickMembersPermission", PermissionsBits.KICK_MEMBERS],
-        ["banMembersPermission", PermissionsBits.BAN_MEMBERS],
-        ["moderateMembersPermission", PermissionsBits.MODERATE_MEMBERS],
-        ["moveMembersPermission", PermissionsBits.MOVE_MEMBERS],
-        ["muteMembersPermission", PermissionsBits.MUTE_MEMBERS],
-        ["deafenMembersPermission", PermissionsBits.DEAFEN_MEMBERS],
-    ];
 }
 
 function isUserStaff(userId: string, guildId: string): boolean {
@@ -373,9 +391,9 @@ function isUserStaff(userId: string, guildId: string): boolean {
     try {
         const computed: bigint | undefined = PermissionStore.getGuildPermissionsForUser?.(userId, guildId);
         if (computed !== undefined && computed !== null) {
-            const permChecks = getPermChecks();
             for (let i = 0; i < permChecks.length; i++) {
-                const [key, perm] = permChecks[i];
+                const [key, permName] = permChecks[i];
+                const perm = PermissionsBits[permName];
                 if (settings.store[key] && (BigInt(computed) & perm) !== 0n) return true;
             }
             return false;
@@ -397,12 +415,12 @@ function isUserStaff(userId: string, guildId: string): boolean {
     }
 
     const userRoleIds = new Set(member.roles);
-    const permChecks = getPermChecks();
 
     for (let i = 0; i < permChecks.length; i++) {
-        const [key, perm] = permChecks[i];
+        const [key, permName] = permChecks[i];
         if (!settings.store[key]) continue;
 
+        const perm = PermissionsBits[permName];
         for (let j = 0; j < sortedRoles.length; j++) {
             const role = sortedRoles[j];
             if (!role || !role.id || !userRoleIds.has(role.id)) continue;
@@ -422,8 +440,8 @@ function getUsername(userId: string): string {
 
 function getAvatarUrl(userId: string): string {
     const user = UserStore.getUser(userId);
-    if (!user?.avatar) return `https://cdn.discordapp.com/embed/avatars/${Number(BigInt(userId) % 5n)}.png`;
-    return `https://cdn.discordapp.com/avatars/${userId}/${user.avatar}.png?size=128`;
+    if (!user) return IconUtils.getDefaultAvatarURL(userId);
+    return IconUtils.getUserAvatarURL(user, false, 128) ?? IconUtils.getDefaultAvatarURL(userId);
 }
 
 function logVoiceChannelDetails(channelId: string): void {
@@ -439,18 +457,18 @@ function logVoiceChannelDetails(channelId: string): void {
     if (!voiceStates) {
         logger.info(`📋 Voice Channel: ${channel.name || channelId}`);
         logger.info(`   Guild: ${guild.name} (${guild.id})`);
-        logger.info(`   No users in voice channel`);
+        logger.info("   No users in voice channel");
         return;
     }
 
     const userIds = Object.keys(voiceStates);
     const myUserId = UserStore.getCurrentUser()?.id;
 
-    logger.info(`════════════════════════════════════════`);
+    logger.info("════════════════════════════════════════");
     logger.info(`   Voice Channel: ${channel.name || channelId}`);
     logger.info(`   Guild: ${guild.name} (${guild.id})`);
     logger.info(`   Users in voice: ${userIds.length}`);
-    logger.info(`════════════════════════════════════════`);
+    logger.info("════════════════════════════════════════");
 
     for (let i = 0; i < userIds.length; i++) {
         const userId = userIds[i];
@@ -459,8 +477,8 @@ function logVoiceChannelDetails(channelId: string): void {
         const discriminator = user?.discriminator ?? "0";
         const isMe = userId === myUserId;
 
-        logger.info(``);
-        logger.info(`👤 User ${i + 1}: ${username}#${discriminator}${isMe ? ' (YOU)' : ''}`);
+        logger.info("");
+        logger.info(`👤 User ${i + 1}: ${username}#${discriminator}${isMe ? " (YOU)" : ""}`);
         logger.info(`   ID: ${userId}`);
 
         const member = GuildMemberStore.getMember(channel.guild_id, userId);
@@ -470,7 +488,7 @@ function logVoiceChannelDetails(channelId: string): void {
         }
 
         if (guild.ownerId === userId) {
-            logger.info(`   ⭐ Server Owner`);
+            logger.info("   ⭐ Server Owner");
         }
 
         if (member?.roles && member.roles.length > 0) {
@@ -481,36 +499,36 @@ function logVoiceChannelDetails(channelId: string): void {
                 if (role) {
                     const rolePerms = BigInt(role.permissions);
                     const isAdmin = (rolePerms & PermissionsBits.ADMINISTRATOR) !== 0n;
-                    logger.info(`     - ${role.name}${isAdmin ? ' ⚠️ [ADMIN]' : ''} (${roleId})`);
+                    logger.info(`     - ${role.name}${isAdmin ? " ⚠️ [ADMIN]" : ""} (${roleId})`);
                 } else {
                     logger.info(`     - Unknown Role (${roleId})`);
                 }
             }
         } else {
-            logger.info(`   Roles: None (or @everyone only)`);
+            logger.info("   Roles: None (or @everyone only)");
         }
 
         logUserPermissions(userId, channel.guild_id);
 
-        logger.info(`────────────────────────────────────`);
+        logger.info("────────────────────────────────────");
     }
 
-    logger.info(``);
-    logger.info(` End of voice channel user list`);
-    logger.info(`════════════════════════════════════════`);
+    logger.info("");
+    logger.info(" End of voice channel user list");
+    logger.info("════════════════════════════════════════");
 }
 
 function logUserPermissions(userId: string, guildId: string): void {
     try {
         const memberData = GuildMemberStore.getMember(guildId, userId);
         if (!memberData || !memberData.roles || memberData.roles.length === 0) {
-            logger.info(`   User has no roles`);
+            logger.info("   User has no roles");
             return;
         }
 
         const sortedRoles = GuildRoleStore.getSortedRoles(guildId);
         if (!sortedRoles || sortedRoles.length === 0) {
-            logger.info(`   No roles available in GuildRoleStore`);
+            logger.info("   No roles available in GuildRoleStore");
             return;
         }
 
@@ -526,10 +544,10 @@ function logUserPermissions(userId: string, guildId: string): void {
         }
 
         if (userPerms.size > 0) {
-            logger.info(`   Permissions:`);
+            logger.info("   Permissions:");
             logPermissions(userPerms);
         } else {
-            logger.info(`   No special permissions found`);
+            logger.info("   No special permissions found");
         }
     } catch (e) {
         logger.info(`   Error retrieving permissions: ${e}`);
@@ -560,7 +578,7 @@ function logPermissions(userPerms: Set<string>): void {
             perm === "Manage Roles" || perm === "Kick Members" ||
             perm === "Ban Members" || perm === "Timeout Members" ||
             perm === "Manage Nicknames";
-        logger.info(`     ✓ ${perm}${isCritical ? ' ⚠️' : ''}`);
+        logger.info(`     ✓ ${perm}${isCritical ? " ⚠️" : ""}`);
     }
 }
 
@@ -683,37 +701,33 @@ export default definePlugin({
             if (!myUserId) return;
 
             for (let i = 0; i < voiceStates.length; i++) {
-                try {
-                    const { userId, channelId, oldChannelId } = voiceStates[i];
-                    if (userId === myUserId) continue;
-                    if (!isServerAllowedForUser(channel.guild_id, userId)) continue;
+                const { userId, channelId, oldChannelId } = voiceStates[i];
+                if (userId === myUserId) continue;
+                if (!isServerAllowedForUser(channel.guild_id, userId)) continue;
 
-                    const entered = channelId === currentChannelId && oldChannelId !== currentChannelId;
+                const entered = channelId === currentChannelId && oldChannelId !== currentChannelId;
 
-                    if (entered) {
-                        if (!shouldFlag(userId, channel.guild_id)) continue;
-                        currentChannelStaff.add(userId);
-                        const name = getUsername(userId);
-                        const ctx = getChannelContext(currentChannelId);
-                        if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" joined - ${ctx}`);
-                        playStaffSound(true);
-                        notify("🚨 StaffDetector:", `"${name}" joined - ${ctx}`, getAvatarUrl(userId));
-                        continue;
-                    }
+                if (entered) {
+                    if (!shouldFlag(userId, channel.guild_id)) continue;
+                    currentChannelStaff.add(userId);
+                    const name = getUsername(userId);
+                    const ctx = getChannelContext(currentChannelId);
+                    if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" joined - ${ctx}`);
+                    playStaffSound(true);
+                    notify("🚨 StaffDetector:", `"${name}" joined - ${ctx}`, getAvatarUrl(userId));
+                    continue;
+                }
 
-                    const left = oldChannelId === currentChannelId && channelId !== currentChannelId;
-                    if (left && currentChannelStaff.has(userId)) {
-                        currentChannelStaff.delete(userId);
-                        const name = getUsername(userId);
-                        const ctx = getChannelContext(currentChannelId);
-                        const remaining = currentChannelStaff.size;
-                        const suffix = remaining > 0 ? ` - ${remaining} staff remaining` : " - No staff remaining";
-                        if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" left - ${ctx} (${remaining} remaining)`);
-                        playStaffSound(false);
-                        notify("✅ StaffDetector:", `"${name}" left - ${ctx}${suffix}`, getAvatarUrl(userId));
-                    }
-                } catch (e) {
-                    if (settings.store.enableLogs) logger.error("StaffDetector: error processing voice state:", e);
+                const left = oldChannelId === currentChannelId && channelId !== currentChannelId;
+                if (left && currentChannelStaff.has(userId)) {
+                    currentChannelStaff.delete(userId);
+                    const name = getUsername(userId);
+                    const ctx = getChannelContext(currentChannelId);
+                    const remaining = currentChannelStaff.size;
+                    const suffix = remaining > 0 ? ` - ${remaining} staff remaining` : " - No staff remaining";
+                    if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" left - ${ctx} (${remaining} remaining)`);
+                    playStaffSound(false);
+                    notify("✅ StaffDetector:", `"${name}" left - ${ctx}${suffix}`, getAvatarUrl(userId));
                 }
             }
         },

@@ -375,9 +375,9 @@ function StereoInstallerPanel() {
             <Paragraph className="vc-stereo-installer-status">{busy ? "Working..." : status}</Paragraph>
 
             {!!logs.length && (
-                <pre className="vc-stereo-installer-log">
-                    {logs.slice(-80).join("\n")}
-                </pre>
+                <div className="vc-stereo-installer-log-panel">
+                    <pre className="vc-stereo-installer-log">{logs.slice(-80).join("\n")}</pre>
+                </div>
             )}
         </div>
     );
