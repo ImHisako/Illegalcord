@@ -497,6 +497,63 @@ const BetterScreenshare = definePlugin({
         this.unpatchChannelRTCStore = patchChannelRTCStore();
         this.screensharePatcher = new ScreensharePatcher().patch();
         this.screenshareAudioPatcher = new ScreenshareAudioPatcher().patch();
+        
+        let updateTimeout: ReturnType<typeof setTimeout> | null = null;
+        
+        const extractUserIdFromAvatar = (url: string): string | null => {
+            const match = url.match(/\/avatars\/(\d+)\//);
+            return match ? match[1] : null;
+        };
+
+        const updateMainStreamQuality = () => {
+            const currentUser = UserStore.getCurrentUser();
+            if (!currentUser) return;
+            
+            const topBar = document.querySelector('.topControls_bfe55a, [class*="topControls_"]');
+            if (!topBar) return;
+            
+            const ownerAvatar = topBar.querySelector('img[class*="avatar__"], div[class*="avatar__"] > img');
+            if (!ownerAvatar || !(ownerAvatar instanceof HTMLImageElement)) return;
+            
+            const ownerId = extractUserIdFromAvatar(ownerAvatar.src);
+            if (!ownerId || ownerId !== currentUser.id) return;
+            
+            const qualityContainer = topBar.querySelector('[class*="streamQualityIndicator__"]');
+            if (!qualityContainer) return;
+            
+            const resolutionSpan = qualityContainer.querySelector('[class*="qualityResolution__"]');
+            const fpsSpan = resolutionSpan?.nextElementSibling;
+            if (!resolutionSpan || !fpsSpan) return;
+            
+            const { currentProfile } = screenshareStore.get();
+            const { resolutionEnabled, height, framerateEnabled, framerate } = currentProfile;
+            
+            let newResolution = resolutionSpan.textContent || "720p";
+            let newFps = (fpsSpan.textContent || "30 FPS").replace(" FPS", "");
+            
+            if (resolutionEnabled && height) newResolution = `${height}p`;
+            if (framerateEnabled && framerate) newFps = `${framerate}`;
+            
+            if (resolutionSpan.textContent !== newResolution) resolutionSpan.textContent = newResolution;
+            if (fpsSpan.textContent !== `${newFps} FPS`) fpsSpan.textContent = `${newFps} FPS`;
+        };
+        
+        const debouncedUpdate = () => {
+            if (updateTimeout) clearTimeout(updateTimeout);
+            updateTimeout = setTimeout(updateMainStreamQuality, 50);
+        };
+        
+        this.qualityObserver = new MutationObserver(debouncedUpdate);
+        this.qualityObserver.observe(document.body, {
+            subtree: true,
+            childList: true,
+            attributes: true,
+            attributeFilter: ['class', 'src']
+
+        });
+        
+        updateMainStreamQuality();
+        
 
     },
     stop(): void {
@@ -505,6 +562,8 @@ const BetterScreenshare = definePlugin({
         this.screenshareAudioPatcher?.unpatch();
         this.screensharePatcher?.unpatch();
         Emitter.removeAllListeners(PluginInfo.PLUGIN_NAME);
+        this.qualityObserver?.disconnect();
+        if (this.updateTimeout) clearTimeout(this.updateTimeout);
     },
     toolboxActions: {
         "Open Screenshare Settings": openScreenshareModal
