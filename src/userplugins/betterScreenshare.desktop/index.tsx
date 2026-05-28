@@ -102,7 +102,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function screenshareSettingsButton() {
-
     return (
         <Button
             tooltipText="Change screenshare settings"
@@ -278,6 +277,17 @@ const streamContextPatch: NavContextMenuPatchCallback = (children, props: Stream
     children.push(<Menu.MenuSeparator />, <Menu.MenuGroup>{menuItem}</Menu.MenuGroup>);
 };
 
+const screenshareContextMenuPatch: NavContextMenuPatchCallback = (children) => {
+    children.push(
+        <Menu.MenuSeparator />,
+        <Menu.MenuItem
+            id="better-screenshare-open-settings"
+            label="Screenshare Plugin Settings"
+            action={openScreenshareModal}
+        />
+    );
+};
+
 function patchStreamQuality(opts: StreamQualityOptions) {
     if (!screenshareStore) return opts;
 
@@ -420,26 +430,27 @@ function patchChannelRTCStore() {
 const BetterScreenshare = definePlugin({
     name: "BetterScreenshare",
     description: "This plugin allows you to further customize your screen sharing.",
-    tags: ["Voice", "Customisation"],
     authors: [Devs.phil],
+    tags: ["Voice", "Customisation"],
+    enabledByDefault: false,
     dependencies: ["PhilsPluginLibrary"],
     patches: [
         {
-            find: "GoLiveModal: user cannot be undefined", // Module: 60594; canaryRelease: 364525; L431
+            find: "GoLiveModal: user cannot be undefined",
             replacement: {
                 match: /onSubmit:(\w+)/,
                 replace: "onSubmit:$self.replacedSubmitFunction($1)"
             }
         },
         {
-            find: "StreamSettings: user cannot be undefined", // Module: 641115; canaryRelease: 364525; L254
+            find: "StreamSettings: user cannot be undefined",
             replacement: {
                 match: /\(.{0,10}(,{.{0,100}modalContent)/,
                 replace: "($self.GoLivePanelWrapper$1"
             }
         },
         {
-            find: ".StreamPreviewIntro", // Stream settings modal
+            find: ".StreamPreviewIntro",
             replacement: {
                 match: /className:\i\.buttons,.{0,100}children:\[/,
                 replace: "$&$self.screenshareSettingsButton(),"
@@ -488,7 +499,9 @@ const BetterScreenshare = definePlugin({
         }
     }),
     contextMenus: {
-        "stream-context": streamContextPatch
+        "stream-context": streamContextPatch,
+        "manage-streams": screenshareContextMenuPatch,
+        "stream-options": screenshareContextMenuPatch,
     },
     start(): void {
         initScreenshareStore();
@@ -497,9 +510,9 @@ const BetterScreenshare = definePlugin({
         this.unpatchChannelRTCStore = patchChannelRTCStore();
         this.screensharePatcher = new ScreensharePatcher().patch();
         this.screenshareAudioPatcher = new ScreenshareAudioPatcher().patch();
-        
+
         let updateTimeout: ReturnType<typeof setTimeout> | null = null;
-        
+
         const extractUserIdFromAvatar = (url: string): string | null => {
             const match = url.match(/\/avatars\/(\d+)\//);
             return match ? match[1] : null;
@@ -508,53 +521,50 @@ const BetterScreenshare = definePlugin({
         const updateMainStreamQuality = () => {
             const currentUser = UserStore.getCurrentUser();
             if (!currentUser) return;
-            
+
             const topBar = document.querySelector('.topControls_bfe55a, [class*="topControls_"]');
             if (!topBar) return;
-            
+
             const ownerAvatar = topBar.querySelector('img[class*="avatar__"], div[class*="avatar__"] > img');
             if (!ownerAvatar || !(ownerAvatar instanceof HTMLImageElement)) return;
-            
+
             const ownerId = extractUserIdFromAvatar(ownerAvatar.src);
             if (!ownerId || ownerId !== currentUser.id) return;
-            
+
             const qualityContainer = topBar.querySelector('[class*="streamQualityIndicator__"]');
             if (!qualityContainer) return;
-            
+
             const resolutionSpan = qualityContainer.querySelector('[class*="qualityResolution__"]');
             const fpsSpan = resolutionSpan?.nextElementSibling;
             if (!resolutionSpan || !fpsSpan) return;
-            
+
             const { currentProfile } = screenshareStore.get();
             const { resolutionEnabled, height, framerateEnabled, framerate } = currentProfile;
-            
+
             let newResolution = resolutionSpan.textContent || "720p";
             let newFps = (fpsSpan.textContent || "30 FPS").replace(" FPS", "");
-            
+
             if (resolutionEnabled && height) newResolution = `${height}p`;
             if (framerateEnabled && framerate) newFps = `${framerate}`;
-            
+
             if (resolutionSpan.textContent !== newResolution) resolutionSpan.textContent = newResolution;
             if (fpsSpan.textContent !== `${newFps} FPS`) fpsSpan.textContent = `${newFps} FPS`;
         };
-        
+
         const debouncedUpdate = () => {
             if (updateTimeout) clearTimeout(updateTimeout);
             updateTimeout = setTimeout(updateMainStreamQuality, 50);
         };
-        
+
         this.qualityObserver = new MutationObserver(debouncedUpdate);
         this.qualityObserver.observe(document.body, {
             subtree: true,
             childList: true,
             attributes: true,
             attributeFilter: ['class', 'src']
-
         });
-        
-        updateMainStreamQuality();
-        
 
+        updateMainStreamQuality();
     },
     stop(): void {
         this.unpatchChannelRTCStore?.();
