@@ -12,7 +12,6 @@ import { Heading } from "@components/Heading";
 import { HeadphonesIcon } from "@components/Icons";
 import { Paragraph } from "@components/Paragraph";
 import SettingsPlugin from "@plugins/_core/settings";
-import { EquicordDevs } from "@utils/constants";
 import { removeFromArray } from "@utils/misc";
 import definePlugin, { OptionType, PluginNative, ReporterTestable } from "@utils/types";
 import { Alerts, Button, React, Select, SettingsRouter, showToast, TextInput, Toasts } from "@webpack/common";
@@ -403,7 +402,7 @@ export default definePlugin({
     name: "StereoInstaller",
     description: "Installs and reverts the Discord stereo voice module from selected method sources.",
     tags: ["Utility"],
-    authors: [EquicordDevs.irritably],
+    authors: [{ name: "irritably", id: 928787166916640838n }],
     reporterTestable: ReporterTestable.None,
     settings,
     settingsAboutComponent: ErrorBoundary.wrap(StereoWarning, { noop: true }),
