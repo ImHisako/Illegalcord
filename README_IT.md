@@ -31,6 +31,7 @@ I plugin inclusi possono essere trovati [qui](https://equicord.org/plugins).
 - **FakeMuteAndDeafen**
 - **BetterMic**
 - **BetterScreenshare**
+- **Anon.li Drop** | Supera i limiti di Discord per la condivisione di file + Attenzione alla sicurezza e alla privacy https://anon.li/
 - **StaffDetector**
 - **BigFileUpload**
 - **Stalker**
