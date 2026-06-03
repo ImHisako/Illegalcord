@@ -57,18 +57,18 @@ I plugin inclusi possono essere trovati [qui](https://equicord.org/plugins).
 - **InviteDefaults**
 - **OsintToolKit**
 - **Ottimizzazioni di Hisako**
-- **SilentDelete** 
+- **SilentDelete**
+- **ScreenshareAlert**
 - **BoosterCount** (https://github.com/Reathe/BoosterCount/tree/main)
 - **BadgeSelector** | (https://github.com/002-sans/VencordPlugins/tree/b8c7c98a50c0700f7389b0484e5659fe5ec0f99e/BadgesSelector)
 - **CustomStream** | (https://github.com/MrTopQ/customStream-Vencord)
 - **TypingFriends** | (https://github.com/debxylen/Vencord/tree/main/src/plugins/typingFriends)
-- **ScreenshareAlert** | (https://github.com/arrependimentosconstantes/Extension-ScreenShareAlert/tree/main)
 - **embeddedURLs** | (https://github.com/ddadiani/Vencord-EmbeddedLinks/blob/main/src/plugins/embeddedURLs/index.ts)
 - **GPU Binder** | (https://github.com/UnClide/vencord-gpubinder)
 - **stereoScreenshareAudio** | (https://github.com/nerdwave-nick/Vencord-Stereo-Fix/blob/main/src/plugins/stereoScreenshareAudio/index.ts)
 - **DiscordLock** | (https://github.com/vejcowski/DiscordLock/tree/main)
 - **Opsec Plugin** | (https://github.com/ItzSolace/OpSec-Vencord/tree/main) | (Abbiamo una versione diversa con supporto italiano)
-- **CrashHandlerEnhanched** |
+- **CrashHandlerEnhanched**
 
 </details>
 
