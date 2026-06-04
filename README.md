@@ -55,6 +55,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **GateawayLogger**
 - **InviteDefaults**
 - **OsintToolKit**
+- **LarpCord**
 - **Hisako's Optimizations**
 - **SilentDelete**
 - **ScreenshareAlert**
