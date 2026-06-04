@@ -16,14 +16,16 @@ const Quality = {
 } as const;
 type Quality = typeof Quality[keyof typeof Quality];
 
+// Qualities are reverse engineered, cap is the maximum dimension in pixels
 const qualities = [
-    { giphy: "giphy", tenor: "Ax", cap: 480 }, // webp
-    { giphy: "480w", tenor: "A5", cap: 360 }, // webppreview
-    { giphy: "200", tenor: "A1", cap: 200 }, // tinywebp
-    { giphy: "100", tenor: "A2", cap: 120 }, // nanowebp
+    { giphy: "giphy", tenor: "Ax", cap: 480, video: "Po" }, // High ~ 480-native
+    { giphy: "480w", tenor: "A5", cap: 360, video: "P3" }, // Reasonable ~ 360
+    { giphy: "200", tenor: "A1", cap: 200, video: "P2" }, // Low ~ 200
+    { giphy: "100", tenor: "A2", cap: 120, video: "P4" }, // Horrible ~ 120
 ];
 
 const mediaTenorLinkRegex = /^https:\/\/(?:media\d?|c)\.tenor\.com(?:\/m)?\/(?<id>.+?)(?<quality>.{2})\/(?<name>[^/]+)\./i;
+const mediaTenorVideoLinkRegex = /^https:\/\/(?:media\d?|c)\.tenor\.com(?:\/m)?\/(?<id>.+?)(?<quality>P\w{1,2})\/(?<name>[^/]+)\.(?:mp4|webm)$/i;
 const giphyLinkRegex = /^https:\/\/media\d?\.giphy\.com\/media\/.*?\/(?<code>.*?)\/giphy/i;
 const mediaProxyParser = /^https:\/\/images-ext-\d\.discordapp.net\/external\/.*?\.*?\/(?<protocol>.*?)\/(?<rest>.*?)$/i;
 
@@ -50,7 +52,7 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "BetterGifLoad",
-    description: "Allows you to change the quality of GIFs in the GIF picker",
+    description: "Change the quality of GIFs in the GIF picker. Improves performance and lowers internet usage.",
     tags: ["Media", "Utility"],
     authors: [EquicordDevs.Leon135, EquicordDevs.nexpid],
     settings,
@@ -76,6 +78,19 @@ export default definePlugin({
                 },
             ]
         },
+        {
+            find: "renderEmptyFavorite",
+            replacement: [
+                {
+                    match: /src:\(\i=.{0,300}"animated","true"\),\i\.toString\(\)\):\i\),/,
+                    replace: "src:$self.parseLink(this.props.src,[this.props.coords.width,this.props.coords.height]),",
+                },
+                {
+                    match: /(this\.handleCanPlay,\i)\.src=(\i)/,
+                    replace: "$1.src=$self.parseLink(this.props.src,[this.props.coords.width,this.props.coords.height])",
+                },
+            ],
+        },
     ],
     parseLink(link: string, sizes?: [width: number, height: number]) {
         const quality = settings.store.gifQuality;
@@ -83,6 +98,11 @@ export default definePlugin({
         const url: URL = new URL(link.startsWith("//") ? `https:${link}` : link);
 
         const cleanLink = getCleanLink(link);
+        const tenorVideoMatch = cleanLink.match(mediaTenorVideoLinkRegex);
+        if (tenorVideoMatch) {
+            const { id, name } = tenorVideoMatch.groups!;
+            return `https://media.tenor.com/${id}${q.video}/${name}.mp4`;
+        }
         const tenorMatch = cleanLink.match(mediaTenorLinkRegex);
         if (tenorMatch) {
             const { id, name } = tenorMatch.groups!;
@@ -105,7 +125,6 @@ export default definePlugin({
             }
             return url.toString();
         }
-
         return link;
     }
 });
