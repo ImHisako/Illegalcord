@@ -1,4 +1,4 @@
-# [<img src="./browser/icon.png" width="40" align="left" alt="Equicord">](https://github.com/Equicord/Equicord) Illegalcord
+# [<img src="./browser/Illegalcord.png" width="40" align="left" alt="Equicord">](https://github.com/Equicord/Equicord) Illegalcord
 
 🌐 **Languages / Lingue:** [English](README.md) | [Italiano](README_IT.md)
 
