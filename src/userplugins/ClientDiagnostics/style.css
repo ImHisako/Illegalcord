@@ -134,6 +134,99 @@
     background: var(--background-secondary);
 }
 
+.vc-client-diagnostics-search-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vc-client-diagnostics-search-input {
+    min-width: 0;
+    flex: 1;
+}
+
+.vc-client-diagnostics-search-controls button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vc-client-diagnostics-guide-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--background-secondary);
+}
+
+.vc-client-diagnostics-guide-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+}
+
+.vc-client-diagnostics-guide-item {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--background-primary);
+}
+
+.vc-client-diagnostics-monitor-layout {
+    display: grid;
+    grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1.28fr);
+    align-items: start;
+    gap: 12px;
+}
+
+.vc-client-diagnostics-monitor-results,
+.vc-client-diagnostics-monitor-panel {
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--background-secondary);
+}
+
+.vc-client-diagnostics-monitor-results {
+    display: flex;
+    max-height: 540px;
+    flex-direction: column;
+    gap: 8px;
+    overflow: auto;
+    padding: 8px;
+}
+
+.vc-client-diagnostics-monitor-result {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 74px auto;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--background-primary);
+}
+
+.vc-client-diagnostics-monitor-panel {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+}
+
+.vc-client-diagnostics-monitor-panel-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
 .vc-client-diagnostics-analysis-list {
     display: flex;
     flex-direction: column;
@@ -285,9 +378,23 @@
     overflow: auto;
 }
 
-@media (max-width: 760px) {
+@media (width <= 760px) {
     .vc-client-diagnostics-toolbar {
         flex-direction: column;
+    }
+
+    .vc-client-diagnostics-search-controls,
+    .vc-client-diagnostics-monitor-panel-head {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .vc-client-diagnostics-monitor-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .vc-client-diagnostics-monitor-result {
+        grid-template-columns: minmax(0, 1fr) auto;
     }
 
     .vc-client-diagnostics-actions {

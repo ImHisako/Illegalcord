@@ -12,7 +12,7 @@ import { BaseText } from "@components/BaseText";
 import { Button } from "@components/Button";
 import { CodeBlock } from "@components/CodeBlock";
 import ErrorBoundary from "@components/ErrorBoundary";
-import { ClockIcon, CopyIcon, ResetIcon } from "@components/Icons";
+import { ClockIcon, CopyIcon, MagnifyingGlassIcon, ResetIcon } from "@components/Icons";
 import SettingsPlugin from "@plugins/_core/settings";
 import { classNameFactory } from "@utils/css";
 import { copyWithToast } from "@utils/discord";
@@ -20,10 +20,10 @@ import { Logger } from "@utils/Logger";
 import { isObject, removeFromArray } from "@utils/misc";
 import { useFixedTimer } from "@utils/react";
 import definePlugin, { OptionType, type Plugin, StartAt } from "@utils/types";
-import { React, TabBar, useState } from "@webpack/common";
+import { React, TabBar, TextInput, useState } from "@webpack/common";
 
 type SortBy = "impact" | "cpu" | "memory" | "calls" | "resources";
-type ClientDiagnosticsTab = "diagnostics" | "analysis";
+type ClientDiagnosticsTab = "diagnostics" | "analysis" | "monitor" | "guide";
 type SettingKey = "sortBy" | "showDisabled" | "showApiPlugins" | "refreshMs";
 type ResourceKey = "intervals" | "pendingTimeouts" | "animationFrames" | "listeners";
 type AnyCallback = (this: unknown, ...args: never[]) => unknown;
@@ -108,6 +108,63 @@ const SETTINGS_KEYS: SettingKey[] = ["sortBy", "showDisabled", "showApiPlugins",
 const REFRESH_SETTING_KEYS: SettingKey[] = ["refreshMs"];
 const cl = classNameFactory("vc-client-diagnostics-");
 const logger = new Logger("ClientDiagnostics");
+const GUIDE_ITEMS = [
+    {
+        label: "Impact",
+        description: "An internal score that combines CPU time, slow spikes, slow calls, async time, heap growth, and active resources. The higher it is, the more the plugin deserves attention."
+    },
+    {
+        label: "CPU",
+        description: "The total time measured plugin functions spent on the JavaScript thread since collection started or was reset."
+    },
+    {
+        label: "Calls",
+        description: "The number of times a measured plugin function was called."
+    },
+    {
+        label: "Slow",
+        description: "Counts how many calls passed the slow call threshold configured in the plugin settings."
+    },
+    {
+        label: "Heap +",
+        description: "Shows how much extra JavaScript memory was observed during plugin calls. It uses Chromium heap data, so it does not represent the full process RAM."
+    },
+    {
+        label: "Resources",
+        description: "Adds up still-active resources created by the plugin, such as intervals, pending timeouts, animation frames, and listeners."
+    },
+    {
+        label: "Listeners",
+        description: "Counts event listeners registered while the plugin was running measured code."
+    },
+    {
+        label: "Hot surface",
+        description: "Shows the plugin surface that consumed the most total time, such as start, flux, interval, command, or context menu."
+    },
+    {
+        label: "Max",
+        description: "The slowest single call observed for that plugin."
+    }
+] satisfies Array<{ label: string; description: string; }>;
+
+const MONITOR_GUIDE_ITEMS = [
+    {
+        label: "Extra CPU",
+        description: "In the monitor, this compares the plugin CPU time with the time elapsed since reset. It estimates the extra observed work."
+    },
+    {
+        label: "CPU share",
+        description: "Shows how much of the measured plugin CPU time belongs to the selected plugin."
+    },
+    {
+        label: "Extra RAM",
+        description: "Compares the plugin's observed heap growth with the JavaScript heap currently in use."
+    },
+    {
+        label: "RAM share",
+        description: "Shows how much of the measured heap growth belongs to the selected plugin."
+    }
+] satisfies Array<{ label: string; description: string; }>;
 
 const settings = definePluginSettings({
     sortBy: {
@@ -743,6 +800,27 @@ function formatNumber(value: number) {
     return value.toLocaleString();
 }
 
+function getPercent(part: number, total: number) {
+    if (part === 0) return 0;
+    return total > 0 ? part / total * 100 : undefined;
+}
+
+function formatPercent(value?: number) {
+    if (value === undefined || !Number.isFinite(value)) return "Unavailable";
+    if (value <= 0) return "0%";
+    if (value < 0.1) return "<0.1%";
+    if (value >= 100) return `${value.toFixed(0)}%`;
+    return `${value.toFixed(value >= 10 ? 1 : 2)}%`;
+}
+
+function normalizeSearch(value: string) {
+    return value.trim().toLowerCase();
+}
+
+function matchesPluginSearch(pluginName: string, query: string) {
+    return !query || pluginName.toLowerCase().includes(query);
+}
+
 function getImpactClass(impact: number) {
     if (impact >= 2000) return "high";
     if (impact >= 500) return "medium";
@@ -967,6 +1045,24 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
     );
 }
 
+function SearchControls({ query, onChange, onSearch, disabled }: { query: string; onChange(value: string): void; onSearch(): void; disabled?: boolean; }) {
+    return (
+        <div className={cl("search-controls")}>
+            <div className={cl("search-input")}>
+                <TextInput
+                    placeholder="Search for a plugin..."
+                    value={query}
+                    onChange={onChange}
+                />
+            </div>
+            <Button variant="secondary" onClick={onSearch} disabled={disabled}>
+                <MagnifyingGlassIcon height={16} width={16} />
+                Search
+            </Button>
+        </div>
+    );
+}
+
 function PluginRow({ row }: { row: DiagnosticsRow; }) {
     const impactClass = getImpactClass(row.impact);
     const status = row.enabled ? row.calls > 0 ? "Measured" : "Idle" : "Disabled";
@@ -1120,11 +1216,17 @@ function ImpactAnalysisCard({ item, selected, onSelect }: { item: ImpactAnalysis
 
 function ImpactAnalysisPage() {
     const { refreshMs } = settings.use(REFRESH_SETTING_KEYS);
+    const [query, setQuery] = useState("");
+    const [searchQuery, setSearchQuery] = useState("");
     const [selectedPlugin, setSelectedPlugin] = useState<string | undefined>();
     const elapsed = useFixedTimer({ interval: refreshMs });
     const items = React.useMemo(
         () => buildImpactAnalysis(buildRows(false, false, "impact")),
         [elapsed]
+    );
+    const filteredItems = React.useMemo(
+        () => items.filter(item => matchesPluginSearch(item.row.name, searchQuery)),
+        [items, searchQuery]
     );
 
     return (
@@ -1138,14 +1240,26 @@ function ImpactAnalysisPage() {
                 </div>
             </div>
 
+            <SearchControls
+                query={query}
+                onChange={setQuery}
+                onSearch={() => setSearchQuery(normalizeSearch(query))}
+                disabled={items.length === 0}
+            />
+
             {items.length === 0 ? (
                 <div className={cl("empty")}>
                     <BaseText size="md" weight="semibold">No suspicious plugins yet.</BaseText>
                     <BaseText size="sm" color="text-muted">Use the client for a few minutes, then come back here to see collected samples.</BaseText>
                 </div>
+            ) : filteredItems.length === 0 ? (
+                <div className={cl("empty")}>
+                    <BaseText size="md" weight="semibold">No plugin matches that search.</BaseText>
+                    <BaseText size="sm" color="text-muted">Try another plugin name or clear the search field.</BaseText>
+                </div>
             ) : (
                 <div className={cl("analysis-list")}>
-                    {items.map(item => (
+                    {filteredItems.map(item => (
                         <ImpactAnalysisCard
                             key={item.row.name}
                             item={item}
@@ -1159,15 +1273,149 @@ function ImpactAnalysisPage() {
     );
 }
 
+function PluginMonitorPage() {
+    const { showDisabled, showApiPlugins, refreshMs } = settings.use(SETTINGS_KEYS);
+    const [query, setQuery] = useState("");
+    const [selectedPlugin, setSelectedPlugin] = useState<string | undefined>();
+    const elapsed = useFixedTimer({ interval: refreshMs });
+    const memory = getMemory();
+    const rows = React.useMemo(
+        () => buildRows(showDisabled, showApiPlugins, "impact"),
+        [elapsed, showDisabled, showApiPlugins]
+    );
+    const normalizedQuery = query.trim().toLowerCase();
+    const filteredRows = React.useMemo(
+        () => (normalizedQuery
+            ? rows.filter(row => row.name.toLowerCase().includes(normalizedQuery))
+            : rows).slice(0, 16),
+        [normalizedQuery, rows]
+    );
+    const measuredRows = rows.filter(row => row.calls > 0);
+    const selectedRow = rows.find(row => row.name === selectedPlugin) ?? filteredRows[0];
+    const totalCpu = measuredRows.reduce((sum, row) => sum + row.totalMs, 0);
+    const totalHeapIncrease = measuredRows.reduce((sum, row) => sum + row.heapIncrease, 0);
+    const elapsedMs = Math.max(1, Date.now() - startedAt);
+    const reasons = selectedRow ? getImpactReasons(selectedRow) : [];
+
+    function selectSearchResult() {
+        const exactMatch = normalizedQuery
+            ? filteredRows.find(row => row.name.toLowerCase() === normalizedQuery)
+                ?? filteredRows.find(row => row.name.toLowerCase().startsWith(normalizedQuery))
+            : undefined;
+        const match = exactMatch ?? filteredRows[0];
+
+        if (match) setSelectedPlugin(match.name);
+    }
+
+    return (
+        <div className={cl("page")}>
+            <div className={cl("toolbar")}>
+                <div>
+                    <BaseText tag="h2" size="xl" weight="semibold">Plugin monitor</BaseText>
+                    <BaseText size="sm" color="text-muted">
+                        Search a plugin and compare its measured CPU and RAM contribution.
+                    </BaseText>
+                </div>
+            </div>
+
+            <SearchControls
+                query={query}
+                onChange={setQuery}
+                onSearch={selectSearchResult}
+                disabled={filteredRows.length === 0}
+            />
+
+            <div className={cl("monitor-layout")}>
+                <div className={cl("monitor-results")}>
+                    {filteredRows.length === 0 ? (
+                        <BaseText size="sm" color="text-muted">No plugin matches that search.</BaseText>
+                    ) : filteredRows.map(row => (
+                        <div className={cl("monitor-result", selectedRow?.name === row.name && "selected")} key={row.name}>
+                            <div className={cl("plugin-cell")}>
+                                <BaseText size="sm" weight="semibold" lineClamp={1}>{row.name}</BaseText>
+                                <BaseText size="xs" color="text-muted" lineClamp={1}>{row.enabled ? "Enabled" : "Disabled"}{row.api ? " API" : ""}</BaseText>
+                            </div>
+                            <BaseText size="sm" tabularNumbers>{formatPercent(getPercent(row.totalMs, totalCpu))}</BaseText>
+                            <Button variant={selectedRow?.name === row.name ? "primary" : "secondary"} size="small" onClick={() => setSelectedPlugin(row.name)}>
+                                View
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+
+                {selectedRow ? (
+                    <div className={cl("monitor-panel")}>
+                        <div className={cl("monitor-panel-head")}>
+                            <div className={cl("analysis-title")}>
+                                <BaseText size="lg" weight="semibold" lineClamp={1}>{selectedRow.name}</BaseText>
+                                <BaseText size="sm" color="text-muted" lineClamp={2}>
+                                    {selectedRow.calls > 0 ? `Measured through ${formatNumber(selectedRow.calls)} callbacks.` : "No measured callbacks yet."}
+                                </BaseText>
+                            </div>
+                            <BaseText className={cl("impact", getImpactClass(selectedRow.impact))} size="sm" weight="semibold" tabularNumbers>{selectedRow.impact.toFixed(0)}</BaseText>
+                        </div>
+
+                        <div className={cl("metrics")}>
+                            <Metric label="Extra CPU" value={formatPercent(getPercent(selectedRow.totalMs, elapsedMs))} detail={`${formatMs(selectedRow.totalMs)} since reset`} />
+                            <Metric label="CPU share" value={formatPercent(getPercent(selectedRow.totalMs, totalCpu))} detail="Of measured plugin CPU" />
+                            <Metric label="Extra RAM" value={formatPercent(memory ? getPercent(selectedRow.heapIncrease, memory.usedJSHeapSize) : undefined)} detail={`${formatBytes(selectedRow.heapIncrease)} observed heap +`} />
+                            <Metric label="RAM share" value={formatPercent(getPercent(selectedRow.heapIncrease, totalHeapIncrease))} detail="Of measured heap increase" />
+                        </div>
+
+                        <div className={cl("detail-grid")}>
+                            <Metric label="Max call" value={formatMs(selectedRow.maxMs)} detail={`${formatNumber(selectedRow.slowCalls)} slow calls`} />
+                            <Metric label="Resources" value={formatNumber(selectedRow.resources)} detail={`${selectedRow.intervals} intervals, ${selectedRow.listeners} listeners`} />
+                            <Metric label="Async time" value={formatMs(selectedRow.asyncMs)} detail={`${formatNumber(selectedRow.asyncCalls)} async calls`} />
+                            <Metric label="Last heap delta" value={formatBytes(selectedRow.lastHeapDelta)} detail={memory ? "Chromium heap sample" : "Chromium heap unavailable"} />
+                        </div>
+
+                        <div className={cl("detail-section")}>
+                            <BaseText size="md" weight="semibold">Signals</BaseText>
+                            {reasons.length === 0 ? (
+                                <BaseText size="sm" color="text-muted">No risk signal for this plugin yet.</BaseText>
+                            ) : (
+                                <div className={cl("reason-list")}>
+                                    {reasons.map(reason => (
+                                        <div className={cl("reason-line")} key={`${reason.label}-${reason.value}`}>
+                                            <ReasonPill reason={reason} />
+                                            <BaseText size="sm">{reason.description}</BaseText>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className={cl("detail-section")}>
+                            <BaseText size="md" weight="semibold">Most expensive surfaces</BaseText>
+                            <SurfaceBreakdown row={selectedRow} />
+                        </div>
+                    </div>
+                ) : (
+                    <div className={cl("empty")}>
+                        <BaseText size="md" weight="semibold">No plugin selected.</BaseText>
+                        <BaseText size="sm" color="text-muted">Search for a plugin name, then pick one from the results.</BaseText>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function DiagnosticsPage() {
     const { sortBy, showDisabled, showApiPlugins, refreshMs } = settings.use(SETTINGS_KEYS);
+    const [query, setQuery] = useState("");
+    const [searchQuery, setSearchQuery] = useState("");
     const elapsed = useFixedTimer({ interval: refreshMs });
     const memory = getMemory();
     const rows = React.useMemo(
         () => buildRows(showDisabled, showApiPlugins, sortBy as SortBy),
         [elapsed, showDisabled, showApiPlugins, sortBy]
     );
-    const measuredRows = rows.filter(row => row.calls > 0);
+    const filteredRows = React.useMemo(
+        () => rows.filter(row => matchesPluginSearch(row.name, searchQuery)),
+        [rows, searchQuery]
+    );
+    const measuredRows = filteredRows.filter(row => row.calls > 0);
     const totalCpu = measuredRows.reduce((sum, row) => sum + row.totalMs, 0);
     const activeResources = measuredRows.reduce((sum, row) => sum + row.resources, 0);
 
@@ -1194,10 +1442,17 @@ function DiagnosticsPage() {
 
             <div className={cl("metrics")}>
                 <Metric label="Heap used" value={formatBytes(memory?.usedJSHeapSize)} detail={memory ? `${formatBytes(memory.totalJSHeapSize)} allocated` : "Chromium did not expose heap data"} />
-                <Metric label="Measured plugins" value={formatNumber(measuredRows.length)} detail={`${formatNumber(rows.length)} visible`} />
+                <Metric label="Measured plugins" value={formatNumber(measuredRows.length)} detail={`${formatNumber(filteredRows.length)} visible`} />
                 <Metric label="Callback time" value={formatMs(totalCpu)} detail={`Collected for ${formatMs(Date.now() - startedAt)}`} />
                 <Metric label="Active resources" value={formatNumber(activeResources)} detail="Timers, frames, and listeners" />
             </div>
+
+            <SearchControls
+                query={query}
+                onChange={setQuery}
+                onSearch={() => setSearchQuery(normalizeSearch(query))}
+                disabled={rows.length === 0}
+            />
 
             <div className={cl("table")}>
                 <div className={cl("row", "head")}>
@@ -1212,7 +1467,69 @@ function DiagnosticsPage() {
                     <BaseText size="xs" weight="semibold">Hot surface</BaseText>
                     <BaseText size="xs" weight="semibold">Max</BaseText>
                 </div>
-                {rows.map(row => <PluginRow key={row.name} row={row} />)}
+                {filteredRows.map(row => <PluginRow key={row.name} row={row} />)}
+            </div>
+            {filteredRows.length === 0 && (
+                <div className={cl("empty")}>
+                    <BaseText size="md" weight="semibold">No plugin matches that search.</BaseText>
+                    <BaseText size="sm" color="text-muted">Try another plugin name or clear the search field.</BaseText>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function GuidePage() {
+    return (
+        <div className={cl("page")}>
+            <div className={cl("toolbar")}>
+                <div>
+                    <BaseText tag="h2" size="xl" weight="semibold">Guide</BaseText>
+                    <BaseText size="sm" color="text-muted">
+                        This page explains what Client Diagnostics measures and how to read the numbers without knowing the code.
+                    </BaseText>
+                </div>
+            </div>
+
+            <div className={cl("guide-section")}>
+                <BaseText size="md" weight="semibold">What it is for</BaseText>
+                <BaseText size="sm" color="text-muted">
+                    Client Diagnostics helps find plugins that may cause lag, freezes, or extra memory usage. It measures time spent inside plugin functions, JavaScript memory growth, and resources that remain active.
+                </BaseText>
+                <BaseText size="sm" color="text-muted">
+                    The numbers are samples collected while you use Illegalcord. If a plugin is not used during collection, it may look light even if it does more work in other situations.
+                </BaseText>
+            </div>
+
+            <div className={cl("guide-section")}>
+                <BaseText size="md" weight="semibold">What the columns mean</BaseText>
+                <div className={cl("guide-grid")}>
+                    {GUIDE_ITEMS.map(item => (
+                        <div className={cl("guide-item")} key={item.label}>
+                            <BaseText size="sm" weight="semibold">{item.label}</BaseText>
+                            <BaseText size="sm" color="text-muted">{item.description}</BaseText>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className={cl("guide-section")}>
+                <BaseText size="md" weight="semibold">Monitor percentages</BaseText>
+                <div className={cl("guide-grid")}>
+                    {MONITOR_GUIDE_ITEMS.map(item => (
+                        <div className={cl("guide-item")} key={item.label}>
+                            <BaseText size="sm" weight="semibold">{item.label}</BaseText>
+                            <BaseText size="sm" color="text-muted">{item.description}</BaseText>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className={cl("guide-section")}>
+                <BaseText size="md" weight="semibold">Measurement limits</BaseText>
+                <BaseText size="sm" color="text-muted">
+                    CPU and RAM are not per-plugin values read directly from the operating system. The plugin estimates cost by observing JavaScript work, Chromium heap data, and resources created during plugin callbacks.
+                </BaseText>
             </div>
         </div>
     );
@@ -1232,9 +1549,14 @@ function ClientDiagnosticsPage() {
             >
                 <TabBar.Item id="diagnostics">Client Diagnostics</TabBar.Item>
                 <TabBar.Item id="analysis">Impact analysis</TabBar.Item>
+                <TabBar.Item id="monitor">Plugin monitor</TabBar.Item>
+                <TabBar.Item id="guide">Guide</TabBar.Item>
             </TabBar>
 
-            {tab === "diagnostics" ? <DiagnosticsPage /> : <ImpactAnalysisPage />}
+            {tab === "diagnostics" && <DiagnosticsPage />}
+            {tab === "analysis" && <ImpactAnalysisPage />}
+            {tab === "monitor" && <PluginMonitorPage />}
+            {tab === "guide" && <GuidePage />}
         </div>
     );
 }
