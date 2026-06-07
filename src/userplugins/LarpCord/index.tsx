@@ -1433,7 +1433,7 @@ export default definePlugin({
     name: "LarpCord",
     enabledByDefault: true,
     description: t("Visually customize your local Discord profile preview with names, avatars, banners, badges and effects."),
-    authors: [EquicordDevs.irritably],
+    authors: [{ name: "irritably", id: 928787166916640838n }],
     dependencies: ["HeaderBarAPI", "ContextMenuAPI"],
 
     patches: [
