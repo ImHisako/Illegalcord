@@ -6,6 +6,7 @@
 
 import "./style.css";
 
+import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading } from "@components/Heading";
@@ -47,8 +48,25 @@ const METHOD_2_QUALITY_OPTIONS = [
     { label: "512", value: "512" }
 ] satisfies Array<{ label: string; value: StereoMethod2Quality; }>;
 
+let lastRepatchNotificationKey = "";
+
 function appendLogs(existingLogs: string[], newLogs: string[] | undefined): string[] {
     return [...existingLogs, ...(newLogs ?? [])];
+}
+
+function notifyRepatchIfNeeded(info: InstallInfo): void {
+    if (!info.repatchWarning) return;
+
+    const key = `${info.discordRoot}:${info.clientLabel}:${info.repatchWarning}`;
+    if (lastRepatchNotificationKey === key) return;
+
+    lastRepatchNotificationKey = key;
+    showNotification({
+        title: "StereoInstaller",
+        body: info.repatchWarning,
+        permanent: true,
+        onClick: () => SettingsRouter.openUserSettings(`${SETTINGS_ENTRY_KEY}_panel`)
+    });
 }
 
 function StereoWarning() {
@@ -110,7 +128,8 @@ function StereoInstallerPanel() {
 
         setInfo(detected);
         setRoot(detected.discordRoot);
-        setStatus("Discord install detected.");
+        setStatus(detected.repatchWarning || "Discord install detected.");
+        notifyRepatchIfNeeded(detected);
     }
 
     async function browse(): Promise<void> {
@@ -119,7 +138,8 @@ function StereoInstallerPanel() {
 
         setInfo(selected);
         setRoot(selected.discordRoot);
-        setStatus("Discord install selected.");
+        setStatus(selected.repatchWarning || "Discord install selected.");
+        notifyRepatchIfNeeded(selected);
     }
 
     async function runAction(kind: "patch" | "revert" | "method2Index"): Promise<void> {
@@ -411,14 +431,18 @@ export default definePlugin({
     },
 
     start() {
-        if (SettingsPlugin.customEntries.some(entry => entry.key === SETTINGS_ENTRY_KEY)) return;
+        if (!SettingsPlugin.customEntries.some(entry => entry.key === SETTINGS_ENTRY_KEY)) {
+            SettingsPlugin.customEntries.push({
+                key: SETTINGS_ENTRY_KEY,
+                title: "StereoInstaller",
+                Component: ErrorBoundary.wrap(StereoInstallerPage, { noop: true }),
+                Icon: HeadphonesIcon,
+            });
+        }
 
-        SettingsPlugin.customEntries.push({
-            key: SETTINGS_ENTRY_KEY,
-            title: "StereoInstaller",
-            Component: ErrorBoundary.wrap(StereoInstallerPage, { noop: true }),
-            Icon: HeadphonesIcon,
-        });
+        void Native.autoDetect().then(result => {
+            if (result.success) notifyRepatchIfNeeded(result.data);
+        }, () => void 0);
     },
 
     stop() {

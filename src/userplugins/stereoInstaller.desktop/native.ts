@@ -34,6 +34,7 @@ export interface InstallInfo {
     buildLabel: string;
     lastPatchLabel: string;
     lastPatchLabels: LastPatchLabels;
+    repatchWarning: string;
 }
 
 export interface ActionInfo extends InstallInfo {
@@ -53,6 +54,7 @@ const PATCH_METHOD_LABELS: Record<PatchMethod, string> = {
     discordAudioCollective: "Discord Audio Collective Method",
     voicePlayground: "Voice Playground Method"
 };
+const PATCH_METHODS: PatchMethod[] = ["discordAudioCollective", "voicePlayground"];
 
 export type NativeResult<T> = {
     success: true;
@@ -92,6 +94,8 @@ interface WorkerConfig {
     copyMode: "directory" | "singleFile";
     fileName?: SingleFileName;
     metaPath?: string;
+    patchClientLabel: string;
+    patchBuildLabel: string;
     logPath: string;
     logPaths: string[];
     taskName?: string;
@@ -699,9 +703,14 @@ function buildLabelFromAppDir(appDir?: string): string {
     return parts.at(-1) || match[1];
 }
 
+function clientLabelForRoot(root: string, buildLabel: string): string {
+    const clientPrefix = clientPrefixForRoot(root);
+    return clientPrefix && buildLabel ? `${clientPrefix} ${buildLabel}` : clientPrefix || buildLabel || "--";
+}
+
 async function installInfoFromTarget(target: Target): Promise<InstallInfo> {
     const buildLabel = buildLabelFromAppDir(target.appDir || await findDiscordAppDir(target.discordRoot));
-    const clientPrefix = clientPrefixForRoot(target.discordRoot);
+    const clientLabel = clientLabelForRoot(target.discordRoot, buildLabel);
     const lastPatchLabels: LastPatchLabels = {
         discordAudioCollective: await lastPatchCaption(target.discordRoot, "discordAudioCollective"),
         voicePlayground: await lastPatchCaption(target.discordRoot, "voicePlayground")
@@ -714,10 +723,11 @@ async function installInfoFromTarget(target: Target): Promise<InstallInfo> {
         discordRoot: target.discordRoot,
         voiceDir: target.voiceDir,
         appDir: target.appDir,
-        clientLabel: clientPrefix && buildLabel ? `${clientPrefix} ${buildLabel}` : clientPrefix || buildLabel || "--",
+        clientLabel,
         buildLabel,
         lastPatchLabel: lastPatchLabels.discordAudioCollective,
-        lastPatchLabels
+        lastPatchLabels,
+        repatchWarning: await repatchWarning(target.discordRoot, buildLabel)
     };
 }
 
@@ -735,6 +745,48 @@ function metaPathForRoot(discordRoot: string, method: PatchMethod): string {
         : "quick_hub_meta_voice_playground.json";
 
     return join(hubDataDir(), "backups", sanitizedRootKey(discordRoot), fileName);
+}
+
+async function readPatchMeta(discordRoot: string, method: PatchMethod): Promise<Record<string, unknown> | undefined> {
+    const metaPath = metaPathForRoot(discordRoot, method);
+    if (!await isFile(metaPath)) return undefined;
+
+    try {
+        const parsed: unknown = JSON.parse((await readFile(metaPath, "utf8")).trimStart());
+        return isRecord(parsed) ? parsed : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+function metaString(meta: Record<string, unknown>, key: string): string {
+    const value = meta[key];
+    return typeof value === "string" ? value : "";
+}
+
+async function repatchWarning(discordRoot: string, currentBuildLabel: string): Promise<string> {
+    if (!currentBuildLabel) return "";
+
+    let latestPatchBuildLabel = "";
+    let latestPatchTime = -1;
+
+    for (const method of PATCH_METHODS) {
+        const meta = await readPatchMeta(discordRoot, method);
+        if (!meta || !metaString(meta, "last_patch_utc")) continue;
+
+        const date = new Date(metaString(meta, "last_patch_utc"));
+        const patchTime = Number.isNaN(date.getTime()) ? 0 : date.getTime();
+        if (patchTime < latestPatchTime) continue;
+
+        latestPatchTime = patchTime;
+        latestPatchBuildLabel = metaString(meta, "build_label");
+    }
+
+    if (latestPatchTime < 0) return "";
+    if (!latestPatchBuildLabel) return "StereoInstaller needs to verify this Discord version. Patch Discord voice again with StereoInstaller.";
+    if (latestPatchBuildLabel !== currentBuildLabel) return "Discord updated since StereoInstaller last patched audio. Patch Discord voice again with StereoInstaller.";
+
+    return "";
 }
 
 async function lastPatchCaption(discordRoot: string, method: PatchMethod): Promise<string> {
@@ -997,6 +1049,7 @@ async function scheduleWorker(actionName: "Patch" | "Revert", sourceDir: string,
     assertPathInside(hubDataDir(), sourceDir);
     assertPathInside(target.discordRoot, target.voiceDir);
 
+    const patchBuildLabel = buildLabelFromAppDir(target.appDir || await findDiscordAppDir(target.discordRoot));
     const workerDir = join(hubDataDir(), "worker");
     const usePowershellWorker = platformKey() === "windows";
     const workerExecutable = usePowershellWorker ? powershellPath() : process.execPath;
@@ -1012,6 +1065,8 @@ async function scheduleWorker(actionName: "Patch" | "Revert", sourceDir: string,
         copyMode,
         fileName: copyMode === "singleFile" ? fileName : undefined,
         metaPath: metaMethod ? metaPathForRoot(target.discordRoot, metaMethod) : undefined,
+        patchClientLabel: clientLabelForRoot(target.discordRoot, patchBuildLabel),
+        patchBuildLabel,
         logPath: logPath(),
         logPaths: logPaths(),
         taskName,
@@ -1322,7 +1377,10 @@ try {
     if ($config.metaPath) {
         $metaParent = [System.IO.Path]::GetDirectoryName([string] $config.metaPath)
         if ($metaParent) { New-Item -ItemType Directory -Force -Path $metaParent | Out-Null }
-        @{ last_patch_utc = (Get-Date).ToUniversalTime().ToString("o") } | ConvertTo-Json | Set-Content -LiteralPath ([string] $config.metaPath) -Encoding UTF8
+        $meta = [ordered]@{ last_patch_utc = (Get-Date).ToUniversalTime().ToString("o") }
+        if ($config.patchClientLabel) { $meta.client_label = [string] $config.patchClientLabel }
+        if ($config.patchBuildLabel) { $meta.build_label = [string] $config.patchBuildLabel }
+        $meta | ConvertTo-Json | Set-Content -LiteralPath ([string] $config.metaPath) -Encoding UTF8
         Write-InstallerLog ("Wrote metadata: " + $config.metaPath)
     }
 
@@ -1520,7 +1578,10 @@ async function main() {
 
         if (config.metaPath) {
             await fs.mkdir(dirname(config.metaPath), { recursive: true });
-            await fs.writeFile(config.metaPath, JSON.stringify({ last_patch_utc: new Date().toISOString() }, null, 2), "utf8");
+            const meta = { last_patch_utc: new Date().toISOString() };
+            if (config.patchClientLabel) meta.client_label = config.patchClientLabel;
+            if (config.patchBuildLabel) meta.build_label = config.patchBuildLabel;
+            await fs.writeFile(config.metaPath, JSON.stringify(meta, null, 2), "utf8");
             await appendLog(config, "Wrote metadata: " + config.metaPath);
         }
 
