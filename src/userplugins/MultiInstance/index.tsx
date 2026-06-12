@@ -18,6 +18,7 @@ import type { SVGProps } from "react";
 
 const Native = VencordNative?.pluginHelpers?.MultiInstance as PluginNative<typeof import("./native")> | undefined;
 
+const ICON_SETTING_KEYS: Array<"showIcon"> = ["showIcon"];
 const PROFILE_SETTING_KEYS: Array<"instances"> = ["instances"];
 const DOMAINS = ["discord.com", "ptb.discord.com", "canary.discord.com"] as const;
 const DOMAIN_LABELS: Record<DiscordDomain, string> = {
@@ -138,8 +139,7 @@ const settings = definePluginSettings({
     showIcon: {
         type: OptionType.BOOLEAN,
         description: "Show the Multi Instance icon in the header bar.",
-        default: true,
-        restartNeeded: true
+        default: true
     },
     saveSessionsByDefault: {
         type: OptionType.BOOLEAN,
@@ -435,6 +435,9 @@ export function openMultiInstanceModal() {
 }
 
 function MultiInstanceButton() {
+    const { showIcon } = settings.use(ICON_SETTING_KEYS);
+    if (!showIcon) return null;
+
     return (
         <HeaderBarButton
             icon={MultiInstanceIcon}
@@ -455,7 +458,10 @@ export default definePlugin({
     settings,
     headerBarButton: {
         icon: MultiInstanceIcon,
-        render: () => settings.store.showIcon ? <MultiInstanceButtonWithBoundary /> : null,
+        render: () => <MultiInstanceButtonWithBoundary />,
         priority: 9
+    },
+    toolboxActions: {
+        "Open Multi Instance"() { openMultiInstanceModal(); }
     }
 });

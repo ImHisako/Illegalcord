@@ -8,13 +8,13 @@ import "./styles.css";
 
 import { ProfileBadge } from "@api/Badges";
 import { addContextMenuPatch, NavContextMenuPatchCallback, removeContextMenuPatch } from "@api/ContextMenu";
-import { addHeaderBarButton, HeaderBarButton, removeHeaderBarButton } from "@api/HeaderBar";
+import { HeaderBarButton } from "@api/HeaderBar";
 import { DataStore } from "@api/index";
-import { Settings } from "@api/Settings";
-import { EquicordDevs } from "@utils/constants";
+import { definePluginSettings, Settings } from "@api/Settings";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { fetchUserProfile } from "@utils/discord";
 import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalRoot, openModal } from "@utils/modal";
-import definePlugin from "@utils/types";
+import definePlugin, { OptionType } from "@utils/types";
 import type { ProfileEffect } from "@vencord/discord-types";
 import { AuthenticationStore, Button, FluxDispatcher, IconUtils, Menu, OAuth2AuthorizeModal, React, Select, SettingsRouter, SnowflakeUtils, Toasts, UserStore } from "@webpack/common";
 
@@ -22,6 +22,16 @@ const LarpSettings = Settings as typeof Settings & {
     seeAllCustomProfile?: boolean;
     syncOwnCustomProfile?: boolean;
 };
+
+const ICON_SETTING_KEYS: Array<"showIcon"> = ["showIcon"];
+
+const settings = definePluginSettings({
+    showIcon: {
+        type: OptionType.BOOLEAN,
+        description: "Show the LarpCord icon in the header bar.",
+        default: true
+    }
+});
 
 const LarpModalRoot = ModalRoot as React.ComponentType<any>;
 const LarpModalHeader = ModalHeader as React.ComponentType<any>;
@@ -1362,9 +1372,18 @@ function CustomProfileModal({ rootProps }: { rootProps: any; }) {
     );
 }
 
-function CustomProfileButton() {
-    return <HeaderBarButton icon={() => <EditIcon size={18} />} tooltip="LarpCord" onClick={() => openModal(props => <CustomProfileModal rootProps={props} />)} />;
+function CustomProfileIcon() {
+    return <EditIcon size={18} />;
 }
+
+function CustomProfileButton() {
+    const { showIcon } = settings.use(ICON_SETTING_KEYS);
+    if (!showIcon) return null;
+
+    return <HeaderBarButton icon={CustomProfileIcon} tooltip="LarpCord" onClick={() => openModal(props => <CustomProfileModal rootProps={props} />)} />;
+}
+
+const CustomProfileButtonWithBoundary = ErrorBoundary.wrap(CustomProfileButton, { noop: true });
 
 function CPDMNotice({ userId }: { userId: string; }) {
     const cached = publicProfilesCache.get(userId);
@@ -1435,6 +1454,13 @@ export default definePlugin({
     description: t("Visually customize your local Discord profile preview with names, avatars, banners, badges and effects."),
     authors: [{ name: "irritably", id: 928787166916640838n }],
     dependencies: ["HeaderBarAPI", "ContextMenuAPI"],
+    settings,
+
+    headerBarButton: {
+        icon: CustomProfileIcon,
+        render: () => <CustomProfileButtonWithBoundary />,
+        priority: 10
+    },
 
     patches: [
         {
@@ -1916,7 +1942,6 @@ export default definePlugin({
 
     async start() {
         applyAvatarPatchEarly();
-        addHeaderBarButton("custom-profile-btn", () => <CustomProfileButton />, 10);
         addContextMenuPatch("user-context", userContextMenuPatch);
 
         loadData().then(() => {
@@ -2366,7 +2391,6 @@ export default definePlugin({
     ] as ProfileBadge[],
 
     stop() {
-        removeHeaderBarButton("custom-profile-btn");
         removeContextMenuPatch("user-context", userContextMenuPatch);
         FluxDispatcher.unsubscribe("CONNECTION_OPEN", onAccountSwitch);
         stopDomObserver();
