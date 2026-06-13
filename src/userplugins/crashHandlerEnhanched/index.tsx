@@ -32,10 +32,10 @@ import { copyWithToast } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import { relaunch } from "@utils/native";
 import definePlugin, { OptionType, type Plugin, type PluginNative } from "@utils/types";
-import { maybePromptToUpdate } from "@utils/updater";
+import { checkForUpdates, isNewer, maybePromptToUpdate, update as updateIllegalcord } from "@utils/updater";
 import type { RenderModalProps } from "@vencord/discord-types";
 import { filters, findBulk, proxyLazyWebpack } from "@webpack";
-import { closeAllModals, closeModal, DraftType, ExpressionPickerStore, FluxDispatcher, Modal, NavigationRouter, openModal, SelectedChannelStore } from "@webpack/common";
+import { Alerts, closeAllModals, closeModal, DraftType, ExpressionPickerStore, FluxDispatcher, Modal, NavigationRouter, openModal, React, SelectedChannelStore } from "@webpack/common";
 
 import type * as NativeModule from "./native";
 
@@ -544,6 +544,59 @@ function openExternal(url: string) {
     VencordNative.native.openExternal(url);
 }
 
+async function checkAndUpdateIllegalcord() {
+    if (IS_WEB || IS_UPDATER_DISABLED) {
+        showNotification({
+            color: "#f23f43",
+            title: "Illegalcord updater is not available.",
+            body: "Use the installer or repository to update this build.",
+            noPersist: true
+        });
+        return;
+    }
+
+    try {
+        const outdated = await checkForUpdates();
+
+        if (!outdated) {
+            showNotification({
+                title: "Illegalcord is already up to date.",
+                body: "No updates were found.",
+                noPersist: true
+            });
+            return;
+        }
+
+        if (isNewer) {
+            showNotification({
+                color: "#f23f43",
+                title: "Illegalcord cannot update automatically.",
+                body: "Your local copy has newer commits than the remote.",
+                noPersist: true
+            });
+            return;
+        }
+
+        if (!await updateIllegalcord()) return;
+
+        Alerts.show({
+            title: "Illegalcord updated.",
+            body: "Restart the client to apply the update.",
+            confirmText: "Restart now",
+            cancelText: "Later",
+            onConfirm: relaunch
+        });
+    } catch (err) {
+        logger.error("Failed to update Illegalcord from the crash popup.", err);
+        showNotification({
+            color: "#f23f43",
+            title: "Illegalcord update failed.",
+            body: "Try the Updater settings tab or reinstall from the repository.",
+            noPersist: true
+        });
+    }
+}
+
 function normalizeSearchText(value: string) {
     return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -861,9 +914,15 @@ function triggerTestCrash() {
 
 function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
     const isLooping = report.recentCrashCount >= 3;
+    const [isCheckingUpdate, setIsCheckingUpdate] = React.useState(false);
     const recoveredText = report.recovered
         ? "Illegalcord recovered the screen, but the crash can happen again if the install or a plugin is broken."
         : "Illegalcord could not confirm a clean recovery. Restart or reinstall the client before continuing.";
+    const runUpdate = async () => {
+        setIsCheckingUpdate(true);
+        await checkAndUpdateIllegalcord();
+        setIsCheckingUpdate(false);
+    };
 
     return (
         <Modal
@@ -903,6 +962,18 @@ function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
                             <Button onClick={() => openExternal(REINSTALL_URL)} className={cl("action-button")}>
                                 Open repository
                                 <OpenExternalIcon height={16} width={16} />
+                            </Button>
+                        </section>
+
+                        <section className={cl("action")}>
+                            <div className={cl("action-copy")}>
+                                <BaseText size="md" weight="semibold">Update Illegalcord</BaseText>
+                                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                    Check for updates and install them without opening the settings updater.
+                                </BaseText>
+                            </div>
+                            <Button variant="secondary" disabled={isCheckingUpdate} onClick={() => void runUpdate()} className={cl("action-button")}>
+                                {isCheckingUpdate ? "Checking..." : "Check updates"}
                             </Button>
                         </section>
 
