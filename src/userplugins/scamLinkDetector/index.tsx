@@ -26,7 +26,7 @@ interface IMessageCreate {
     message: Message;
 }
 
-const urlRegex = /(?:https?:\/\/)?(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)/gi;
+const urlRegex = /(?:https?:\/\/)?(?:www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_+.~#?&//=]*)/gi;
 
 const settings = definePluginSettings({
     enableDebugLogs: {
@@ -102,14 +102,14 @@ function extractDomains(content: string): string[] {
             let cleanedUrl = url.replace(/[)>.,;:!?'"]+$/, "");
 
             // Add protocol if missing for URL parsing
-            if (!cleanedUrl.startsWith('http://') && !cleanedUrl.startsWith('https://')) {
-                cleanedUrl = 'https://' + cleanedUrl;
+            if (!cleanedUrl.startsWith("http://") && !cleanedUrl.startsWith("https://")) {
+                cleanedUrl = "https://" + cleanedUrl;
             }
 
             const hostname = new URL(cleanedUrl).hostname.toLowerCase();
 
             // Remove www. prefix if present
-            const domain = hostname.replace(/^www\./, '');
+            const domain = hostname.replace(/^www\./, "");
 
             domains.push(domain);
             if (settings.store.enableDebugLogs) {
