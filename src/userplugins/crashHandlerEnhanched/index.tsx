@@ -240,7 +240,7 @@ function isDraftTypes(value: unknown): value is DraftTypes {
 
 function getErrorText(value: unknown) {
     if (value instanceof Error) return value.message || value.name;
-    if (typeof value === "string" && value) return value;
+    if (typeof value === "string" && value && value !== "[object Object]") return value;
 }
 
 function getObjectErrorMessage(error: unknown) {
@@ -248,6 +248,25 @@ function getObjectErrorMessage(error: unknown) {
     if (!record) return undefined;
 
     return getErrorText(record.message) ?? getErrorText(record.error) ?? getErrorText(record.reason);
+}
+
+function stringifyErrorObject(error: unknown) {
+    const seen = new WeakSet<object>();
+
+    try {
+        const serialized = JSON.stringify(error, (_key, value: unknown) => {
+            if (typeof value === "bigint") return value.toString();
+            if (typeof value !== "object" || value === null) return value;
+            if (seen.has(value)) return "[Circular]";
+
+            seen.add(value);
+            return value;
+        });
+
+        if (serialized && serialized !== "{}") return serialized;
+    } catch {
+        return String(error);
+    }
 }
 
 function getErrorMessage(error: unknown) {
@@ -258,12 +277,8 @@ function getErrorMessage(error: unknown) {
     const message = getObjectErrorMessage(error);
     if (message) return message;
 
-    try {
-        const serialized = JSON.stringify(error);
-        if (serialized && serialized !== "{}") return serialized;
-    } catch {
-        return String(error);
-    }
+    const serialized = stringifyErrorObject(error);
+    if (serialized) return serialized;
 
     return String(error);
 }
@@ -861,6 +876,9 @@ function isIgnorableUnhandledRejection(error: unknown) {
     if (error == null) return true;
     if (isIgnorableDiscordRejection(error)) return true;
     if (error instanceof Error || typeof error === "string") return false;
+
+    const record = asRecord(error);
+    if (typeof record?.stack === "string") return false;
 
     return !getObjectErrorMessage(error);
 }
