@@ -6,6 +6,7 @@
 
 import "./style.css";
 
+import { showNotification } from "@api/Notifications";
 import { isPluginEnabled, plugins } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
@@ -20,7 +21,7 @@ import { Logger } from "@utils/Logger";
 import { isObject, removeFromArray } from "@utils/misc";
 import { useFixedTimer } from "@utils/react";
 import definePlugin, { OptionType, type Plugin, StartAt } from "@utils/types";
-import { React, TabBar, TextInput, useState } from "@webpack/common";
+import { React, SettingsRouter, TabBar, TextInput, useState } from "@webpack/common";
 
 type SortBy = "impact" | "cpu" | "memory" | "calls" | "resources";
 type ClientDiagnosticsTab = "diagnostics" | "analysis" | "monitor" | "guide";
@@ -106,6 +107,9 @@ const PLUGIN_NAME = "Client diagnostics";
 const ENTRY_KEY = "illegalcord_client_diagnostics";
 const SETTINGS_KEYS: SettingKey[] = ["sortBy", "showDisabled", "showApiPlugins", "refreshMs"];
 const REFRESH_SETTING_KEYS: SettingKey[] = ["refreshMs"];
+const LAG_NOTIFICATION_CHECK_MS = 30_000;
+const LAG_NOTIFICATION_COOLDOWN_MS = 10 * 60_000;
+const LAG_NOTIFICATION_MIN_COLLECTION_MS = 30_000;
 const cl = classNameFactory("vc-client-diagnostics-");
 const logger = new Logger("ClientDiagnostics");
 const GUIDE_ITEMS = [
@@ -204,6 +208,11 @@ const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Measure Chromium JS heap deltas when available.",
         default: true
+    },
+    lagNotifications: {
+        type: OptionType.BOOLEAN,
+        description: "Send a notification when a plugin may make Discord lag.",
+        default: true
     }
 });
 
@@ -226,6 +235,8 @@ let originalRequestAnimationFrame: typeof window.requestAnimationFrame | undefin
 let originalCancelAnimationFrame: typeof window.cancelAnimationFrame | undefined;
 let originalAddEventListener: typeof EventTarget.prototype.addEventListener | undefined;
 let originalRemoveEventListener: typeof EventTarget.prototype.removeEventListener | undefined;
+let lagNotificationInterval: number | undefined;
+const lagNotificationTimes = new Map<string, number>();
 
 function getPluginStats(pluginName: string) {
     let stat = stats.get(pluginName);
@@ -691,6 +702,7 @@ function rebuildResourceCounters() {
 
 function resetStats() {
     stats.clear();
+    lagNotificationTimes.clear();
     startedAt = Date.now();
     rebuildResourceCounters();
 }
@@ -1006,6 +1018,51 @@ function buildImpactAnalysis(rows: DiagnosticsRow[]) {
         })
         .sort((a, b) => b.row.impact - a.row.impact)
         .slice(0, 20);
+}
+
+function openClientDiagnosticsSettings() {
+    SettingsRouter.openUserSettings(`${ENTRY_KEY}_panel`);
+}
+
+function getLagNotificationCandidates() {
+    return buildImpactAnalysis(buildRows(false, false, "impact"))
+        .filter(item => item.shouldDisable);
+}
+
+function maybeSendLagNotification() {
+    if (!settings.store.lagNotifications) return;
+    if (Date.now() - startedAt < LAG_NOTIFICATION_MIN_COLLECTION_MS) return;
+
+    const now = Date.now();
+    const candidate = getLagNotificationCandidates()
+        .find(item => now - (lagNotificationTimes.get(item.row.name) ?? 0) >= LAG_NOTIFICATION_COOLDOWN_MS);
+
+    if (!candidate) return;
+
+    const signal = candidate.reasons.find(reason => reason.level === "high") ?? candidate.reasons[0];
+    const signalText = signal ? `${signal.label}: ${signal.value}.` : `Impact: ${candidate.row.impact.toFixed(0)}.`;
+
+    lagNotificationTimes.set(candidate.row.name, now);
+    void showNotification({
+        title: "Client Diagnostics",
+        body: `${candidate.row.name} may be making Discord lag. ${signalText} Open Client Diagnostics to review it.`,
+        permanent: true,
+        onClick: openClientDiagnosticsSettings
+    });
+}
+
+function startLagNotifications() {
+    if (lagNotificationInterval !== undefined) return;
+
+    lagNotificationInterval = window.setInterval(maybeSendLagNotification, LAG_NOTIFICATION_CHECK_MS);
+}
+
+function stopLagNotifications() {
+    if (lagNotificationInterval === undefined) return;
+
+    window.clearInterval(lagNotificationInterval);
+    lagNotificationInterval = undefined;
+    lagNotificationTimes.clear();
 }
 
 function getReportRows() {
@@ -1647,6 +1704,7 @@ export default definePlugin({
     authors: [{ name: "irritably", id: 928787166916640838n }],
     tags: ["Developers", "Utility"],
     searchTerms: ["lag", "cpu", "ram", "memory", "performance", "profiler"],
+    enabledByDefault: true,
     startAt: StartAt.Init,
     requiresRestart: true,
     settings,
@@ -1656,6 +1714,7 @@ export default definePlugin({
             startedAt = Date.now();
             installGlobalProbes();
             for (const plugin of Object.values(plugins)) instrumentPlugin(plugin);
+            startLagNotifications();
             SettingsPlugin.customEntries.push({
                 key: ENTRY_KEY,
                 title: "Client diagnostics",
@@ -1669,6 +1728,7 @@ export default definePlugin({
 
     stop() {
         try {
+            stopLagNotifications();
             restoreGlobalProbes();
             removeFromArray(SettingsPlugin.customEntries, entry => entry.key === ENTRY_KEY);
         } catch (error) {

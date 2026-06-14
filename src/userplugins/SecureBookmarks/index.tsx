@@ -6,7 +6,6 @@
 
 import "./styles.css";
 
-import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { ReporterTestable } from "@utils/types";
 import type { Message } from "@vencord/discord-types";
