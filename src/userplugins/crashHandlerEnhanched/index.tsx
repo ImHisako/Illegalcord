@@ -55,6 +55,7 @@ const NO_PLUGIN_DETECTION_REASON = "The crash stack did not match any enabled pl
 const NO_PLUGIN_DISABLED = "None";
 const NO_PLUGIN_DISABLE_REASON = "No plugin was disabled.";
 const MESSAGE_SEND_FORBIDDEN_RE = /^POST \/channels\/(?:\d+|xxx)\/messages \[403\]$/;
+const GUILD_VANITY_FORBIDDEN_RE = /^GET \/guilds\/(?:\d+|xxx)\/vanity-url \[403\]$/;
 const USER_PROFILE_UNAVAILABLE_RE = /^GET \/users\/(?:\d+|xxx)\/profile \[(?:404|409)\]$/;
 const SOCKET_ALIVE_TIMEOUT_RE = /^(?:Max tries exceeded, last error: Error: )?socket alive timeout$/;
 const Native = VencordNative.pluginHelpers.CrashHandlerEnhanced as PluginNative<typeof NativeModule> | undefined;
@@ -894,6 +895,7 @@ function isIgnorableDiscordRejection(error: unknown) {
     if (message === "Aborted") return true;
 
     return MESSAGE_SEND_FORBIDDEN_RE.test(message) ||
+        GUILD_VANITY_FORBIDDEN_RE.test(message) ||
         USER_PROFILE_UNAVAILABLE_RE.test(message) ||
         SOCKET_ALIVE_TIMEOUT_RE.test(message);
 }
