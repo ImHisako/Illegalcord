@@ -7,7 +7,7 @@ on:
 env:
     FORCE_COLOR: true
     GITHUB_TOKEN: ${{ secrets.ETOKEN }}
-    REPO: Equicord/Equibored
+    REPO: ImHisako/Illegalcord
     USERNAME: GitHub-Actions
 
 permissions:
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
     Build:
-        name: Build Equicord
+        name: Build Illegalcord
         runs-on: ubuntu-latest
 
         steps:
@@ -67,7 +67,7 @@ jobs:
                   rm release/package.json
                   rm release/*.map
 
-            - name: Upload Equicord Stable
+            - name: Upload Illegalcord Stable
               if: ${{ vars.ACT == 'false' }}
               run: |
                   gh release upload latest --clobber dist/release/*
