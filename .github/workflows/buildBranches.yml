@@ -27,9 +27,9 @@ permissions:
 
 jobs:
     Build:
-        name: Build Equicord
+        name: Build Illegalcord
         runs-on: ubuntu-latest
-        if: github.repository == 'Equicord/Equicord'
+        if: github.repository == 'ImHisako/Illegalcord'
 
         steps:
             - uses: actions/checkout@v6
