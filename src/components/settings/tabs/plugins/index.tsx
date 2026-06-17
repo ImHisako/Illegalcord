@@ -200,7 +200,7 @@ export default function PluginSettings() {
     const sortedPlugins = useMemo(() => Object.values(Plugins)
         .sort((a, b) => a.name.localeCompare(b.name)), []);
 
-    const hasUserPlugins = useMemo(() => !IS_STANDALONE && Object.values(PluginMeta).some(m => m.userPlugin), []);
+    const hasUserPlugins = useMemo(() => Object.values(PluginMeta).some(m => m.userPlugin), []);
 
     const [searchValue, setSearchValue] = useState({ value: "", tags: [] as PluginTag[], status: SearchStatus.ALL });
 
