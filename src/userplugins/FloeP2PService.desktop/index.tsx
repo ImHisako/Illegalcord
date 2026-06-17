@@ -17,7 +17,7 @@ import { Logger } from "@utils/Logger";
 import { Margins } from "@utils/margins";
 import definePlugin, { type PluginNative, ReporterTestable } from "@utils/types";
 import type { CommandArgument, CommandContext, RenderModalProps } from "@vencord/discord-types";
-import { Button, Menu, Modal, openModal, showToast, TextInput, Toasts, useState } from "@webpack/common";
+import { Button, MaskedLink, Menu, Modal, openModal, showToast, TextInput, Toasts, useState } from "@webpack/common";
 
 import type { FloeCommandResult, FloeSession, NativeResult } from "./native";
 
@@ -26,6 +26,25 @@ const logger = new Logger("FloeP2PService");
 
 type FloeNative = NonNullable<typeof Native>;
 type FloeAction<T> = (native: FloeNative) => Promise<NativeResult<T>>;
+
+function FloeP2PSettingsAbout() {
+    return (
+        <>
+            <HeadingSecondary>About Floe P2P Service</HeadingSecondary>
+            <Paragraph>
+                Floe was created by <MaskedLink href="https://github.com/jannskiee">https://github.com/jannskiee</MaskedLink>.
+            </Paragraph>
+            <Paragraph className={Margins.top8}>
+                This Illegalcord plugin was created by the creator of Illegalcord.
+            </Paragraph>
+            <Paragraph className={Margins.top8}>
+                The plugin also includes the /floe command. Before sending or receiving files, use Install Floe CLI once. To open the Floe menu from chat, right-click the + button.
+            </Paragraph>
+        </>
+    );
+}
+
+const SafeFloeP2PSettingsAbout = ErrorBoundary.wrap(FloeP2PSettingsAbout, { noop: true });
 
 async function runNativeAction<T>(action: FloeAction<T>, fallbackError: string): Promise<T | null> {
     const native = Native;
@@ -295,6 +314,7 @@ export default definePlugin({
     authors: [EquicordDevs.irritably],
     dependencies: ["CommandsAPI"],
     reporterTestable: ReporterTestable.None,
+    settingsAboutComponent: SafeFloeP2PSettingsAbout,
     contextMenus: {
         "channel-attach": channelAttachMenuPatch
     },
