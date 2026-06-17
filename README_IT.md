@@ -24,6 +24,7 @@ I plugin inclusi possono essere trovati [qui](https://equicord.org/plugins).
 - **Kamidere Mutual Scanner**
 - **kamidere PresenceLab**
 - **Kamidere SendTrail**
+- **FloeP2PService** | Basato sul servizio Floe.one, il miglior servizio di condivisione file P2P.
 - **WebCord Hardened**
 - **StereoInstaller** Più Metodi!
 - **Nitro Sniper**: | (https://github.com/neoarz/NitroSniper/tree/main)
