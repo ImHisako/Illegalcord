@@ -1,5 +1,6 @@
-.vc-viewraw-codeblock {
-    white-space: nowrap !important;
-    word-break: normal !important;
-    min-width: 40px !important;
+.vc-viewRaw-codeBlock,
+.vc-viewRaw-codeBlock :is(pre, code, [class*="codeContainer"]) {
+    max-width: unset;
+    width: 100%;
+    box-sizing: border-box;
 }

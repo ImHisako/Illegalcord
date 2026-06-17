@@ -21,19 +21,18 @@ import "./style.css";
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings, migratePluginSettings } from "@api/Settings";
 import { CodeBlock } from "@components/CodeBlock";
-import { Divider } from "@components/Divider";
 import ErrorBoundary from "@components/ErrorBoundary";
-import { Heading } from "@components/Heading";
+import { HeadingSecondary } from "@components/Heading";
+import { Margins } from "@components/margins";
 import { Devs } from "@utils/constants";
 import { copyWithToast, getCurrentGuild, getIntlMessage } from "@utils/discord";
 import { isTruthy } from "@utils/guards";
-import { Margins } from "@utils/margins";
 import definePlugin, { IconComponent, OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
 import { ChannelStore, GuildRoleStore, Menu, Modal, openModal, UserProfileStore } from "@webpack/common";
 import { MouseEventHandler } from "react";
 
-const CopyIcon: IconComponent = ({ height = 20, width = 20, className }) => {
+const CopyRawIcon: IconComponent = ({ height = 20, width = 20, className }) => {
     return (
         <svg
             viewBox="0 0 20 20"
@@ -77,12 +76,12 @@ function openViewRawModal(json: string, type: string, msgContent?: string) {
         <ErrorBoundary>
             <Modal
                 {...props}
-                title="View Raw"
+                title={`Raw ${type} Data`}
                 size="xl"
                 actions={[
                     {
-                        text: `Copy ${type} JSON`,
-                        variant: "primary",
+                        text: `Copy ${type} Data`,
+                        variant: "secondary",
                         onClick: () => copyWithToast(json, `${type} data copied to clipboard!`)
                     },
                     msgContent && {
@@ -94,18 +93,12 @@ function openViewRawModal(json: string, type: string, msgContent?: string) {
             >
                 {!!msgContent && (
                     <>
-                        <Heading tag="h5">Content</Heading>
-                        <div className="vc-viewraw-codeblock">
-                            <CodeBlock content={msgContent} lang="" />
-                        </div>
-                        <Divider className={Margins.bottom20} />
+                        <HeadingSecondary>Message Content</HeadingSecondary>
+                        <CodeBlock className="vc-viewRaw-codeBlock" content={msgContent} lang="" />
+                        <HeadingSecondary className={Margins.top16}>Message Data</HeadingSecondary>
                     </>
                 )}
-
-                <Heading tag="h5">{type} Data</Heading>
-                <div className="vc-viewraw-codeblock">
-                    <CodeBlock content={json} lang="json" />
-                </div>
+                <CodeBlock className="vc-viewRaw-codeBlock" content={json} lang="json" />
             </Modal>
         </ErrorBoundary >
     ));
@@ -155,7 +148,7 @@ function MakeContextCallback(name: "Guild" | "Role" | "User" | "Channel" | "Mess
                 id={id}
                 label="View Raw"
                 action={action}
-                icon={CopyIcon}
+                icon={CopyRawIcon}
             />
         );
     };
@@ -173,7 +166,7 @@ const devContextCallback: NavContextMenuPatchCallback = (children, { id }: { id:
             id={"vc-view-role-raw"}
             label="View Raw"
             action={() => openViewRawModal(JSON.stringify(role, null, 4), "Role")}
-            icon={CopyIcon}
+            icon={CopyRawIcon}
         />
     );
 };
@@ -200,7 +193,7 @@ export default definePlugin({
     },
 
     messagePopoverButton: {
-        icon: CopyIcon,
+        icon: CopyRawIcon,
         render(msg) {
             const handleClick = () => {
                 if (settings.store.clickMethod === "Right") {
@@ -228,7 +221,7 @@ export default definePlugin({
 
             return {
                 label,
-                icon: CopyIcon,
+                icon: CopyRawIcon,
                 message: msg,
                 channel: ChannelStore.getChannel(msg.channel_id),
                 onClick: handleClick,
