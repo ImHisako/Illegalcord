@@ -178,6 +178,15 @@ export default definePlugin({
                 }
             ]
         },
+        // Fixes crashing with unknown gift styles
+        // ty dziurwa for crashing me
+        {
+            find: "Unexpected giftStyle",
+            replacement: {
+                match: /throw Error\(`Unexpected giftStyle \$\{(\i)\}`\);/,
+                replace: "console.warn(`Unexpected giftStyle $${$1}`);"
+            }
+        },
         // Fix a race condition?
         {
             find: ".completeOperation(",
