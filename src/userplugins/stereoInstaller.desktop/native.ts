@@ -34,6 +34,8 @@ export interface InstallInfo {
     buildLabel: string;
     lastPatchLabel: string;
     lastPatchLabels: LastPatchLabels;
+    installStatus: StereoInstallStatus;
+    installedMethod: PatchMethod | null;
     repatchWarning: string;
 }
 
@@ -42,7 +44,8 @@ export interface ActionInfo extends InstallInfo {
 }
 
 export type StereoMethod2Quality = "128" | "384" | "512";
-type PatchMethod = "discordAudioCollective" | "voicePlayground";
+export type StereoInstallStatus = "installed" | "notInstalled" | "needsReinstall";
+export type PatchMethod = "discordAudioCollective" | "voicePlayground";
 type SingleFileName = "discord_voice.node" | "index.js";
 
 export interface LastPatchLabels {
@@ -94,6 +97,8 @@ interface WorkerConfig {
     copyMode: "directory" | "singleFile";
     fileName?: SingleFileName;
     metaPath?: string;
+    statePath: string;
+    activeMethod?: PatchMethod;
     patchClientLabel: string;
     patchBuildLabel: string;
     logPath: string;
@@ -105,6 +110,17 @@ interface WorkerConfig {
 interface ProcessResult {
     code: number;
     output: string;
+}
+
+interface InstallationState {
+    status: StereoInstallStatus;
+    method: PatchMethod | null;
+}
+
+interface PatchMeta {
+    method: PatchMethod;
+    buildLabel: string;
+    time: number;
 }
 
 const allowedDiscordRoots = new Set<string>();
@@ -248,7 +264,7 @@ export async function patchMethod2Index(_: IpcMainInvokeEvent, rootPath: string)
 
         await ensurePermanentUnpatchedBackup(methodTarget, log);
         const patchedIndexDir = await prepareMethod2IndexPayload(log);
-        await scheduleWorker("Patch", patchedIndexDir, methodTarget, "voicePlayground", log, "singleFile", "index.js");
+        await scheduleWorker("Patch", patchedIndexDir, methodTarget, undefined, log, "singleFile", "index.js");
         log.ok("Patch scheduled. Discord will close, install index.js, then reopen.");
 
         return ok({ ...await installInfoFromTarget(methodTarget), logPath: logPath() }, log.lines);
@@ -454,6 +470,61 @@ function defaultDiscordRoots(): string[] {
     ];
 }
 
+function runningDiscordRoots(): string[] {
+    const roots: string[] = [];
+    const executableDirs = [app.getPath("exe"), process.execPath].map((pathValue: string) => dirname(pathValue));
+
+    for (const executableDir of executableDirs) {
+        if (isDiscordAppDirName(basename(executableDir))) roots.push(dirname(executableDir));
+
+        let current = executableDir;
+        for (let depth = 0; depth < 6; depth++) {
+            if (basename(current).toLowerCase().endsWith(".app")) {
+                roots.push(current);
+                break;
+            }
+
+            const parent = dirname(current);
+            if (parent === current) break;
+            current = parent;
+        }
+    }
+
+    roots.push(app.getPath("userData"));
+    return roots;
+}
+
+async function discoveredDiscordRoots(): Promise<string[]> {
+    const key = platformKey();
+    const parent = key === "windows"
+        ? process.env.LOCALAPPDATA || ""
+        : key === "macos"
+            ? join(homedir(), "Library", "Application Support")
+            : join(homedir(), ".config");
+    if (!parent) return [];
+
+    let entries: Dirent[];
+    try {
+        entries = await readdir(parent, { withFileTypes: true });
+    } catch {
+        return [];
+    }
+
+    return entries
+        .filter((entry: Dirent) => entry.isDirectory() && /(discord|cord|vencord|equicord)/i.test(entry.name))
+        .map((entry: Dirent) => join(parent, entry.name));
+}
+
+async function candidateDiscordRoots(preferredRoot?: string): Promise<string[]> {
+    const roots = preferredRoot ? [normalizeInputPath(preferredRoot)] : [];
+
+    for (const root of [...runningDiscordRoots(), ...defaultDiscordRoots(), ...await discoveredDiscordRoots()]) {
+        if (!roots.some((knownRoot: string) => samePath(knownRoot, root))) roots.push(root);
+    }
+
+    return roots;
+}
+
 function validateRendererDiscordRoot(rootPath: string): string {
     const root = normalizeInputPath(rootPath);
     const canonical = canonicalPath(root);
@@ -618,14 +689,7 @@ async function findVoiceDirWithDiagnostics(discordRoot: string): Promise<{ voice
 }
 
 async function resolveTarget(preferredRoot?: string): Promise<Target | undefined> {
-    const roots: string[] = [];
-    if (preferredRoot) roots.push(normalizeInputPath(preferredRoot));
-
-    for (const root of defaultDiscordRoots()) {
-        if (!roots.some((knownRoot: string) => samePath(knownRoot, root))) roots.push(root);
-    }
-
-    for (const root of roots) {
+    for (const root of await candidateDiscordRoots(preferredRoot)) {
         const found = await findVoiceDirWithDiagnostics(root);
         if (found.voiceDir) {
             return {
@@ -711,6 +775,7 @@ function clientLabelForRoot(root: string, buildLabel: string): string {
 async function installInfoFromTarget(target: Target): Promise<InstallInfo> {
     const buildLabel = buildLabelFromAppDir(target.appDir || await findDiscordAppDir(target.discordRoot));
     const clientLabel = clientLabelForRoot(target.discordRoot, buildLabel);
+    const installation = await installationState(target, buildLabel);
     const lastPatchLabels: LastPatchLabels = {
         discordAudioCollective: await lastPatchCaption(target.discordRoot, "discordAudioCollective"),
         voicePlayground: await lastPatchCaption(target.discordRoot, "voicePlayground")
@@ -727,7 +792,9 @@ async function installInfoFromTarget(target: Target): Promise<InstallInfo> {
         buildLabel,
         lastPatchLabel: lastPatchLabels.discordAudioCollective,
         lastPatchLabels,
-        repatchWarning: await repatchWarning(target.discordRoot, buildLabel)
+        installStatus: installation.status,
+        installedMethod: installation.method,
+        repatchWarning: repatchWarning(installation.status)
     };
 }
 
@@ -747,6 +814,10 @@ function metaPathForRoot(discordRoot: string, method: PatchMethod): string {
     return join(hubDataDir(), "backups", sanitizedRootKey(discordRoot), fileName);
 }
 
+function statePathForRoot(discordRoot: string): string {
+    return join(hubDataDir(), "backups", sanitizedRootKey(discordRoot), "installation_state.json");
+}
+
 async function readPatchMeta(discordRoot: string, method: PatchMethod): Promise<Record<string, unknown> | undefined> {
     const metaPath = metaPathForRoot(discordRoot, method);
     if (!await isFile(metaPath)) return undefined;
@@ -764,27 +835,67 @@ function metaString(meta: Record<string, unknown>, key: string): string {
     return typeof value === "string" ? value : "";
 }
 
-async function repatchWarning(discordRoot: string, currentBuildLabel: string): Promise<string> {
-    if (!currentBuildLabel) return "";
+function isPatchMethod(value: unknown): value is PatchMethod {
+    return value === "discordAudioCollective" || value === "voicePlayground";
+}
 
-    let latestPatchBuildLabel = "";
-    let latestPatchTime = -1;
-
+async function latestPatchMeta(discordRoot: string): Promise<PatchMeta | undefined> {
+    let latest: PatchMeta | undefined;
     for (const method of PATCH_METHODS) {
         const meta = await readPatchMeta(discordRoot, method);
         if (!meta || !metaString(meta, "last_patch_utc")) continue;
 
         const date = new Date(metaString(meta, "last_patch_utc"));
         const patchTime = Number.isNaN(date.getTime()) ? 0 : date.getTime();
-        if (patchTime < latestPatchTime) continue;
-
-        latestPatchTime = patchTime;
-        latestPatchBuildLabel = metaString(meta, "build_label");
+        if (latest && patchTime < latest.time) continue;
+        latest = { method, buildLabel: metaString(meta, "build_label"), time: patchTime };
     }
 
-    if (latestPatchTime < 0) return "";
-    if (!latestPatchBuildLabel) return "StereoInstaller needs to verify this Discord version. Patch Discord voice again with StereoInstaller.";
-    if (latestPatchBuildLabel !== currentBuildLabel) return "Discord updated since StereoInstaller last patched audio. Patch Discord voice again with StereoInstaller.";
+    return latest;
+}
+
+async function filesEqual(left: string, right: string): Promise<boolean> {
+    if (!await isFile(left) || !await isFile(right)) return false;
+    if ((await stat(left)).size !== (await stat(right)).size) return false;
+
+    return (await readFile(left)).equals(await readFile(right));
+}
+
+async function installationState(target: Target, currentBuildLabel: string): Promise<InstallationState> {
+    const backupNode = join(permanentBackupDir(target), "discord_voice.node");
+    const installedNode = join(target.voiceDir, "discord_voice.node");
+    if (!await isFile(backupNode) || await filesEqual(backupNode, installedNode)) {
+        return { status: "notInstalled", method: null };
+    }
+
+    const statePath = statePathForRoot(target.discordRoot);
+    if (await isFile(statePath)) {
+        try {
+            const state: unknown = JSON.parse((await readFile(statePath, "utf8")).trimStart());
+            if (isRecord(state) && state.status === "notInstalled") return { status: "notInstalled", method: null };
+            if (isRecord(state) && state.status === "installed" && isPatchMethod(state.active_method)) {
+                const method = state.active_method;
+                const buildLabel = metaString(state, "build_label");
+                return !currentBuildLabel || !buildLabel || buildLabel !== currentBuildLabel
+                    ? { status: "needsReinstall", method }
+                    : { status: "installed", method };
+            }
+        } catch {
+            return { status: "notInstalled", method: null };
+        }
+    }
+
+    const latestPatch = await latestPatchMeta(target.discordRoot);
+    if (!latestPatch) return { status: "notInstalled", method: null };
+    if (!currentBuildLabel || !latestPatch.buildLabel || latestPatch.buildLabel !== currentBuildLabel) {
+        return { status: "needsReinstall", method: latestPatch.method };
+    }
+
+    return { status: "installed", method: latestPatch.method };
+}
+
+function repatchWarning(status: StereoInstallStatus): string {
+    if (status === "needsReinstall") return "Discord updated since StereoInstaller last patched audio. Patch Discord voice again with StereoInstaller.";
 
     return "";
 }
@@ -1065,6 +1176,8 @@ async function scheduleWorker(actionName: "Patch" | "Revert", sourceDir: string,
         copyMode,
         fileName: copyMode === "singleFile" ? fileName : undefined,
         metaPath: metaMethod ? metaPathForRoot(target.discordRoot, metaMethod) : undefined,
+        statePath: statePathForRoot(target.discordRoot),
+        activeMethod: metaMethod,
         patchClientLabel: clientLabelForRoot(target.discordRoot, patchBuildLabel),
         patchBuildLabel,
         logPath: logPath(),
@@ -1384,6 +1497,16 @@ try {
         Write-InstallerLog ("Wrote metadata: " + $config.metaPath)
     }
 
+    if ($config.statePath -and ($config.actionName -eq "Revert" -or $config.activeMethod)) {
+        $stateParent = [System.IO.Path]::GetDirectoryName([string] $config.statePath)
+        if ($stateParent) { New-Item -ItemType Directory -Force -Path $stateParent | Out-Null }
+        $stateStatus = if ($config.actionName -eq "Revert") { "notInstalled" } else { "installed" }
+        $state = [ordered]@{ status = $stateStatus; build_label = [string] $config.patchBuildLabel; updated_utc = (Get-Date).ToUniversalTime().ToString("o") }
+        if ($config.activeMethod) { $state["active_method"] = [string] $config.activeMethod }
+        $state | ConvertTo-Json | Set-Content -LiteralPath ([string] $config.statePath) -Encoding UTF8
+        Write-InstallerLog ("Wrote installation state: " + $config.statePath)
+    }
+
     Write-InstallerLog ("OK: " + $config.actionName + " complete.")
     Start-DiscordAgain
 } catch {
@@ -1583,6 +1706,18 @@ async function main() {
             if (config.patchBuildLabel) meta.build_label = config.patchBuildLabel;
             await fs.writeFile(config.metaPath, JSON.stringify(meta, null, 2), "utf8");
             await appendLog(config, "Wrote metadata: " + config.metaPath);
+        }
+
+        if (config.statePath && (config.actionName === "Revert" || config.activeMethod)) {
+            await fs.mkdir(dirname(config.statePath), { recursive: true });
+            const state = {
+                status: config.actionName === "Revert" ? "notInstalled" : "installed",
+                build_label: config.patchBuildLabel,
+                updated_utc: new Date().toISOString()
+            };
+            if (config.activeMethod) state.active_method = config.activeMethod;
+            await fs.writeFile(config.statePath, JSON.stringify(state, null, 2), "utf8");
+            await appendLog(config, "Wrote installation state: " + config.statePath);
         }
 
         await appendLog(config, "OK: " + config.actionName + " complete.");

@@ -10,10 +10,10 @@ import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading } from "@components/Heading";
-import { HeadphonesIcon } from "@components/Icons";
+import { HeadphonesIcon, NoEntrySignIcon, WarningIcon } from "@components/Icons";
 import { Paragraph } from "@components/Paragraph";
 import SettingsPlugin from "@plugins/_core/settings";
-import { removeFromArray } from "@utils/misc";
+import { classes, removeFromArray } from "@utils/misc";
 import definePlugin, { OptionType, PluginNative, ReporterTestable } from "@utils/types";
 import { Alerts, Button, React, Select, SettingsRouter, showToast, TextInput, Toasts } from "@webpack/common";
 
@@ -88,6 +88,44 @@ function InfoLine({ label, value }: { label: string; value: string; }) {
         <div className="vc-stereo-installer-info-line">
             <span>{label}</span>
             <code>{value || "--"}</code>
+        </div>
+    );
+}
+
+function InstallationStatus({ info }: { info: InstallInfo | ActionInfo; }) {
+    const method = info.installedMethod ? METHOD_LABELS[info.installedMethod === "discordAudioCollective" ? "method1" : "method2"] : "StereoInstaller";
+
+    if (info.installStatus === "installed") {
+        return (
+            <div className={classes("vc-stereo-installer-install-status", "vc-stereo-installer-install-status-installed")}>
+                <HeadphonesIcon width={28} height={28} />
+                <div>
+                    <Heading tag="h3">Stereo is installed</Heading>
+                    <Paragraph>{method} is active for {info.clientLabel}.</Paragraph>
+                </div>
+            </div>
+        );
+    }
+
+    if (info.installStatus === "needsReinstall") {
+        return (
+            <div className={classes("vc-stereo-installer-install-status", "vc-stereo-installer-install-status-needs-reinstall")}>
+                <WarningIcon width={28} height={28} />
+                <div>
+                    <Heading tag="h3">Stereo must be installed again</Heading>
+                    <Paragraph>Discord was updated after {method} was installed. Patch Discord voice again.</Paragraph>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className={classes("vc-stereo-installer-install-status", "vc-stereo-installer-install-status-not-installed")}>
+            <NoEntrySignIcon width={28} height={28} />
+            <div>
+                <Heading tag="h3">Stereo is not installed</Heading>
+                <Paragraph>Choose a method and patch Discord voice to enable stereo audio.</Paragraph>
+            </div>
         </div>
     );
 }
@@ -380,6 +418,8 @@ function StereoInstallerPanel() {
                     </Button>
                 </div>
             </div>
+
+            {info && <InstallationStatus info={info} />}
 
             {info && (
                 <div className="vc-stereo-installer-info">

@@ -75,6 +75,40 @@
     background: var(--background-secondary);
 }
 
+.vc-stereo-installer-install-status {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid currentColor;
+    border-radius: 8px;
+    background: var(--background-secondary);
+}
+
+.vc-stereo-installer-install-status svg {
+    flex: 0 0 auto;
+}
+
+.vc-stereo-installer-install-status h3 {
+    color: currentColor;
+}
+
+.vc-stereo-installer-install-status-installed {
+    color: var(--status-positive);
+}
+
+.vc-stereo-installer-install-status-needs-reinstall {
+    color: var(--status-warning);
+}
+
+.vc-stereo-installer-install-status-not-installed {
+    color: var(--text-muted);
+}
+
+.vc-stereo-installer-install-status p {
+    color: var(--text-normal);
+}
+
 .vc-stereo-installer-info-line {
     display: grid;
     grid-template-columns: minmax(90px, 0.22fr) minmax(0, 1fr);
