@@ -13,10 +13,10 @@ import { getLyricsLrclib } from "@equicordplugins/musicControls/spotify/lyrics/p
 import type { SyncedLyric } from "@equicordplugins/musicControls/spotify/lyrics/providers/types";
 import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
-import definePlugin, { OptionType } from "@utils/types";
+import definePlugin, { OptionType, type PluginNative } from "@utils/types";
 import { chooseFile } from "@utils/web";
 import type { SpotifyTrack } from "@vencord/discord-types";
-import { showToast, SpotifyStore, Toasts } from "@webpack/common";
+import { Alerts, showToast, SpotifyStore, Toasts } from "@webpack/common";
 
 interface CustomStatusSetting {
     createdAtMs?: string;
@@ -35,6 +35,7 @@ interface SpotifyPlayerState {
 const IMPORT_SETTING_KEYS: ("phrases" | "sourceFileName")[] = ["phrases", "sourceFileName"];
 const logger = new Logger("StatusCycler");
 const CustomStatusSettings = getUserSettingLazy<CustomStatusSetting | null>("status", "customStatus");
+const Native = VencordNative?.pluginHelpers?.StatusCycler as PluginNative<typeof import("./native")> | undefined;
 
 let active = false;
 let intervalId: ReturnType<typeof setInterval> | undefined;
@@ -47,10 +48,21 @@ let spotifyPlaybackActive = false;
 let spotifyPosition = 0;
 let spotifyPositionUpdatedAt = 0;
 let lastLyricText: string | undefined;
-let lastStatusUpdateAt = 0;
+let nextSpotifyLyricsUpdateAt = 0;
 
 function getPhrases(value = settings.store.phrases) {
     return value.split(/\r?\n|\r/).map(line => line.trim()).filter(Boolean);
+}
+
+function setNextSpotifyLyricsUpdate() {
+    const delay = settings.plain.spotifyLyricsUpdateDelay * 1_000;
+    const variation = settings.plain.humanizeSpotifyLyricsDelay ? Math.random() * delay * 0.35 : 0;
+    nextSpotifyLyricsUpdateAt = Date.now() + delay + variation;
+}
+
+function restartSpotifyLyricsDelay() {
+    nextSpotifyLyricsUpdateAt = 0;
+    scheduleSpotifyLyric();
 }
 
 function applyNextStatus() {
@@ -61,7 +73,7 @@ function applyNextStatus() {
     const nextIndex = (settings.store.nextIndex ?? 0) % phrases.length;
     const text = phrases[nextIndex];
     settings.store.nextIndex = (nextIndex + 1) % phrases.length;
-    lastStatusUpdateAt = Date.now();
+    setNextSpotifyLyricsUpdate();
 
     void CustomStatusSettings.updateSetting({
         text,
@@ -88,7 +100,7 @@ function scheduleSpotifyLyric() {
 
     const text = spotifyLyrics[currentIndex]?.text?.trim();
     if (text && text !== lastLyricText && CustomStatusSettings) {
-        const remainingDelay = settings.plain.spotifyLyricsUpdateDelay * 1_000 - (Date.now() - lastStatusUpdateAt);
+        const remainingDelay = nextSpotifyLyricsUpdateAt - Date.now();
         if (remainingDelay > 0) {
             lyricsTimeoutId = setTimeout(scheduleSpotifyLyric, remainingDelay);
             return;
@@ -96,7 +108,7 @@ function scheduleSpotifyLyric() {
 
         const current = CustomStatusSettings.getSetting();
         lastLyricText = text;
-        lastStatusUpdateAt = Date.now();
+        setNextSpotifyLyricsUpdate();
 
         void CustomStatusSettings.updateSetting({
             text: text.slice(0, 128),
@@ -257,6 +269,38 @@ function ImportSetting() {
 
 const SafeImportSetting = ErrorBoundary.wrap(ImportSetting, { noop: true });
 
+function SpicetifyInstallerSetting() {
+    const confirmInstall = () => Alerts.show({
+        title: "Install Spicetify?",
+        body: "This downloads and runs the official Spicetify installer from GitHub in a terminal. Review its prompts before continuing.",
+        confirmText: "Install",
+        cancelText: "Cancel",
+        onConfirm: () => {
+            if (!Native) {
+                showToast("The Spicetify installer is only available in the desktop client.", Toasts.Type.FAILURE);
+                return;
+            }
+
+            showToast("Opening the Spicetify installer.", Toasts.Type.MESSAGE);
+            void Native.installSpicetify()
+                .then(result => showToast(
+                    result.success ? "Spicetify installer opened in a terminal." : result.error,
+                    result.success ? Toasts.Type.SUCCESS : Toasts.Type.FAILURE
+                ))
+                .catch(error => {
+                    logger.error("Could not open the Spicetify installer.", error);
+                    showToast("Could not open the Spicetify installer.", Toasts.Type.FAILURE);
+                });
+        }
+    });
+
+    return (
+        <Button onClick={confirmInstall}>Install Spicetify</Button>
+    );
+}
+
+const SafeSpicetifyInstallerSetting = ErrorBoundary.wrap(SpicetifyInstallerSetting, { noop: true });
+
 const settings = definePluginSettings({
     phrases: {
         type: OptionType.STRING,
@@ -286,7 +330,18 @@ const settings = definePluginSettings({
         description: "Minimum seconds between Spotify lyric status updates. Set to 0 to disable the delay.",
         default: 0,
         isValid: (value: number) => value >= 0 || "Spotify lyrics update delay cannot be negative.",
-        onChange: scheduleSpotifyLyric
+        onChange: restartSpotifyLyricsDelay
+    },
+    humanizeSpotifyLyricsDelay: {
+        type: OptionType.BOOLEAN,
+        description: "Add up to 35% random variation to the Spotify lyrics update delay.",
+        default: false,
+        onChange: restartSpotifyLyricsDelay
+    },
+    spicetifyInstaller: {
+        type: OptionType.COMPONENT,
+        description: "Spicetify modifies the Spotify desktop client and adds support for themes, extensions, and custom apps.",
+        component: SafeSpicetifyInstallerSetting
     },
     importFile: {
         type: OptionType.COMPONENT,
