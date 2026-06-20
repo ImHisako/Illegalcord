@@ -18,7 +18,7 @@ import { useFixedTimer } from "@utils/react";
 import { formatDurationMs } from "@utils/text";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Message, Stream } from "@vencord/discord-types";
-import { ApplicationStreamingStore, ChannelActions, ChannelStore, FluxDispatcher, IconUtils, MediaEngineStore, MessageStore, NavigationRouter, ReactDOM, SelectedChannelStore, Tooltip, useEffect, UserGuildSettingsStore, UserStore, useState, useStateFromStores, VoiceActions, VoiceStateStore } from "@webpack/common";
+import { ApplicationStreamingStore, ChannelActions, ChannelStore, FluxDispatcher, IconUtils, MediaEngineStore, MessageStore, ReactDOM, SelectedChannelStore, Tooltip, useEffect, UserGuildSettingsStore, UserStore, useState, useStateFromStores, VoiceActions, VoiceStateStore } from "@webpack/common";
 import type { MouseEvent, ReactNode, SVGProps } from "react";
 
 interface ControlButtonProps {
@@ -37,8 +37,6 @@ interface IconProps extends SVGProps<SVGSVGElement> {
 interface IslandNotification {
     avatarUrl: string;
     body: string;
-    channelId: string;
-    guildId: string | null;
     id: string;
     title: string;
 }
@@ -277,8 +275,6 @@ function DynamicIsland() {
             setNotification({
                 avatarUrl: IconUtils.getUserAvatarURL(message.author, false, 64),
                 body: message.content.trim() || (message.attachments.length ? "Sent an attachment." : "Sent a message."),
-                channelId: channel.id,
-                guildId: channel.guild_id,
                 id: message.id,
                 title: message.author.globalName ?? message.author.username
             });
@@ -294,8 +290,8 @@ function DynamicIsland() {
 
     const activateSummary = () => {
         if (notification) {
-            NavigationRouter.transitionTo(`/channels/${notification.guildId ?? "@me"}/${notification.channelId}/${notification.id}`);
             setNotification(null);
+            setExpanded(true);
             return;
         }
 

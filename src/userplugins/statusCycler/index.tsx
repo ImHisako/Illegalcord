@@ -65,6 +65,7 @@ interface ReactionEmojiPickerProps {
 const IMPORT_SETTING_KEYS: ("phrases" | "sourceFileName")[] = ["phrases", "sourceFileName"];
 const CUSTOM_EMOJI_REGEX = /^<a?:([\w-]+):(\d+)>$/;
 const EMOJI_INTENTION = { STATUS: 1 } as const;
+const SPOTIFY_LYRICS_END_GRACE_MS = 15_000;
 const SPOTIFY_POSITION_JITTER_MS = 2_000;
 const logger = new Logger("StatusCycler");
 const CustomStatusSettings = getUserSettingLazy<CustomStatusSetting | null>("status", "customStatus");
@@ -86,6 +87,8 @@ let spotifyPlaybackActive = false;
 let spotifyPlaybackTrackId: string | undefined;
 let spotifyPosition = 0;
 let spotifyPositionUpdatedAt = 0;
+let pendingSpotifyBackwardPosition: number | undefined;
+let pendingSpotifyBackwardPositionUpdatedAt = 0;
 let lastLyricText: string | undefined;
 let nextSpotifyLyricsUpdateAt = 0;
 let pendingStatusUpdate: StatusUpdate | undefined;
@@ -105,6 +108,10 @@ function getEmojis(value = settings.store.emojis): StatusEmoji[] {
             emojiName: customEmoji?.[1] ?? emoji
         };
     }).filter(emoji => emoji.emojiName);
+}
+
+function phrasesHavePriority() {
+    return settings.plain.prioritizePhrases && getPhrases().length > 0;
 }
 
 function setNextSpotifyLyricsUpdate() {
@@ -173,7 +180,7 @@ function scheduleSpotifyLyric() {
     if (lyricsTimeoutId !== undefined) clearTimeout(lyricsTimeoutId);
     lyricsTimeoutId = undefined;
 
-    if (!active || !settings.plain.useSpotifyLyrics || !spotifyPlaybackActive || spotifyLyricsTrackId !== spotifyPlaybackTrackId || !spotifyLyrics.length) return;
+    if (!active || !settings.plain.useSpotifyLyrics || phrasesHavePriority() || !spotifyPlaybackActive || spotifyLyricsTrackId !== spotifyPlaybackTrackId || !spotifyLyrics.length) return;
 
     const position = (spotifyPosition + Date.now() - spotifyPositionUpdatedAt) / 1_000;
     let currentIndex = -1;
@@ -220,6 +227,12 @@ function scheduleSpotifyLyric() {
     const nextLyric = spotifyLyrics.slice(currentIndex + 1).find(lyric => lyric.time > position);
     if (nextLyric) {
         lyricsTimeoutId = setTimeout(scheduleSpotifyLyric, Math.max(100, (nextLyric.time - position) * 1_000));
+    } else {
+        lyricsTimeoutId = setTimeout(() => {
+            lyricsTimeoutId = undefined;
+            spotifyLyrics = [];
+            resumePhraseRotation();
+        }, SPOTIFY_LYRICS_END_GRACE_MS);
     }
 }
 
@@ -234,6 +247,8 @@ function resumePhraseRotation() {
 }
 
 async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
+    if (phrasesHavePriority()) return;
+
     const trackChanged = spotifyPlaybackTrackId !== track.id;
     const playbackResumed = !spotifyPlaybackActive;
     spotifyPlaybackActive = true;
@@ -258,6 +273,7 @@ async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
         spotifyLyricsTrackId = undefined;
         lastLyricText = undefined;
         nextSpotifyLyricsUpdateAt = 0;
+        pendingSpotifyBackwardPosition = undefined;
         if (lyricsTimeoutId !== undefined) clearTimeout(lyricsTimeoutId);
         lyricsTimeoutId = undefined;
     }
@@ -268,9 +284,25 @@ async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
         const reportedPosition = position ?? (activity ? Math.max(0, now - activity.timestamps.start) : 0);
         const estimatedPosition = spotifyPosition + now - spotifyPositionUpdatedAt;
 
-        if (trackChanged || playbackResumed || Math.abs(reportedPosition - estimatedPosition) > SPOTIFY_POSITION_JITTER_MS) {
+        if (trackChanged || playbackResumed || reportedPosition - estimatedPosition > SPOTIFY_POSITION_JITTER_MS) {
             spotifyPosition = reportedPosition;
             spotifyPositionUpdatedAt = now;
+            pendingSpotifyBackwardPosition = undefined;
+        } else if (estimatedPosition - reportedPosition > SPOTIFY_POSITION_JITTER_MS) {
+            const pendingEstimatedPosition = pendingSpotifyBackwardPosition === undefined
+                ? undefined
+                : pendingSpotifyBackwardPosition + now - pendingSpotifyBackwardPositionUpdatedAt;
+
+            if (pendingEstimatedPosition !== undefined && Math.abs(reportedPosition - pendingEstimatedPosition) <= SPOTIFY_POSITION_JITTER_MS) {
+                spotifyPosition = reportedPosition;
+                spotifyPositionUpdatedAt = now;
+                pendingSpotifyBackwardPosition = undefined;
+            } else {
+                pendingSpotifyBackwardPosition = reportedPosition;
+                pendingSpotifyBackwardPositionUpdatedAt = now;
+            }
+        } else {
+            pendingSpotifyBackwardPosition = undefined;
         }
     } else if (playbackResumed) {
         spotifyPositionUpdatedAt = Date.now();
@@ -308,7 +340,7 @@ async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
     });
     if (loadingSpotifyTrackId === track.id) loadingSpotifyTrackId = undefined;
 
-    if (!active || !settings.plain.useSpotifyLyrics || !spotifyPlaybackActive || SpotifyStore.getTrack()?.id !== track.id) return;
+    if (!active || !settings.plain.useSpotifyLyrics || phrasesHavePriority() || !spotifyPlaybackActive || SpotifyStore.getTrack()?.id !== track.id) return;
 
     spotifyLyricsTrackId = track.id;
     spotifyLyrics = lyricsInfo?.lyricsVersions[lyricsInfo.useLyric]?.filter(lyric => lyric.text) ?? [];
@@ -331,13 +363,14 @@ function stopSpotifyLyrics() {
     }
     spotifyPlaybackActive = false;
     loadingSpotifyTrackId = undefined;
+    pendingSpotifyBackwardPosition = undefined;
     resumePhraseRotation();
 }
 
 function syncSpotifyLyrics(enabled: boolean) {
     if (!active) return;
 
-    if (!enabled) {
+    if (!enabled || phrasesHavePriority()) {
         stopSpotifyLyrics();
         return;
     }
@@ -366,6 +399,7 @@ function restartWithFirstPhrase() {
     settings.store.nextIndex = 0;
     settings.store.sourceFileName = undefined;
     restartRotation();
+    syncSpotifyLyrics(settings.store.useSpotifyLyrics);
 }
 
 function restartWithFirstEmoji() {
@@ -535,6 +569,12 @@ const settings = definePluginSettings({
         default: false,
         onChange: syncSpotifyLyrics
     },
+    prioritizePhrases: {
+        type: OptionType.BOOLEAN,
+        description: "Give configured phrases priority over Spotify lyrics while music is playing.",
+        default: false,
+        onChange: () => syncSpotifyLyrics(settings.store.useSpotifyLyrics)
+    },
     spotifyLyricsUpdateDelay: {
         type: OptionType.NUMBER,
         description: "Minimum seconds between Spotify lyric status updates. Set to 0 to disable the delay.",
@@ -583,6 +623,7 @@ export default definePlugin({
         spotifyPlaybackActive = false;
         spotifyOverrideActive = false;
         loadingSpotifyTrackId = undefined;
+        pendingSpotifyBackwardPosition = undefined;
         lastLyricText = undefined;
         pendingStatusUpdate = undefined;
         if (intervalId !== undefined) {
@@ -597,7 +638,7 @@ export default definePlugin({
 
     flux: {
         async SPOTIFY_PLAYER_STATE({ track, position, isPlaying }: SpotifyPlayerState) {
-            if (!settings.plain.useSpotifyLyrics) return;
+            if (!settings.plain.useSpotifyLyrics || phrasesHavePriority()) return;
 
             if (!track || !isPlaying) {
                 stopSpotifyLyrics();
