@@ -6,13 +6,15 @@
 
 import "./style.css";
 
+import { definePluginSettings } from "@api/Settings";
 import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { HeadphonesIcon, Microphone } from "@components/Icons";
+import { settings as musicControlsSettings } from "@equicordplugins/musicControls/settings";
 import { SpotifyStore } from "@equicordplugins/musicControls/spotify/SpotifyStore";
 import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
-import definePlugin from "@utils/types";
+import definePlugin, { OptionType } from "@utils/types";
 import { ChannelActions, ChannelStore, MediaEngineStore, ReactDOM, Tooltip, UserStore, useState, useStateFromStores, VoiceActions, VoiceStateStore } from "@webpack/common";
 import type { MouseEvent, ReactNode, SVGProps } from "react";
 
@@ -29,6 +31,27 @@ interface IconProps extends SVGProps<SVGSVGElement> {
 }
 
 const cl = classNameFactory("vc-illegalcord-dynamic-island-");
+const SETTINGS_KEYS = ["islandColor"] satisfies Array<"islandColor">;
+const settings = definePluginSettings({
+    islandColor: {
+        description: "Choose the Dynamic Island color.",
+        type: OptionType.SELECT,
+        options: [
+            { label: "Transparent", value: "transparent", default: true },
+            { label: "Discord theme", value: "theme" },
+            { label: "AMOLED", value: "amoled" },
+            { label: "White", value: "white" },
+            { label: "Light blue", value: "blue" },
+            { label: "Pink", value: "pink" }
+        ]
+    },
+    showSpotifyPanel: {
+        description: "Show the Spotify player in the Discord user panel.",
+        type: OptionType.BOOLEAN,
+        default: false,
+        onChange: value => { musicControlsSettings.store.showSpotifyControls = value; }
+    }
+});
 
 function Glyph({ path, size: _, ...props }: IconProps & { path: string; }) {
     return (
@@ -129,6 +152,7 @@ function VoiceSection({ channelId }: { channelId: string; }) {
 
 function DynamicIsland() {
     const [expanded, setExpanded] = useState(false);
+    const { islandColor } = settings.use(SETTINGS_KEYS);
     const track = useStateFromStores([SpotifyStore], () => SpotifyStore.track);
     const currentUser = UserStore.getCurrentUser();
     const voiceState = useStateFromStores([VoiceStateStore], () => VoiceStateStore.getVoiceStateForUser(currentUser.id));
@@ -136,7 +160,7 @@ function DynamicIsland() {
     const idle = !track && !channelId;
 
     return (
-        <div className={cl("root", { expanded, idle })}>
+        <div className={cl("root", `color-${islandColor}`, { expanded, idle })}>
             <div
                 className={cl("summary")}
                 role="button"
@@ -185,6 +209,11 @@ export default definePlugin({
     authors: [EquicordDevs.irritably],
     tags: ["Media", "Voice"],
     dependencies: ["HeaderBarAPI", "MusicControls"],
+    settings,
+
+    start() {
+        musicControlsSettings.store.showSpotifyControls = settings.store.showSpotifyPanel;
+    },
 
     headerBarButton: {
         icon: IslandIcon,

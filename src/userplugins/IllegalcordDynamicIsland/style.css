@@ -25,6 +25,66 @@
     -webkit-app-region: no-drag;
 }
 
+.vc-illegalcord-dynamic-island-root-color-transparent {
+    background: transparent;
+}
+
+.vc-illegalcord-dynamic-island-root-color-amoled {
+    --background-floating: #000;
+    --background-mod-subtle: #111;
+    --background-mod-strong: #1a1a1a;
+    --background-modifier-hover: #242424;
+    --border-subtle: #2b2b2b;
+    --border-strong: #555;
+    --text-default: #dbdee1;
+    --header-primary: #fff;
+    --text-muted: #aeb1b6;
+    --interactive-normal: #b5bac1;
+    --interactive-hover: #fff;
+}
+
+.vc-illegalcord-dynamic-island-root-color-white {
+    --background-floating: #fff;
+    --background-mod-subtle: #f2f3f5;
+    --background-mod-strong: #e3e5e8;
+    --background-modifier-hover: #d9dce1;
+    --border-subtle: #d4d7dc;
+    --border-strong: #9da2aa;
+    --text-default: #313338;
+    --header-primary: #111214;
+    --text-muted: #5c5e66;
+    --interactive-normal: #4e5058;
+    --interactive-hover: #111214;
+}
+
+.vc-illegalcord-dynamic-island-root-color-blue {
+    --background-floating: #c9edff;
+    --background-mod-subtle: #b8e5fb;
+    --background-mod-strong: #a6dcf7;
+    --background-modifier-hover: #92d1f0;
+    --border-subtle: #75bddd;
+    --border-strong: #438dac;
+    --text-default: #173849;
+    --header-primary: #092635;
+    --text-muted: #41697b;
+    --interactive-normal: #285b72;
+    --interactive-hover: #092635;
+}
+
+.vc-illegalcord-dynamic-island-root-color-pink {
+    --background-floating: #ffd6e9;
+    --background-mod-subtle: #f8c6dd;
+    --background-mod-strong: #efb4d0;
+    --background-modifier-hover: #e8a2c3;
+    --border-subtle: #d98eb2;
+    --border-strong: #a94e79;
+    --text-default: #57253d;
+    --header-primary: #351225;
+    --text-muted: #84546b;
+    --interactive-normal: #77405a;
+    --interactive-hover: #351225;
+}
+
 .vc-illegalcord-dynamic-island-root * {
     -webkit-app-region: no-drag;
 }
