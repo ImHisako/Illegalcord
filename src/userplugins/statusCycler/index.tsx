@@ -11,7 +11,7 @@ import { getUserSettingLazy } from "@api/UserSettings";
 import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
-import { getLyricsLrclib } from "@equicordplugins/musicControls/spotify/lyrics/providers/lrclibAPI";
+import { getLyrics } from "@equicordplugins/musicControls/spotify/lyrics/api";
 import type { SyncedLyric } from "@equicordplugins/musicControls/spotify/lyrics/providers/types";
 import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
@@ -38,6 +38,11 @@ interface SpotifyPlayerState {
 interface StatusEmoji {
     emojiId: string;
     emojiName: string;
+}
+
+interface StatusUpdate {
+    errorMessage: string;
+    value: CustomStatusSetting;
 }
 
 interface EmojiSelectPayload {
@@ -83,6 +88,8 @@ let spotifyPosition = 0;
 let spotifyPositionUpdatedAt = 0;
 let lastLyricText: string | undefined;
 let nextSpotifyLyricsUpdateAt = 0;
+let pendingStatusUpdate: StatusUpdate | undefined;
+let statusUpdateInFlight = false;
 
 function getPhrases(value = settings.store.phrases) {
     return value.split(/\r?\n|\r/).map(line => line.trim()).filter(Boolean);
@@ -111,6 +118,21 @@ function restartSpotifyLyricsDelay() {
     scheduleSpotifyLyric();
 }
 
+function updateStatus(update: StatusUpdate) {
+    pendingStatusUpdate = update;
+    if (statusUpdateInFlight || !CustomStatusSettings) return;
+
+    statusUpdateInFlight = true;
+    pendingStatusUpdate = undefined;
+
+    void CustomStatusSettings.updateSetting(update.value)
+        .catch(error => logger.error(update.errorMessage, error))
+        .finally(() => {
+            statusUpdateInFlight = false;
+            if (pendingStatusUpdate) updateStatus(pendingStatusUpdate);
+        });
+}
+
 function applyNextStatus() {
     const phrases = getPhrases();
     const emojis = getEmojis();
@@ -135,20 +157,23 @@ function applyNextStatus() {
 
     setNextSpotifyLyricsUpdate();
 
-    void CustomStatusSettings.updateSetting({
-        text,
-        expiresAtMs: "0",
-        emojiId,
-        emojiName,
-        createdAtMs: String(Date.now())
-    }).catch(error => logger.error("Could not update the custom status.", error));
+    updateStatus({
+        errorMessage: "Could not update the custom status.",
+        value: {
+            text,
+            expiresAtMs: "0",
+            emojiId,
+            emojiName,
+            createdAtMs: String(Date.now())
+        }
+    });
 }
 
 function scheduleSpotifyLyric() {
     if (lyricsTimeoutId !== undefined) clearTimeout(lyricsTimeoutId);
     lyricsTimeoutId = undefined;
 
-    if (!active || !settings.plain.useSpotifyLyrics || !spotifyPlaybackActive || !spotifyLyrics.length) return;
+    if (!active || !settings.plain.useSpotifyLyrics || !spotifyPlaybackActive || spotifyLyricsTrackId !== spotifyPlaybackTrackId || !spotifyLyrics.length) return;
 
     const position = (spotifyPosition + Date.now() - spotifyPositionUpdatedAt) / 1_000;
     let currentIndex = -1;
@@ -180,13 +205,16 @@ function scheduleSpotifyLyric() {
         lastLyricText = text;
         setNextSpotifyLyricsUpdate();
 
-        void CustomStatusSettings.updateSetting({
-            text: text.slice(0, 128),
-            expiresAtMs: "0",
-            emojiId,
-            emojiName,
-            createdAtMs: String(Date.now())
-        }).catch(error => logger.error("Could not update the custom status with Spotify lyrics.", error));
+        updateStatus({
+            errorMessage: "Could not update the custom status with Spotify lyrics.",
+            value: {
+                text: text.slice(0, 128),
+                expiresAtMs: "0",
+                emojiId,
+                emojiName,
+                createdAtMs: String(Date.now())
+            }
+        });
     }
 
     const nextLyric = spotifyLyrics.slice(currentIndex + 1).find(lyric => lyric.time > position);
@@ -210,6 +238,29 @@ async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
     const playbackResumed = !spotifyPlaybackActive;
     spotifyPlaybackActive = true;
     spotifyPlaybackTrackId = track.id;
+
+    if (trackChanged) {
+        if (spotifyOverrideActive && CustomStatusSettings) {
+            const current = CustomStatusSettings.getSetting();
+            updateStatus({
+                errorMessage: "Could not clear the previous Spotify lyric.",
+                value: {
+                    text: "",
+                    expiresAtMs: "0",
+                    emojiId: current?.emojiId ?? "0",
+                    emojiName: current?.emojiName ?? "",
+                    createdAtMs: String(Date.now())
+                }
+            });
+        }
+
+        spotifyLyrics = [];
+        spotifyLyricsTrackId = undefined;
+        lastLyricText = undefined;
+        nextSpotifyLyricsUpdateAt = 0;
+        if (lyricsTimeoutId !== undefined) clearTimeout(lyricsTimeoutId);
+        lyricsTimeoutId = undefined;
+    }
 
     if (position !== undefined || trackChanged) {
         const now = Date.now();
@@ -237,9 +288,6 @@ async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
 
     if (loadingSpotifyTrackId === track.id) return;
     loadingSpotifyTrackId = track.id;
-    lastLyricText = undefined;
-    if (lyricsTimeoutId !== undefined) clearTimeout(lyricsTimeoutId);
-    lyricsTimeoutId = undefined;
 
     const lyricsTrack = {
         ...track,
@@ -254,7 +302,7 @@ async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
             uri: `spotify:artist:${artist.id}`
         }))
     };
-    const lyricsInfo = await getLyricsLrclib(lyricsTrack).catch(error => {
+    const lyricsInfo = await getLyrics(lyricsTrack).catch(error => {
         logger.error("Could not load Spotify lyrics.", error);
         return null;
     });
@@ -536,6 +584,7 @@ export default definePlugin({
         spotifyOverrideActive = false;
         loadingSpotifyTrackId = undefined;
         lastLyricText = undefined;
+        pendingStatusUpdate = undefined;
         if (intervalId !== undefined) {
             clearInterval(intervalId);
             intervalId = undefined;
