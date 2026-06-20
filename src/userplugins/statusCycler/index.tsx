@@ -60,6 +60,7 @@ interface ReactionEmojiPickerProps {
 const IMPORT_SETTING_KEYS: ("phrases" | "sourceFileName")[] = ["phrases", "sourceFileName"];
 const CUSTOM_EMOJI_REGEX = /^<a?:([\w-]+):(\d+)>$/;
 const EMOJI_INTENTION = { STATUS: 1 } as const;
+const SPOTIFY_POSITION_JITTER_MS = 2_000;
 const logger = new Logger("StatusCycler");
 const CustomStatusSettings = getUserSettingLazy<CustomStatusSetting | null>("status", "customStatus");
 const Native = VencordNative?.pluginHelpers?.StatusCycler as PluginNative<typeof import("./native")> | undefined;
@@ -77,6 +78,7 @@ let spotifyLyrics: SyncedLyric[] = [];
 let spotifyLyricsTrackId: string | undefined;
 let spotifyOverrideActive = false;
 let spotifyPlaybackActive = false;
+let spotifyPlaybackTrackId: string | undefined;
 let spotifyPosition = 0;
 let spotifyPositionUpdatedAt = 0;
 let lastLyricText: string | undefined;
@@ -203,10 +205,25 @@ function resumePhraseRotation() {
     restartRotation();
 }
 
-async function startSpotifyLyrics(track: SpotifyTrack, position: number) {
+async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
+    const trackChanged = spotifyPlaybackTrackId !== track.id;
+    const playbackResumed = !spotifyPlaybackActive;
     spotifyPlaybackActive = true;
-    spotifyPosition = position;
-    spotifyPositionUpdatedAt = Date.now();
+    spotifyPlaybackTrackId = track.id;
+
+    if (position !== undefined || trackChanged) {
+        const now = Date.now();
+        const activity = SpotifyStore.getTrack()?.id === track.id ? SpotifyStore.getActivity() : null;
+        const reportedPosition = position ?? (activity ? Math.max(0, now - activity.timestamps.start) : 0);
+        const estimatedPosition = spotifyPosition + now - spotifyPositionUpdatedAt;
+
+        if (trackChanged || playbackResumed || Math.abs(reportedPosition - estimatedPosition) > SPOTIFY_POSITION_JITTER_MS) {
+            spotifyPosition = reportedPosition;
+            spotifyPositionUpdatedAt = now;
+        }
+    } else if (playbackResumed) {
+        spotifyPositionUpdatedAt = Date.now();
+    }
 
     if (spotifyLyricsTrackId === track.id) {
         if (spotifyLyrics.length) {
@@ -260,6 +277,10 @@ async function startSpotifyLyrics(track: SpotifyTrack, position: number) {
 }
 
 function stopSpotifyLyrics() {
+    if (spotifyPlaybackActive) {
+        spotifyPosition += Date.now() - spotifyPositionUpdatedAt;
+        spotifyPositionUpdatedAt = Date.now();
+    }
     spotifyPlaybackActive = false;
     loadingSpotifyTrackId = undefined;
     resumePhraseRotation();
@@ -534,7 +555,7 @@ export default definePlugin({
                 return;
             }
 
-            await startSpotifyLyrics(track, position ?? 0);
+            await startSpotifyLyrics(track, position);
         }
     }
 });

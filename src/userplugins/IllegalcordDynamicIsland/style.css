@@ -1,0 +1,218 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+.vc-illegalcord-dynamic-island-root {
+    position: fixed;
+    z-index: 10000;
+    top: 40px;
+    left: 50%;
+    width: min(340px, calc(100vw - 420px));
+    min-width: 260px;
+    color: var(--text-default);
+    background: var(--background-floating);
+    border: 1px solid var(--border-subtle);
+    border-radius: 24px;
+    box-shadow: var(--shadow-high);
+    overflow: hidden;
+    cursor: pointer;
+    pointer-events: auto;
+    isolation: isolate;
+    transform: translateX(-50%);
+    transition: width 180ms ease, border-radius 180ms ease, box-shadow 180ms ease;
+    -webkit-app-region: no-drag;
+}
+
+.vc-illegalcord-dynamic-island-root * {
+    -webkit-app-region: no-drag;
+}
+
+.vc-illegalcord-dynamic-island-root:hover,
+.vc-illegalcord-dynamic-island-root:focus-visible,
+.vc-illegalcord-dynamic-island-root-expanded {
+    box-shadow: var(--shadow-high), 0 0 0 1px var(--border-strong);
+}
+
+.vc-illegalcord-dynamic-island-root-expanded {
+    width: min(440px, calc(100vw - 320px));
+    border-radius: 20px;
+}
+
+.vc-illegalcord-dynamic-island-summary {
+    display: flex;
+    height: 38px;
+    padding: 3px 8px 3px 5px;
+    align-items: center;
+    gap: 8px;
+}
+
+.vc-illegalcord-dynamic-island-summary-cover,
+.vc-illegalcord-dynamic-island-cover {
+    flex: none;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+.vc-illegalcord-dynamic-island-summary-cover {
+    width: 32px;
+    height: 32px;
+}
+
+.vc-illegalcord-dynamic-island-cover {
+    width: 40px;
+    height: 40px;
+}
+
+.vc-illegalcord-dynamic-island-summary-icon {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    padding: 4px;
+    color: var(--green-360);
+    background: var(--background-mod-subtle);
+    border-radius: 50%;
+}
+
+.vc-illegalcord-dynamic-island-summary-copy,
+.vc-illegalcord-dynamic-island-copy {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+}
+
+.vc-illegalcord-dynamic-island-summary-copy strong,
+.vc-illegalcord-dynamic-island-summary-copy span,
+.vc-illegalcord-dynamic-island-copy strong,
+.vc-illegalcord-dynamic-island-copy span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.vc-illegalcord-dynamic-island-summary-copy strong,
+.vc-illegalcord-dynamic-island-copy strong {
+    color: var(--header-primary);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.vc-illegalcord-dynamic-island-summary-copy span,
+.vc-illegalcord-dynamic-island-copy span,
+.vc-illegalcord-dynamic-island-empty {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.vc-illegalcord-dynamic-island-beta {
+    flex: none;
+    padding: 2px 5px;
+    color: var(--brand-500);
+    background: var(--brand-500-20a);
+    border-radius: 5px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .06em;
+}
+
+.vc-illegalcord-dynamic-island-live-dot {
+    width: 7px;
+    height: 7px;
+    flex: none;
+    background: var(--green-360);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--green-360);
+}
+
+.vc-illegalcord-dynamic-island-panel {
+    display: flex;
+    padding: 4px 8px 9px;
+    flex-direction: column;
+    gap: 6px;
+    cursor: default;
+}
+
+.vc-illegalcord-dynamic-island-section {
+    display: flex;
+    min-width: 0;
+    padding: 8px;
+    align-items: center;
+    gap: 10px;
+    background: var(--background-mod-subtle);
+    border-radius: 14px;
+}
+
+.vc-illegalcord-dynamic-island-section-info {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+    gap: 9px;
+}
+
+.vc-illegalcord-dynamic-island-controls {
+    display: flex;
+    flex: none;
+    gap: 4px;
+}
+
+.vc-illegalcord-dynamic-island-control {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    padding: 7px;
+    color: var(--interactive-normal);
+    background: var(--background-mod-strong);
+    border-radius: 50%;
+}
+
+.vc-illegalcord-dynamic-island-control:hover {
+    color: var(--interactive-hover);
+    background: var(--background-modifier-hover);
+}
+
+.vc-illegalcord-dynamic-island-control-active {
+    color: var(--green-360);
+}
+
+.vc-illegalcord-dynamic-island-control-danger {
+    color: var(--red-400);
+}
+
+.vc-illegalcord-dynamic-island-control svg {
+    display: block;
+    width: 18px;
+    height: 18px;
+}
+
+.vc-illegalcord-dynamic-island-call-indicator {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    flex: none;
+    place-items: center;
+    background: var(--green-360-20a);
+    border-radius: 50%;
+}
+
+.vc-illegalcord-dynamic-island-call-indicator span {
+    width: 12px;
+    height: 12px;
+    background: var(--green-360);
+    border-radius: 50%;
+    box-shadow: 0 0 10px var(--green-360);
+}
+
+.vc-illegalcord-dynamic-island-empty {
+    padding: 14px;
+    text-align: center;
+}
+
+@media (width <= 760px) {
+    .vc-illegalcord-dynamic-island-root,
+    .vc-illegalcord-dynamic-island-root-expanded {
+        width: min(360px, calc(100vw - 24px));
+    }
+}
