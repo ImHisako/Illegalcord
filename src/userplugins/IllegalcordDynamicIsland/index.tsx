@@ -73,6 +73,7 @@ type IslandType = typeof IslandType[keyof typeof IslandType];
 const cl = classNameFactory("vc-illegalcord-dynamic-island-");
 const NOTIFICATION_DURATION = 5000;
 const RUNTIME_KEY = Symbol.for("IllegalcordDynamicIsland.runtime");
+const SPOTIFY_IDLE_DURATION = 60_000;
 const SWIPE_MIN_DISTANCE = 48;
 const SWIPE_MIN_DURATION = 120;
 const portalModule = Symbol();
@@ -299,16 +300,18 @@ function DynamicIsland() {
     const [expanded, setExpanded] = useState(false);
     const [notification, setNotification] = useState(runtime.notification);
     const [primaryIsland, setPrimaryIsland] = useState<IslandType>(IslandType.ScreenShare);
+    const [spotifyIdle, setSpotifyIdle] = useState(false);
     const [streamStartedAt, setStreamStartedAt] = useState(Date.now());
     const swipeStartRef = useRef<SwipeStart | null>(null);
     const suppressClickRef = useRef(false);
     const { islandColor, keepIslandVisible, morphNotifications, showScreenShareIsland, showSpotifyIsland, showVoiceIsland } = settings.use(SETTINGS_KEYS);
     const spotifyTrack = useStateFromStores([SpotifyStore], () => SpotifyStore.device?.is_active ? SpotifyStore.track : null);
     const isPlaying = useStateFromStores([SpotifyStore], () => SpotifyStore.isPlaying);
+    const spotifyTrackId = spotifyTrack?.id;
     const activeStream = useStateFromStores([ApplicationStreamingStore], () => ApplicationStreamingStore.getCurrentUserActiveStream());
     const currentUser = UserStore.getCurrentUser();
     const voiceState = useStateFromStores([VoiceStateStore], () => VoiceStateStore.getVoiceStateForUser(currentUser.id));
-    const track = showSpotifyIsland ? spotifyTrack : null;
+    const track = showSpotifyIsland && !spotifyIdle ? spotifyTrack : null;
     const channelId = showVoiceIsland ? voiceState?.channelId : undefined;
     const stream = showScreenShareIsland ? activeStream : null;
     const streamKey = stream ? getStreamKey(stream) : null;
@@ -325,6 +328,14 @@ function DynamicIsland() {
     useEffect(() => {
         if (streamKey) setStreamStartedAt(Date.now());
     }, [streamKey]);
+
+    useEffect(() => {
+        setSpotifyIdle(false);
+        if (!showSpotifyIsland || !spotifyTrackId || isPlaying) return;
+
+        const timeoutId = window.setTimeout(() => setSpotifyIdle(true), SPOTIFY_IDLE_DURATION);
+        return () => clearTimeout(timeoutId);
+    }, [isPlaying, showSpotifyIsland, spotifyTrackId]);
 
     useEffect(() => {
         const updateNotification = () => setNotification(runtime.notification);

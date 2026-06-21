@@ -6,6 +6,7 @@ dm @neoarz if u need help or have any questions
 https://github.com/neoarz/NitroSniper
 */
 
+import { showNotification } from "@api/Notifications";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { Message } from "@vencord/discord-types";
@@ -24,10 +25,12 @@ const GiftActions = findByPropsLazy("redeemGiftCode");
 let startTime = 0;
 let claiming = false;
 const claimQueue: ClaimRequest[] = [];
+const seenCodes = new Set<string>();
 
 function resetState() {
     startTime = Date.now();
     claimQueue.length = 0;
+    seenCodes.clear();
     claiming = false;
 }
 
@@ -49,6 +52,12 @@ function isMessageOlderThanStart(message: Message) {
 
 function extractGiftCode(content: string) {
     return content.match(GIFT_LINK_REGEX)?.[1] ?? null;
+}
+
+function shouldSkipCode(code: string) {
+    const repeated = seenCodes.has(code);
+    seenCodes.add(code);
+    return settings.store.skipRepeatedCodes && repeated;
 }
 
 function createClaimRequest(message: Message): ClaimRequest | null {
@@ -82,6 +91,16 @@ function notifyClaim(result: WebhookResult, request: ClaimRequest) {
     });
 }
 
+function notifyClaimAttempt(request: ClaimRequest) {
+    const sender = request.authorName ?? request.authorUsername;
+    showNotification({
+        title: "Nitro redemption attempt",
+        body: sender
+            ? `Trying to redeem a Nitro gift code sent by ${sender}.`
+            : "Trying to redeem a Nitro gift code."
+    });
+}
+
 function continueQueue() {
     claiming = false;
     processQueue();
@@ -106,6 +125,7 @@ function processQueue() {
     if (!request) return;
 
     claiming = true;
+    notifyClaimAttempt(request);
     GiftActions.redeemGiftCode({
         code: request.code,
         onRedeemed: () => handleClaimSuccess(request),
@@ -133,7 +153,7 @@ export default definePlugin({
             if (!message.content || shouldSkipMessage(message) || isMessageOlderThanStart(message)) return;
 
             const request = createClaimRequest(message);
-            if (!request) return;
+            if (!request || shouldSkipCode(request.code)) return;
 
             claimQueue.push(request);
             processQueue();
