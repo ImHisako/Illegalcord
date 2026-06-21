@@ -303,7 +303,7 @@ function DynamicIsland() {
     const activeStream = useStateFromStores([ApplicationStreamingStore], () => ApplicationStreamingStore.getCurrentUserActiveStream());
     const currentUser = UserStore.getCurrentUser();
     const voiceState = useStateFromStores([VoiceStateStore], () => VoiceStateStore.getVoiceStateForUser(currentUser.id));
-    const track = showSpotifyIsland ? spotifyTrack : null;
+    const track = showSpotifyIsland && isPlaying ? spotifyTrack : null;
     const channelId = showVoiceIsland ? voiceState?.channelId : undefined;
     const stream = showScreenShareIsland ? activeStream : null;
     const streamKey = stream ? getStreamKey(stream) : null;
@@ -362,6 +362,12 @@ function DynamicIsland() {
         FluxDispatcher.subscribe("MESSAGE_CREATE", handleMessage);
         return () => FluxDispatcher.unsubscribe("MESSAGE_CREATE", handleMessage);
     }, [currentUser.id, morphNotifications]);
+
+    useEffect(() => {
+        if (idle) setExpanded(false);
+    }, [idle]);
+
+    if (idle && !notification) return null;
 
     const activateSummary = () => {
         if (suppressClickRef.current) {

@@ -42,6 +42,11 @@ interface StatusEmoji {
 
 interface StatusUpdate {
     errorMessage: string;
+    spotify?: {
+        lyricIndex: number;
+        timeline: number;
+        trackId: string;
+    };
     value: CustomStatusSetting;
 }
 
@@ -84,7 +89,10 @@ let spotifyLyricsTrackId: string | undefined;
 let spotifyOverrideActive = false;
 let spotifyPlaybackActive = false;
 let spotifyPlaybackTrackId: string | undefined;
-let lastLyricText: string | undefined;
+let spotifyTimeline = 0;
+let lastSpotifyLyricIndex: number | undefined;
+let pendingSpotifyBackwardLyricIndex: number | undefined;
+let spotifyBackwardConfirmations = 0;
 let nextSpotifyLyricsUpdateAt = 0;
 let pendingStatusUpdate: StatusUpdate | undefined;
 let statusUpdateInFlight = false;
@@ -120,12 +128,50 @@ function restartSpotifyLyricsDelay() {
     scheduleSpotifyLyric();
 }
 
+function getSpotifyPosition(reportedPosition?: number) {
+    if (reportedPosition !== undefined) return reportedPosition / 1_000;
+
+    const activity = DiscordSpotifyStore.getActivity();
+    return (SpotifyPlayerStore.track?.id === spotifyPlaybackTrackId
+        ? SpotifyPlayerStore.position
+        : activity && DiscordSpotifyStore.getTrack()?.id === spotifyPlaybackTrackId
+            ? Math.max(0, Date.now() - activity.timestamps.start)
+            : 0) / 1_000;
+}
+
+function getSpotifyLyricIndex(position: number) {
+    let currentIndex = -1;
+
+    for (let index = 0; index < spotifyLyrics.length; index++) {
+        if (spotifyLyrics[index].time > position) break;
+        currentIndex = index;
+    }
+
+    return currentIndex;
+}
+
+function isCurrentSpotifyUpdate(update: NonNullable<StatusUpdate["spotify"]>, text: string) {
+    if (!active || !spotifyOverrideActive || !spotifyPlaybackActive || update.trackId !== spotifyPlaybackTrackId || update.timeline !== spotifyTimeline) return false;
+
+    const currentIndex = getSpotifyLyricIndex(getSpotifyPosition());
+    return currentIndex === update.lyricIndex
+        && (lastSpotifyLyricIndex === undefined || update.lyricIndex >= lastSpotifyLyricIndex)
+        && spotifyLyrics[update.lyricIndex]?.text?.trim().slice(0, 128) === text;
+}
+
 function updateStatus(update: StatusUpdate) {
     pendingStatusUpdate = update;
     if (statusUpdateInFlight || !CustomStatusSettings) return;
 
     statusUpdateInFlight = true;
     pendingStatusUpdate = undefined;
+
+    if (update.spotify && !isCurrentSpotifyUpdate(update.spotify, update.value.text)) {
+        statusUpdateInFlight = false;
+        return;
+    }
+
+    if (update.spotify) lastSpotifyLyricIndex = update.spotify.lyricIndex;
 
     void CustomStatusSettings.updateSetting(update.value)
         .catch(error => logger.error(update.errorMessage, error))
@@ -175,24 +221,39 @@ function scheduleSpotifyLyric(reportedPosition?: number) {
     if (lyricsTimeoutId !== undefined) clearTimeout(lyricsTimeoutId);
     lyricsTimeoutId = undefined;
 
-    if (!active || !settings.plain.useSpotifyLyrics || phrasesHavePriority() || !spotifyPlaybackActive || spotifyLyricsTrackId !== spotifyPlaybackTrackId || !spotifyLyrics.length) return;
+    const trackId = spotifyPlaybackTrackId;
+    if (!active || !settings.plain.useSpotifyLyrics || phrasesHavePriority() || !spotifyPlaybackActive || !trackId || spotifyLyricsTrackId !== trackId || !spotifyLyrics.length) return;
 
-    const activity = DiscordSpotifyStore.getActivity();
-    const position = (reportedPosition
-        ?? (SpotifyPlayerStore.track?.id === spotifyPlaybackTrackId
-            ? SpotifyPlayerStore.position
-            : activity && DiscordSpotifyStore.getTrack()?.id === spotifyPlaybackTrackId
-                ? Math.max(0, Date.now() - activity.timestamps.start)
-                : 0)) / 1_000;
-    let currentIndex = -1;
+    const position = getSpotifyPosition(reportedPosition);
+    const currentIndex = getSpotifyLyricIndex(position);
 
-    for (let index = 0; index < spotifyLyrics.length; index++) {
-        if (spotifyLyrics[index].time > position) break;
-        currentIndex = index;
+    if (lastSpotifyLyricIndex !== undefined && currentIndex < lastSpotifyLyricIndex) {
+        if (reportedPosition !== undefined && pendingSpotifyBackwardLyricIndex !== undefined && currentIndex >= pendingSpotifyBackwardLyricIndex && currentIndex <= pendingSpotifyBackwardLyricIndex + 1) {
+            spotifyBackwardConfirmations++;
+            pendingSpotifyBackwardLyricIndex = currentIndex;
+            if (spotifyBackwardConfirmations >= 3) {
+                spotifyTimeline++;
+                lastSpotifyLyricIndex = undefined;
+                pendingSpotifyBackwardLyricIndex = undefined;
+                spotifyBackwardConfirmations = 0;
+                pendingStatusUpdate = undefined;
+            } else {
+                return;
+            }
+        } else {
+            if (reportedPosition !== undefined) {
+                pendingSpotifyBackwardLyricIndex = currentIndex;
+                spotifyBackwardConfirmations = 1;
+            }
+            return;
+        }
+    } else {
+        pendingSpotifyBackwardLyricIndex = undefined;
+        spotifyBackwardConfirmations = 0;
     }
 
     const text = spotifyLyrics[currentIndex]?.text?.trim();
-    if (text && text !== lastLyricText && CustomStatusSettings) {
+    if (text && currentIndex !== lastSpotifyLyricIndex && CustomStatusSettings) {
         const remainingDelay = nextSpotifyLyricsUpdateAt - Date.now();
         if (remainingDelay > 0) {
             lyricsTimeoutId = setTimeout(scheduleSpotifyLyric, remainingDelay);
@@ -210,11 +271,15 @@ function scheduleSpotifyLyric(reportedPosition?: number) {
             settings.store.nextEmojiIndex = (nextEmojiIndex + 1) % emojis.length;
         }
 
-        lastLyricText = text;
         setNextSpotifyLyricsUpdate();
 
         updateStatus({
             errorMessage: "Could not update the custom status with Spotify lyrics.",
+            spotify: {
+                lyricIndex: currentIndex,
+                timeline: spotifyTimeline,
+                trackId
+            },
             value: {
                 text: text.slice(0, 128),
                 expiresAtMs: "0",
@@ -240,10 +305,13 @@ function scheduleSpotifyLyric(reportedPosition?: number) {
 function resumePhraseRotation() {
     if (lyricsTimeoutId !== undefined) clearTimeout(lyricsTimeoutId);
     lyricsTimeoutId = undefined;
-    lastLyricText = undefined;
 
     if (!spotifyOverrideActive) return;
     spotifyOverrideActive = false;
+    spotifyTimeline++;
+    lastSpotifyLyricIndex = undefined;
+    pendingSpotifyBackwardLyricIndex = undefined;
+    spotifyBackwardConfirmations = 0;
     restartRotation();
 }
 
@@ -264,7 +332,10 @@ async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
     if (trackChanged) {
         spotifyLyrics = [];
         spotifyLyricsTrackId = undefined;
-        lastLyricText = undefined;
+        spotifyTimeline++;
+        lastSpotifyLyricIndex = undefined;
+        pendingSpotifyBackwardLyricIndex = undefined;
+        spotifyBackwardConfirmations = 0;
         nextSpotifyLyricsUpdateAt = 0;
         if (lyricsTimeoutId !== undefined) clearTimeout(lyricsTimeoutId);
         lyricsTimeoutId = undefined;
@@ -576,7 +647,10 @@ export default definePlugin({
         spotifyPlaybackActive = false;
         spotifyOverrideActive = false;
         loadingSpotifyTrackId = undefined;
-        lastLyricText = undefined;
+        spotifyTimeline++;
+        lastSpotifyLyricIndex = undefined;
+        pendingSpotifyBackwardLyricIndex = undefined;
+        spotifyBackwardConfirmations = 0;
         pendingStatusUpdate = undefined;
         if (intervalId !== undefined) {
             clearInterval(intervalId);
