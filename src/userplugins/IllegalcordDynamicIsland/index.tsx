@@ -101,6 +101,11 @@ const settings = definePluginSettings({
             { label: "Pink", value: "pink" }
         ]
     },
+    keepIslandVisible: {
+        description: "Keep the Dynamic Island visible when no activity is active.",
+        type: OptionType.BOOLEAN,
+        default: false
+    },
     showSpotifyIsland: {
         description: "Show Spotify activity in the Dynamic Island.",
         type: OptionType.BOOLEAN,
@@ -128,7 +133,7 @@ const settings = definePluginSettings({
         onChange: value => { musicControlsSettings.store.showSpotifyControls = value; }
     }
 });
-const SETTINGS_KEYS = ["islandColor", "showSpotifyIsland", "showVoiceIsland", "showScreenShareIsland", "morphNotifications"] satisfies Array<keyof typeof settings.store>;
+const SETTINGS_KEYS = ["islandColor", "keepIslandVisible", "showSpotifyIsland", "showVoiceIsland", "showScreenShareIsland", "morphNotifications"] satisfies Array<keyof typeof settings.store>;
 
 function setIslandNotification(notification: IslandNotification | null) {
     if (runtime.notificationTimeoutId !== undefined) clearTimeout(runtime.notificationTimeoutId);
@@ -297,13 +302,13 @@ function DynamicIsland() {
     const [streamStartedAt, setStreamStartedAt] = useState(Date.now());
     const swipeStartRef = useRef<SwipeStart | null>(null);
     const suppressClickRef = useRef(false);
-    const { islandColor, morphNotifications, showScreenShareIsland, showSpotifyIsland, showVoiceIsland } = settings.use(SETTINGS_KEYS);
+    const { islandColor, keepIslandVisible, morphNotifications, showScreenShareIsland, showSpotifyIsland, showVoiceIsland } = settings.use(SETTINGS_KEYS);
     const spotifyTrack = useStateFromStores([SpotifyStore], () => SpotifyStore.device?.is_active ? SpotifyStore.track : null);
     const isPlaying = useStateFromStores([SpotifyStore], () => SpotifyStore.isPlaying);
     const activeStream = useStateFromStores([ApplicationStreamingStore], () => ApplicationStreamingStore.getCurrentUserActiveStream());
     const currentUser = UserStore.getCurrentUser();
     const voiceState = useStateFromStores([VoiceStateStore], () => VoiceStateStore.getVoiceStateForUser(currentUser.id));
-    const track = showSpotifyIsland && isPlaying ? spotifyTrack : null;
+    const track = showSpotifyIsland ? spotifyTrack : null;
     const channelId = showVoiceIsland ? voiceState?.channelId : undefined;
     const stream = showScreenShareIsland ? activeStream : null;
     const streamKey = stream ? getStreamKey(stream) : null;
@@ -367,7 +372,7 @@ function DynamicIsland() {
         if (idle) setExpanded(false);
     }, [idle]);
 
-    if (idle && !notification) return null;
+    if (idle && !notification && !keepIslandVisible) return null;
 
     const activateSummary = () => {
         if (suppressClickRef.current) {
