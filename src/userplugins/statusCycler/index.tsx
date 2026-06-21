@@ -66,6 +66,7 @@ const CUSTOM_EMOJI_REGEX = /^<a?:([\w-]+):(\d+)>$/;
 const EMOJI_INTENTION = { STATUS: 1 } as const;
 const SPOTIFY_LYRICS_END_GRACE_MS = 15_000;
 const SPOTIFY_POSITION_JITTER_MS = 2_000;
+const SPOTIFY_POSITION_SETTLE_MS = 500;
 const logger = new Logger("StatusCycler");
 const CustomStatusSettings = getUserSettingLazy<CustomStatusSetting | null>("status", "customStatus");
 const Native = VencordNative?.pluginHelpers?.StatusCycler as PluginNative<typeof import("./native")> | undefined;
@@ -86,8 +87,9 @@ let spotifyPlaybackActive = false;
 let spotifyPlaybackTrackId: string | undefined;
 let spotifyPosition = 0;
 let spotifyPositionUpdatedAt = 0;
-let pendingSpotifyBackwardPosition: number | undefined;
-let pendingSpotifyBackwardPositionUpdatedAt = 0;
+let pendingSpotifyPosition: number | undefined;
+let pendingSpotifyPositionUpdatedAt = 0;
+let spotifyPositionTimeoutId: ReturnType<typeof setTimeout> | undefined;
 let lastLyricText: string | undefined;
 let nextSpotifyLyricsUpdateAt = 0;
 let pendingStatusUpdate: StatusUpdate | undefined;
@@ -179,7 +181,7 @@ function scheduleSpotifyLyric() {
     if (lyricsTimeoutId !== undefined) clearTimeout(lyricsTimeoutId);
     lyricsTimeoutId = undefined;
 
-    if (!active || !settings.plain.useSpotifyLyrics || phrasesHavePriority() || !spotifyPlaybackActive || spotifyLyricsTrackId !== spotifyPlaybackTrackId || !spotifyLyrics.length) return;
+    if (!active || !settings.plain.useSpotifyLyrics || phrasesHavePriority() || !spotifyPlaybackActive || spotifyLyricsTrackId !== spotifyPlaybackTrackId || pendingSpotifyPosition !== undefined || !spotifyLyrics.length) return;
 
     const position = (spotifyPosition + Date.now() - spotifyPositionUpdatedAt) / 1_000;
     let currentIndex = -1;
@@ -253,26 +255,21 @@ async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
     spotifyPlaybackActive = true;
     spotifyPlaybackTrackId = track.id;
 
-    if (trackChanged) {
-        if (spotifyOverrideActive && CustomStatusSettings) {
-            const current = CustomStatusSettings.getSetting();
-            updateStatus({
-                errorMessage: "Could not clear the previous Spotify lyric.",
-                value: {
-                    text: "",
-                    expiresAtMs: "0",
-                    emojiId: current?.emojiId ?? "0",
-                    emojiName: current?.emojiName ?? "",
-                    createdAtMs: String(Date.now())
-                }
-            });
-        }
+    if (spotifyLyricsTrackId === track.id && !spotifyLyrics.length) return;
 
+    if (!spotifyOverrideActive || trackChanged) pendingStatusUpdate = undefined;
+    spotifyOverrideActive = true;
+    if (intervalId !== undefined) clearInterval(intervalId);
+    intervalId = undefined;
+
+    if (trackChanged) {
         spotifyLyrics = [];
         spotifyLyricsTrackId = undefined;
         lastLyricText = undefined;
         nextSpotifyLyricsUpdateAt = 0;
-        pendingSpotifyBackwardPosition = undefined;
+        pendingSpotifyPosition = undefined;
+        if (spotifyPositionTimeoutId !== undefined) clearTimeout(spotifyPositionTimeoutId);
+        spotifyPositionTimeoutId = undefined;
         if (lyricsTimeoutId !== undefined) clearTimeout(lyricsTimeoutId);
         lyricsTimeoutId = undefined;
     }
@@ -283,25 +280,40 @@ async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
         const reportedPosition = position ?? (activity ? Math.max(0, now - activity.timestamps.start) : 0);
         const estimatedPosition = spotifyPosition + now - spotifyPositionUpdatedAt;
 
-        if (trackChanged || playbackResumed || reportedPosition - estimatedPosition > SPOTIFY_POSITION_JITTER_MS) {
+        if (trackChanged || playbackResumed) {
             spotifyPosition = reportedPosition;
             spotifyPositionUpdatedAt = now;
-            pendingSpotifyBackwardPosition = undefined;
-        } else if (estimatedPosition - reportedPosition > SPOTIFY_POSITION_JITTER_MS) {
-            const pendingEstimatedPosition = pendingSpotifyBackwardPosition === undefined
+            pendingSpotifyPosition = undefined;
+        } else if (Math.abs(reportedPosition - estimatedPosition) > SPOTIFY_POSITION_JITTER_MS) {
+            const pendingEstimatedPosition = pendingSpotifyPosition === undefined
                 ? undefined
-                : pendingSpotifyBackwardPosition + now - pendingSpotifyBackwardPositionUpdatedAt;
+                : pendingSpotifyPosition + now - pendingSpotifyPositionUpdatedAt;
 
             if (pendingEstimatedPosition !== undefined && Math.abs(reportedPosition - pendingEstimatedPosition) <= SPOTIFY_POSITION_JITTER_MS) {
                 spotifyPosition = reportedPosition;
                 spotifyPositionUpdatedAt = now;
-                pendingSpotifyBackwardPosition = undefined;
+                pendingSpotifyPosition = undefined;
+                if (spotifyPositionTimeoutId !== undefined) clearTimeout(spotifyPositionTimeoutId);
+                spotifyPositionTimeoutId = undefined;
             } else {
-                pendingSpotifyBackwardPosition = reportedPosition;
-                pendingSpotifyBackwardPositionUpdatedAt = now;
+                pendingSpotifyPosition = reportedPosition;
+                pendingSpotifyPositionUpdatedAt = now;
+                if (spotifyPositionTimeoutId !== undefined) clearTimeout(spotifyPositionTimeoutId);
+                spotifyPositionTimeoutId = setTimeout(() => {
+                    spotifyPositionTimeoutId = undefined;
+                    if (pendingSpotifyPosition === undefined) return;
+
+                    const settledAt = Date.now();
+                    spotifyPosition = pendingSpotifyPosition + settledAt - pendingSpotifyPositionUpdatedAt;
+                    spotifyPositionUpdatedAt = settledAt;
+                    pendingSpotifyPosition = undefined;
+                    scheduleSpotifyLyric();
+                }, SPOTIFY_POSITION_SETTLE_MS);
             }
         } else {
-            pendingSpotifyBackwardPosition = undefined;
+            pendingSpotifyPosition = undefined;
+            if (spotifyPositionTimeoutId !== undefined) clearTimeout(spotifyPositionTimeoutId);
+            spotifyPositionTimeoutId = undefined;
         }
     } else if (playbackResumed) {
         spotifyPositionUpdatedAt = Date.now();
@@ -309,9 +321,6 @@ async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
 
     if (spotifyLyricsTrackId === track.id) {
         if (spotifyLyrics.length) {
-            if (intervalId !== undefined) clearInterval(intervalId);
-            intervalId = undefined;
-            spotifyOverrideActive = true;
             scheduleSpotifyLyric();
         }
         return;
@@ -349,9 +358,6 @@ async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
         return;
     }
 
-    if (intervalId !== undefined) clearInterval(intervalId);
-    intervalId = undefined;
-    spotifyOverrideActive = true;
     scheduleSpotifyLyric();
 }
 
@@ -362,7 +368,9 @@ function stopSpotifyLyrics() {
     }
     spotifyPlaybackActive = false;
     loadingSpotifyTrackId = undefined;
-    pendingSpotifyBackwardPosition = undefined;
+    pendingSpotifyPosition = undefined;
+    if (spotifyPositionTimeoutId !== undefined) clearTimeout(spotifyPositionTimeoutId);
+    spotifyPositionTimeoutId = undefined;
     resumePhraseRotation();
 }
 
@@ -613,8 +621,8 @@ export default definePlugin({
 
     start() {
         active = true;
-        restartRotation();
         syncSpotifyLyrics(settings.store.useSpotifyLyrics);
+        restartRotation();
     },
 
     stop() {
@@ -622,7 +630,7 @@ export default definePlugin({
         spotifyPlaybackActive = false;
         spotifyOverrideActive = false;
         loadingSpotifyTrackId = undefined;
-        pendingSpotifyBackwardPosition = undefined;
+        pendingSpotifyPosition = undefined;
         lastLyricText = undefined;
         pendingStatusUpdate = undefined;
         if (intervalId !== undefined) {
@@ -632,6 +640,10 @@ export default definePlugin({
         if (lyricsTimeoutId !== undefined) {
             clearTimeout(lyricsTimeoutId);
             lyricsTimeoutId = undefined;
+        }
+        if (spotifyPositionTimeoutId !== undefined) {
+            clearTimeout(spotifyPositionTimeoutId);
+            spotifyPositionTimeoutId = undefined;
         }
     },
 
