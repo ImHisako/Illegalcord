@@ -19,6 +19,7 @@
 import "./style.css";
 
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
+import { ErrorBoundary } from "@components/index";
 import { Devs, EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import { ChannelStore, Menu } from "@webpack/common";
@@ -53,7 +54,7 @@ export default definePlugin({
     contextMenus: {
         "message": messageCtxPatch
     },
-    renderMessageAccessory: props => <Accessory message={props.message} />,
+    renderMessageAccessory: props => <ErrorBoundary noop><Accessory message={props.message} /></ErrorBoundary>,
     messagePopoverButton: {
         icon: Icon,
         render(message) {

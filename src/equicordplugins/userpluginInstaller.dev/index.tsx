@@ -9,6 +9,7 @@ import "./misc/style.css";
 import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
 import { Button } from "@components/Button";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { Notice } from "@components/Notice";
 import plSettings from "@plugins/_core/settings";
 import { Devs } from "@utils/constants";
@@ -142,6 +143,6 @@ export default definePlugin({
     settings,
     authors: [Devs.nin0dev],
     renderMessageAccessory: props => {
-        return <UserpluginInstallButton props={props} />;
+        return <ErrorBoundary noop><UserpluginInstallButton props={props} /></ErrorBoundary>;
     }
 });

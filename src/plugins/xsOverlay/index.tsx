@@ -10,7 +10,7 @@ import { Logger } from "@utils/Logger";
 import definePlugin, { makeRange, OptionType, PluginNative, ReporterTestable } from "@utils/types";
 import type { Channel, Embed, GuildMember, MessageAttachment, User } from "@vencord/discord-types";
 import { findByCodeLazy, findLazy } from "@webpack";
-import { Button, ChannelStore, GuildRoleStore, GuildStore, UserStore } from "@webpack/common";
+import { Button, ChannelStore, GuildRoleStore, GuildStore, IconUtils, UserStore } from "@webpack/common";
 
 const ChannelTypes = findLazy(m => m.ANNOUNCEMENT_THREAD === 10);
 
@@ -321,13 +321,15 @@ function shouldIgnoreForChannelType(channel: Channel) {
 }
 
 function sendMsgNotif(titleString: string, content: string, message: Message) {
-    fetch(`https://cdn.discordapp.com/avatars/${message.author.id}/${message.author.avatar}.png?size=128`)
-        .then(response => response.blob())
+    const avatarUrl = IconUtils.getUserAvatarURL(message.author, false, 128);
+    (avatarUrl ? fetch(avatarUrl) : Promise.reject())
+        .then(r => r.blob())
         .then(blob => new Promise<string>(resolve => {
             const r = new FileReader();
             r.onload = () => resolve((r.result as string).split(",")[1]);
             r.readAsDataURL(blob);
-        })).then(result => {
+        }))
+        .then(result => {
             const msgData: NotificationObject = {
                 type: 1,
                 timeout: settings.store.lengthBasedTimeout ? calculateTimeout(content) : settings.store.timeout,
@@ -341,8 +343,22 @@ function sendMsgNotif(titleString: string, content: string, message: Message) {
                 icon: result,
                 sourceApp: "Vencord"
             };
-
             sendToOverlay(msgData);
+        })
+        .catch(() => {
+            sendToOverlay({
+                type: 1,
+                timeout: settings.store.lengthBasedTimeout ? calculateTimeout(content) : settings.store.timeout,
+                height: calculateHeight(content),
+                opacity: settings.store.opacity,
+                volume: settings.store.volume,
+                audioPath: settings.store.soundPath,
+                title: titleString,
+                content: content,
+                useBase64Icon: false,
+                icon: "default",
+                sourceApp: "Vencord"
+            });
         });
 }
 

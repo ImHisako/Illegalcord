@@ -11,16 +11,14 @@ import { classNameFactory } from "@utils/css";
 import { openUserProfile } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
-import { findByPropsLazy } from "@webpack";
-import { FluxDispatcher, GuildMemberStore, Menu, Modal, openModal, ScrollerThin, Text, useEffect, UserStore, useStateFromStores } from "@webpack/common";
+import { FluxDispatcher, GuildMemberStore, IconUtils, Menu, Modal, openModal, RestAPI, ScrollerThin, Text, useEffect, UserStore, useStateFromStores } from "@webpack/common";
 
 const cl = classNameFactory("bc-");
 
 const logger = new Logger("showBoostCounts");
-const { getToken } = findByPropsLazy("setToken");
 async function openViewBoosters(guild: string) {
     logger.info("Viewing boosters for guild", guild);
-    const boosters = await fetchBoosters(getToken(), guild);
+    const boosters = await fetchBoosters(guild);
     logger.info(boosters);
     openModal(props => (
         <ErrorBoundary>
@@ -64,7 +62,7 @@ export default definePlugin({
     name: "BoostCounts",
     description: "Shows all the boosters in the server and the number of boosts for each booster.",
     tags: ["Servers", "Appearance"],
-    dependencies: ["MessagePopoverAPI"],
+
     authors: [{
         name: "Raf", id: 121253596753952768n
     }],
@@ -73,37 +71,16 @@ export default definePlugin({
     }
 });
 
-async function fetchBoosters(authorization: string, guildId: string) {
-    const response = await fetch(`https://discord.com/api/v9/guilds/${guildId}/premium/subscriptions`, {
-        "headers": {
-            "accept": "*/*",
-            "accept-language": "fr,en-US;q=0.9,hy;q=0.8,ru;q=0.7",
-            "authorization": authorization,
-            "priority": "u=1, i",
-            "sec-ch-ua": "\"Not;A=Brand\";v=\"24\", \"Chromium\";v=\"128\"",
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": "\"Windows\"",
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "same-origin",
-            "x-debug-options": "bugReporterEnabled",
-            "x-discord-locale": "en-GB",
-            "x-discord-timezone": "Europe/Paris",
-            "x-super-properties": "eyJvcyI6IldpbmRvd3MiLCJicm93c2VyIjoiRGlzY29yZCBDbGllbnQiLCJyZWxlYXNlX2NoYW5uZWwiOiJzdGFibGUiLCJjbGllbnRfdmVyc2lvbiI6IjEuMC45MTY4Iiwib3NfdmVyc2lvbiI6IjEwLjAuMjI2MzEiLCJvc19hcmNoIjoieDY0IiwiYXBwX2FyY2giOiJ4NjQiLCJzeXN0ZW1fbG9jYWxlIjoiZnIiLCJicm93c2VyX3VzZXJfYWdlbnQiOiJNb3ppbGxhLzUuMCAoV2luZG93cyBOVCAxMC4wOyBXaW42NDsgeDY0KSBBcHBsZVdlYktpdC81MzcuMzYgKEtIVE1MLCBsaWtlIEdlY2tvKSBkaXNjb3JkLzEuMC45MTY4IENocm9tZS8xMjguMC42NjEzLjM2IEVsZWN0cm9uLzMyLjAuMCBTYWZhcmkvNTM3LjM2IiwiYnJvd3Nlcl92ZXJzaW9uIjoiMzIuMC4wIiwib3Nfc2RrX3ZlcnNpb24iOiIyMjYzMSIsImNsaWVudF9idWlsZF9udW1iZXIiOjMzOTIyMSwibmF0aXZlX2J1aWxkX251bWJlciI6NTQwMzksImNsaWVudF9ldmVudF9zb3VyY2UiOm51bGx9"
-        },
-        "body": null,
-        "method": "GET",
-        "mode": "cors",
-        "credentials": "include"
+async function fetchBoosters(guildId: string) {
+    const res = await RestAPI.get({
+        url: `/guilds/${guildId}/premium/subscriptions`
     });
-
-    const boosts = await response.json();
-    const boosters = {};
+    const boosts: any[] = res.body ?? [];
+    const boosters: Record<string, number> = {};
     for (const boost of boosts) {
-        if (boost.user.id in boosters)
-            boosters[boost.user.id] += 1;
-        else
-            boosters[boost.user.id] = 1;
+        const id = boost?.user?.id;
+        if (!id) continue;
+        boosters[id] = (boosters[id] ?? 0) + 1;
     }
     return boosters;
 }
@@ -147,8 +124,7 @@ function UserList({ guildId, boosters }: { guildId: string, boosters: any; }) {
                 }
 
                 // Fallback avatar logic in case getAvatarURL is stubborn
-                const avatarUrl = user.getAvatarURL?.()
-                    ?? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`;
+                const avatarUrl = user.getAvatarURL?.() ?? IconUtils.getUserAvatarURL(user, false, 32);
 
                 return (
                     <Flex key={id} style={{ alignItems: "center", marginBottom: "10px", gap: "12px" }}>

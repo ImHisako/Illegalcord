@@ -5,7 +5,7 @@
  */
 
 import { Guild } from "@vencord/discord-types";
-import { GuildStore,NavigationRouter, RestAPI } from "@webpack/common";
+import { GuildStore, IconUtils, NavigationRouter, RestAPI } from "@webpack/common";
 
 import { settings } from "../settings";
 import { state, throwIfCancelled } from "../store";
@@ -152,25 +152,36 @@ export async function cloneServer(sourceGuild: Guild, options: CloneOptions) {
             (async () => {
                 if (guild.icon) {
                     try {
-                        const response = await fetch(`https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=512`);
-                        if (response.ok) iconBase64 = `data:image/png;base64,${arrayBufferToBase64(await response.arrayBuffer())}`;
-                    } catch (e) { }
+                        const url = IconUtils.getGuildIconURL({ id: guild.id, icon: guild.icon, size: 512 });
+                        if (url) {
+                            const response = await fetch(url);
+                            if (response.ok) iconBase64 = `data:image/png;base64,${arrayBufferToBase64(await response.arrayBuffer())}`;
+                        }
+                    } catch {}
                 }
             })(),
             (async () => {
-                if ((guild as any).banner) {
+                const { banner } = (guild as any);
+                if (banner) {
                     try {
-                        const response = await fetch(`https://cdn.discordapp.com/banners/${guild.id}/${(guild as any).banner}.png?size=512`);
-                        if (response.ok) bannerBase64 = `data:image/png;base64,${arrayBufferToBase64(await response.arrayBuffer())}`;
-                    } catch (e) { }
+                        const url = IconUtils.getGuildBannerURL(guild as any);
+                        if (url) {
+                            const response = await fetch(url);
+                            if (response.ok) bannerBase64 = `data:image/png;base64,${arrayBufferToBase64(await response.arrayBuffer())}`;
+                        }
+                    } catch {}
                 }
             })(),
             (async () => {
-                if ((guild as any).splash) {
+                const { splash } = (guild as any);
+                if (splash) {
                     try {
-                        const response = await fetch(`https://cdn.discordapp.com/splashes/${guild.id}/${(guild as any).splash}.png?size=512`);
-                        if (response.ok) splashBase64 = `data:image/png;base64,${arrayBufferToBase64(await response.arrayBuffer())}`;
-                    } catch (e) { }
+                        const url = IconUtils.getGuildSplashURL(guild as any);
+                        if (url) {
+                            const response = await fetch(url);
+                            if (response.ok) splashBase64 = `data:image/png;base64,${arrayBufferToBase64(await response.arrayBuffer())}`;
+                        }
+                    } catch {}
                 }
             })()
         ]);

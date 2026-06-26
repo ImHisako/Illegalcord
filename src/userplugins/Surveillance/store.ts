@@ -177,3 +177,14 @@ export async function trimEvents(limit: number) {
     await persistNow();
     notify();
 }
+
+export function clearTimers() {
+    if (loadSaveTimer) {
+        clearTimeout(loadSaveTimer);
+        loadSaveTimer = undefined;
+    }
+    if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = undefined;
+    }
+}

@@ -5,8 +5,9 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
-import { findByProps } from "@webpack";
+import { RestAPI } from "@webpack/common";
 
 // ─── Settings ────────────────────────────────────────────────────────────────
 
@@ -33,11 +34,9 @@ const settings = definePluginSettings({
     }
 });
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+const logger = new Logger("ClanSwitcher");
 
-function getToken(): string | null {
-    return findByProps("getToken")?.getToken?.() ?? null;
-}
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getClanList(): string[] {
     return settings.store.clans
@@ -46,47 +45,27 @@ function getClanList(): string[] {
         .filter(Boolean);
 }
 
-function log(...args: any[]) {
-    if (settings.store.enableLogs)
-        console.log("[Clan Switcher]", ...args);
+function log(...args: unknown[]) {
+    if (settings.store.enableLogs) logger.info(...args);
 }
 
-function warn(...args: any[]) {
-    if (settings.store.enableLogs)
-        console.warn("[Clan Switcher]", ...args);
+function warn(...args: unknown[]) {
+    if (settings.store.enableLogs) logger.warn(...args);
 }
 
 async function switchClan(clanId: string): Promise<void> {
-    const token = getToken();
-    if (!token) {
-        warn("Could not retrieve token. Skipping switch.");
-        return;
-    }
-
     try {
-        const res = await fetch("https://discord.com/api/v9/users/@me/clan", {
-            method: "PUT",
-            headers: {
-                "authorization": token,
-                "content-type": "application/json",
-                "origin": "https://discord.com",
-                "referer": "https://discord.com/channels/@me",
-                "x-discord-locale": "en-US",
-                "x-discord-timezone": Intl.DateTimeFormat().resolvedOptions().timeZone
-            },
-            body: JSON.stringify({
+        await RestAPI.put({
+            url: "/users/@me/clan",
+            body: {
                 identity_enabled: true,
                 identity_guild_id: clanId
-            })
+            }
         });
-
-        if (!res.ok) {
-            warn(`Switch to clan ${clanId} failed: HTTP ${res.status}`);
-        } else {
-            log(`Switched to clan: ${clanId}`);
-        }
-    } catch (err) {
-        warn("Network error during clan switch:", err);
+        log(`Switched to clan: ${clanId}`);
+    } catch (err: unknown) {
+        const status = (err as { status?: number })?.status;
+        warn(`Switch to clan ${clanId} failed${status ? `: HTTP ${status}` : ""}`);
     }
 }
 
@@ -117,13 +96,6 @@ function scheduleNext() {
 async function tick() {
     if (!isRunning) return;
 
-    const token = getToken();
-    if (!token) {
-        warn("No token available. Retrying next interval.");
-        scheduleNext();
-        return;
-    }
-
     const clanList = getClanList();
     if (clanList.length === 0) {
         warn("No IDs available. Check settings.");
@@ -147,11 +119,6 @@ export default definePlugin({
 
     start() {
         if (isRunning) return;
-
-        const token = getToken();
-        if (!token) {
-            warn("Failed to retrieve token on start. Plugin will retry automatically.");
-        }
 
         const clanList = getClanList();
         if (clanList.length === 0) {
