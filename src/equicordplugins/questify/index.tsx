@@ -230,7 +230,7 @@ export default definePlugin({
         },
         {
             // Overrides the account panel Quest popup and progress display.
-            find: "QUESTS_BAR,questId",
+            find: "collapsed-with-rewards\":\"collapsed-without-rewards",
             predicate: () => getQuestifySettings().disableAccountPanelPromo || !getQuestifySettings().disableAccountPanelQuestProgress,
             replacement: {
                 match: /(?<=function\(\){)(let (\i)=\(0,\i.\i\)\(\);)/,
@@ -350,7 +350,7 @@ export default definePlugin({
         },
         {
             // Overwrite button props for Quest bar.
-            find: "QUESTS_BAR,questId",
+            find: "collapsed-with-rewards\":\"collapsed-without-rewards",
             predicate: () => !getQuestifySettings().disableQuestsEverything && hasEnabledAutoCompleteQuestTypes(),
             replacement: {
                 match: /(?<=SELECT&&!\i&&!\i,(\i)=null;)(return )(\i\?\i=\(0,\i.\i\)\(\i,{quest:(\i))/,
@@ -531,8 +531,19 @@ export default definePlugin({
             ]
         },
         {
+            // Allow non-shareable Quests to embed in chat and to have
+            // their share URLs copyable from the embed context menu.
+            find: "NOT_SHAREABLE}function",
+            group: true,
+            predicate: () => !getQuestifySettings().disableQuestsEverything,
+            replacement: {
+                match: /(?<=return )(?=\i.sharePolicy!==\i.\i.NOT_SHAREABLE)/,
+                replace: "true||"
+            }
+        },
+        {
             // Adds a maxDigits prop to the LowerBadge component which allows for not truncating, or for truncating at a specific threshold.
-            find: ".INTERACTIVE_TEXT_ACTIVE.css,shape",
+            find: ".BADGE_NOTIFICATION_BACKGROUND.css,disableColor",
             group: true,
             replacement: [
                 {
