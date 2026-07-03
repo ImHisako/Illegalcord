@@ -1,9 +1,16 @@
-import { RestAPI, GuildStore } from "@webpack/common";
-import { replaceEmojis, arrayBufferToBase64, sleep } from "../utils/helpers";
-import { checkGuildExistence, fetchGuildRoles } from "../utils/api";
-import { updateWithTime } from "../utils/notifications";
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import { GuildStore,RestAPI } from "@webpack/common";
+
+import { state } from "../store";
+import { checkGuildExistence } from "../utils/api";
 import { handleCloneError } from "../utils/errorHandler";
-import { state, throwIfCancelled } from "../store";
+import { arrayBufferToBase64,replaceEmojis } from "../utils/helpers";
+import { updateWithTime } from "../utils/notifications";
 import { CloneContext } from "./types";
 
 export async function extractAndCloneEmojis(ctx: CloneContext) {
@@ -99,8 +106,8 @@ export async function extractAndCloneEmojis(ctx: CloneContext) {
                     if (response.ok) {
                         const buffer = await response.arrayBuffer();
                         const base64 = typeof window !== "undefined"
-                            ? btoa(new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), ''))
-                            : Buffer.from(buffer).toString('base64');
+                            ? btoa(new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), ""))
+                            : Buffer.from(buffer).toString("base64");
                         const imageStr = `data:image/${ext};base64,${base64}`;
 
                         await taskQueue.execute(async () => {
@@ -115,8 +122,8 @@ export async function extractAndCloneEmojis(ctx: CloneContext) {
                             if (createResp?.body?.id) {
                                 state.emojiIdMap[emoji.id] = createResp.body.id;
                             }
-                        }, (msg) => updateWithTime(msg, 20 + (emojiStep / emojisToClone.length) * 5));
-                        
+                        }, msg => updateWithTime(msg, 20 + (emojiStep / emojisToClone.length) * 5));
+
                         emojiStep++;
                         updateWithTime(`Cloned emoji ${emoji.name} (${emojiStep}/${emojisToClone.length})...`, 20 + (emojiStep / emojisToClone.length) * 5);
                     }
@@ -135,12 +142,12 @@ export async function extractAndCloneEmojis(ctx: CloneContext) {
 export async function cloneRoles(ctx: CloneContext): Promise<number> {
     let rolesFailed = 0;
     const { sourceGuild, newGuildId, options, estimateRoles, rolesProgressStart, rolesProgressEnd, taskQueue, roleIdMap } = ctx;
-    
+
     let skipRoles = false;
     if (state.mainProgressNotificationId) {
         const skipBtn = document.getElementById(state.mainProgressNotificationId)?.querySelector(".cloner-skip-roles-btn") as HTMLElement;
         if (skipBtn) skipBtn.style.display = "";
-        
+
         // Hijack the skip callback to work inside this function context
         const ogSkip = state.skipRolesCallback;
         state.skipRolesCallback = () => {
@@ -202,7 +209,7 @@ export async function cloneRoles(ctx: CloneContext): Promise<number> {
 
         try {
             checkGuildExistence(sourceGuild.id, newGuildId);
-            
+
             const rolePayload: any = {
                 name: replaceEmojis(role.name),
                 permissions: role.permissions.toString(),
@@ -241,19 +248,19 @@ export async function cloneRoles(ctx: CloneContext): Promise<number> {
                     }
                     throw e;
                 }
-            }, (msg) => updateWithTime(msg, rolesProgressStart + ((roleStep / Math.max(rolesToCreate.length, 1)) * (rolesProgressEnd - rolesProgressStart))), () => skipRoles, 5);
+            }, msg => updateWithTime(msg, rolesProgressStart + ((roleStep / Math.max(rolesToCreate.length, 1)) * (rolesProgressEnd - rolesProgressStart))), () => skipRoles, 5);
 
             if (response?.body?.id) {
                 roleIdMap[role.id] = response.body.id;
             }
-            
+
             roleStep++;
             updateWithTime(`${actionLabel} role ${roleStep}/${rolesToCreate.length}: ${role.name}`, rolesProgressStart + ((roleStep / Math.max(rolesToCreate.length, 1)) * (rolesProgressEnd - rolesProgressStart)));
 
         } catch (e: any) {
             if (e?.rateLimitExhausted) {
                 rolesFailed += (rolesToCreate.length - roleStep);
-                updateWithTime(`Rate limited, skipping remaining roles...`, rolesProgressEnd);
+                updateWithTime("Rate limited, skipping remaining roles...", rolesProgressEnd);
                 skipRoles = true;
                 return;
             }
@@ -265,9 +272,9 @@ export async function cloneRoles(ctx: CloneContext): Promise<number> {
     await Promise.all(rolePromises);
 
     if (options.resumeMode && rolesToCreate.length === 0) {
-        updateWithTime(`All roles already exist, skipping...`, rolesProgressEnd);
+        updateWithTime("All roles already exist, skipping...", rolesProgressEnd);
     }
-    
+
     if (state.mainProgressNotificationId) {
         const skipBtn = document.getElementById(state.mainProgressNotificationId)?.querySelector(".cloner-skip-roles-btn") as HTMLElement;
         if (skipBtn) skipBtn.style.display = "none";

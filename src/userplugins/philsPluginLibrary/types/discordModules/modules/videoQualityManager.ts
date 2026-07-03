@@ -17,7 +17,6 @@
 */
 
 import { Bitrate, Framerate, Resolution } from "../../../../philsPluginLibrary/types";
-
 import { Connection } from "./";
 
 export type VideoQualityManager = VideoQualityManager_ & {

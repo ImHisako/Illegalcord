@@ -1,3 +1,9 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { state } from "../store";
 
 export const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -11,7 +17,7 @@ export function escapeHtml(str: string): string {
 
 export function arrayBufferToBase64(buffer: ArrayBuffer): string {
     const bytes = new Uint8Array(buffer);
-    let binary = '';
+    let binary = "";
     const chunkSize = 8192;
     for (let i = 0; i < bytes.length; i += chunkSize) {
         const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
@@ -21,11 +27,11 @@ export function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 export function compareVersions(v1: string, v2: string): number {
-    const clean1 = v1.replace(/[^0-9.]/g, '');
-    const clean2 = v2.replace(/[^0-9.]/g, '');
+    const clean1 = v1.replace(/[^0-9.]/g, "");
+    const clean2 = v2.replace(/[^0-9.]/g, "");
 
-    const parts1 = clean1.split('.').map(n => parseInt(n) || 0);
-    const parts2 = clean2.split('.').map(n => parseInt(n) || 0);
+    const parts1 = clean1.split(".").map(n => parseInt(n) || 0);
+    const parts2 = clean2.split(".").map(n => parseInt(n) || 0);
 
     const maxLength = Math.max(parts1.length, parts2.length);
 

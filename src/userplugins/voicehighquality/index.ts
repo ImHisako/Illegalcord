@@ -5,7 +5,6 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
-import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 
 const settings = definePluginSettings({
@@ -112,7 +111,7 @@ export default definePlugin({
             find: "priority:",
             replacement: {
                 match: /priority:"low"/,
-                replace: 'priority:$self.getAudioPriority()'
+                replace: "priority:$self.getAudioPriority()"
             }
         },
         {

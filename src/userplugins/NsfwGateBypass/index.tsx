@@ -1,5 +1,15 @@
-import { filters, find } from "@webpack";
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
+import { filters, find } from "@webpack";
+
+const logger = new Logger("NSFWGateBypass");
+let intervalId: ReturnType<typeof setInterval> | undefined;
 
 export default definePlugin({
     name: "NSFWGateBypass",
@@ -34,7 +44,7 @@ export default definePlugin({
         {
             find: "useAgeGateVerifyContentForGuild",
             replacement: {
-                match: /null==(\i)\.nsfwAllowed/g,
+                match: /null==(\i)\.nsfwAllowed/,
                 replace: "false",
             },
         },
@@ -63,34 +73,34 @@ export default definePlugin({
         const InviteStore = safeFindByProps("getInvite", "resolveInvite");
         const StageStore = safeFindByProps("isStageSpeakerAllowed");
 
-
         const applyMasterMask = () => {
             const user = UserStore?.getCurrentUser();
             if (!user) return;
 
-            const adultDOB = "1997-11-24"; 
+            const adultDOB = "1997-11-24";
 
-            Object.defineProperties(user, {
-                
-                date_of_birth: { get: () => adultDOB, configurable: true },
-                ageGroup: { get: () => 1, configurable: true }, 
-                
-                ageVerificationStatus: { get: () => 3, configurable: true }, 
-                age_gate_done: { get: () => true, configurable: true },
-                underage: { get: () => false, configurable: true },
-                nsfwAllowed: { get: () => true, configurable: true },
-                guild_nsfw_allowed: { get: () => true, configurable: true }
-            });
+            try {
+                Object.defineProperties(user, {
+                    date_of_birth: { get: () => adultDOB, configurable: true },
+                    ageGroup: { get: () => 1, configurable: true },
+                    ageVerificationStatus: { get: () => 3, configurable: true },
+                    age_gate_done: { get: () => true, configurable: true },
+                    underage: { get: () => false, configurable: true },
+                    nsfwAllowed: { get: () => true, configurable: true },
+                    guild_nsfw_allowed: { get: () => true, configurable: true }
+                });
+            } catch (error) {
+                logger.warn("Failed to modify user properties", error);
+            }
 
             if (typeof user.flags === "number") {
-                user.flags |= 2; 
-                user.flags |= (1 << 18); 
+                user.flags |= 2;
+                user.flags |= (1 << 18);
             }
         };
 
         applyMasterMask();
-        const interval = setInterval(applyMasterMask, 500); 
-        (this as any)._interval = interval;
+        intervalId = setInterval(applyMasterMask, 500);
 
         if (StageStore) {
             StageStore.isStageSpeakerAllowed = () => true;
@@ -102,7 +112,7 @@ export default definePlugin({
             InviteStore.getInvite = function(...args: any[]) {
                 const invite = originalGetInvite.apply(this, args);
                 if (invite) {
-                    invite.is_minimum_age_verified = true; 
+                    invite.is_minimum_age_verified = true;
                     invite.state = "RESOLVED";
                     if (invite.guild) {
                         invite.guild.nsfw = false;
@@ -115,14 +125,14 @@ export default definePlugin({
 
         const ChannelNSFW = safeFindByProps("isNSFW");
         if (ChannelNSFW) {
-            Object.defineProperty(ChannelNSFW, "isNSFW", {
-                get: () => () => false,
-                configurable: true
-            });
+            ChannelNSFW.isNSFW = () => false;
         }
     },
 
     stop() {
-        if ((this as any)._interval) clearInterval((this as any)._interval);
+        if (intervalId !== undefined) {
+            clearInterval(intervalId);
+            intervalId = undefined;
+        }
     }
 });

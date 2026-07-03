@@ -199,7 +199,9 @@ function ControlButton({ active, children, compact, danger, label, onClick }: Co
 }
 
 function ScreenShareTimer({ startedAt }: { startedAt: number; }) {
-    return <>{formatDurationMs(useFixedTimer({ initialTime: startedAt }))}</>;
+    const elapsed = Date.now() - startedAt;
+    const time = useFixedTimer({ initialTime: startedAt });
+    return <>{formatDurationMs(time > 0 ? time : elapsed)}</>;
 }
 
 function VoiceIcon({ children, slashed }: { children: ReactNode; slashed: boolean; }) {
@@ -351,12 +353,15 @@ function DynamicIsland() {
         }
 
         const handleMessage = ({ message }: { message: MessageWithMentions; }) => {
+            const me = UserStore.getCurrentUser();
+            if (!me) return;
+
             const channel = ChannelStore.getChannel(message.channel_id);
             const storedMessage = MessageStore.getMessage(message.channel_id, message.id);
-            if (!channel || message.author.id === currentUser.id || storedMessage?.blocked) return;
+            if (!channel || message.author.id === me.id || storedMessage?.blocked) return;
 
-            const directlyMentioned = message.mentions.some(mention => typeof mention === "string" ? mention === currentUser.id : mention.id === currentUser.id);
-            const memberRoles = channel.guild_id ? GuildMemberStore.getMember(channel.guild_id, currentUser.id)?.roles ?? [] : [];
+            const directlyMentioned = message.mentions.some(mention => typeof mention === "string" ? mention === me.id : mention.id === me.id);
+            const memberRoles = channel.guild_id ? GuildMemberStore.getMember(channel.guild_id, me.id)?.roles ?? [] : [];
             const roleMentioned = channel.guild_id != null
                 && !UserGuildSettingsStore.isSuppressRolesEnabled(channel.guild_id)
                 && message.mention_roles.some(roleId => memberRoles.includes(roleId));
@@ -377,7 +382,7 @@ function DynamicIsland() {
 
         FluxDispatcher.subscribe("MESSAGE_CREATE", handleMessage);
         return () => FluxDispatcher.unsubscribe("MESSAGE_CREATE", handleMessage);
-    }, [currentUser.id, morphNotifications]);
+    }, [morphNotifications]);
 
     useEffect(() => {
         if (idle) setExpanded(false);

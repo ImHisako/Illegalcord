@@ -19,7 +19,6 @@
 import { PluginInfo } from "../../betterMicrophone.desktop/constants";
 import { createPluginStore, ProfilableInitializer, ProfilableStore, profileable, ProfileableProfile } from "../../philsPluginLibrary";
 
-
 export interface MicrophoneProfile {
     freq?: number,
     pacsize?: number,

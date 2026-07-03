@@ -1,18 +1,25 @@
-import { NavigationRouter, RestAPI, GuildStore } from "@webpack/common";
-import { notify, createMainProgressNotification, completeMainProgress, updateProgress, updateWithTime } from "../utils/notifications";
-import { fetchGuildData, fetchGuildRoles, extractChannels, checkGuildExistence } from "../utils/api";
-import { TaskQueue } from "../utils/TaskQueue";
-import { translateError } from "../utils/errorHandler";
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import { Guild } from "@vencord/discord-types";
+import { GuildStore,NavigationRouter, RestAPI } from "@webpack/common";
+
+import { settings } from "../settings";
 import { state, throwIfCancelled } from "../store";
 import { CloneOptions } from "../types";
-import { Guild } from "@vencord/discord-types";
-import { replaceEmojis, sleep, arrayBufferToBase64 } from "../utils/helpers";
-import { CloneContext } from "./types";
-import { extractAndCloneEmojis, cloneRoles } from "./cloneRoles";
+import { extractChannels,fetchGuildData, fetchGuildRoles } from "../utils/api";
+import { translateError } from "../utils/errorHandler";
+import { arrayBufferToBase64,replaceEmojis, sleep } from "../utils/helpers";
+import { completeMainProgress, createMainProgressNotification, notify, updateProgress, updateWithTime } from "../utils/notifications";
+import { TaskQueue } from "../utils/TaskQueue";
 import { cloneChannels } from "./cloneChannels";
-import { cloneSettings } from "./cloneSettings";
 import { cloneOnboarding } from "./cloneOnboarding";
-import { settings } from "../settings";
+import { cloneRoles,extractAndCloneEmojis } from "./cloneRoles";
+import { cloneSettings } from "./cloneSettings";
+import { CloneContext } from "./types";
 
 export async function cloneServer(sourceGuild: Guild, options: CloneOptions) {
     if (state.isCloning) {
@@ -94,13 +101,13 @@ export async function cloneServer(sourceGuild: Guild, options: CloneOptions) {
         apiCalls += 1;
 
         const apiDuration = apiCalls * 0.5 * (5 / (settings.store.concurrencyLimit || 5));
-        let estimatedSeconds = Math.max(10, Math.ceil(apiDuration + sleepSeconds));
+        const estimatedSeconds = Math.max(10, Math.ceil(apiDuration + sleepSeconds));
 
         const formatTime = (s: number) => {
             const time = Math.max(0, Math.floor(s));
             const m = Math.floor(time / 60);
             const rs = time % 60;
-            return `${m}:${rs.toString().padStart(2, '0')}`;
+            return `${m}:${rs.toString().padStart(2, "0")}`;
         };
 
         const timeStr = formatTime(estimatedSeconds);
@@ -120,7 +127,7 @@ export async function cloneServer(sourceGuild: Guild, options: CloneOptions) {
         const hasChannels = options.cloneChannels;
         const hasOnboarding = options.cloneOnboarding;
 
-        let totalWeight = (hasRoles ? 30 : 0) + (hasChannels ? 50 : 0) + 5 + (hasOnboarding ? 5 : 0);
+        const totalWeight = (hasRoles ? 30 : 0) + (hasChannels ? 50 : 0) + 5 + (hasOnboarding ? 5 : 0);
         const scale = totalWeight > 0 ? (90 / totalWeight) : 1;
         let currentProgress = 5;
 
@@ -135,7 +142,7 @@ export async function cloneServer(sourceGuild: Guild, options: CloneOptions) {
         const settingsProgress = advanceProgress(5);
         const onboardingProgress = advanceProgress(hasOnboarding ? 5 : 0);
 
-        updateWithTime(`Preparing server data...`, 5);
+        updateWithTime("Preparing server data...", 5);
 
         let iconBase64: string | null = null;
         let bannerBase64: string | null = null;
@@ -174,7 +181,7 @@ export async function cloneServer(sourceGuild: Guild, options: CloneOptions) {
         if (options.targetGuildId) {
             newGuildId = options.targetGuildId;
             state.currentCloneGuildId = newGuildId;
-            updateWithTime(`Preparing target server...`, 10);
+            updateWithTime("Preparing target server...", 10);
 
             if (!options.resumeMode) {
                 const overwriteQueue = new TaskQueue(3);
@@ -218,7 +225,7 @@ export async function cloneServer(sourceGuild: Guild, options: CloneOptions) {
                     }
                 }
 
-                updateWithTime(`Waiting for Discord to process deletions...`, 10);
+                updateWithTime("Waiting for Discord to process deletions...", 10);
                 await sleep(5000);
             }
 
@@ -267,7 +274,7 @@ export async function cloneServer(sourceGuild: Guild, options: CloneOptions) {
             }
         }
 
-        updateWithTime(`Extracting used emojis...`, 15);
+        updateWithTime("Extracting used emojis...", 15);
 
         const cloneContext: CloneContext = {
             sourceGuild,
@@ -292,7 +299,7 @@ export async function cloneServer(sourceGuild: Guild, options: CloneOptions) {
         }
 
         throwIfCancelled();
-        updateWithTime(`Cloning content...`, rolesProgress.start);
+        updateWithTime("Cloning content...", rolesProgress.start);
 
         if (options.cloneRoles) {
             rolesFailed = await cloneRoles(cloneContext);
@@ -303,7 +310,7 @@ export async function cloneServer(sourceGuild: Guild, options: CloneOptions) {
         if (state.mainProgressNotificationId) {
             const skipBtn = document.getElementById(state.mainProgressNotificationId)?.querySelector(".cloner-skip-roles-btn") as HTMLElement;
             if (skipBtn) skipBtn.style.display = "none";
-            updateWithTime(`Starting channels...`, channelsProgress.start);
+            updateWithTime("Starting channels...", channelsProgress.start);
         }
 
         if (options.cloneChannels) {

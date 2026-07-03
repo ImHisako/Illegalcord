@@ -1,10 +1,8 @@
 /*
-Made with ❤️ by neoarz
-I am not responsible for any damage caused by this plugin; use at your own risk
-Vencord does not endorse/support this plugin (Works with Equicord as well)
-dm @neoarz if u need help or have any questions
-https://github.com/neoarz/NitroSniper
-*/
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import type { PluginNative } from "@utils/types";
 

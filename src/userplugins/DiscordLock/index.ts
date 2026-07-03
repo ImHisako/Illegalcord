@@ -1,7 +1,7 @@
 /*
- * DiscordLock — Vencord plugin
- * Author: vejcowski
- * Do not remove or modify this header when redistributing.
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import { definePluginSettings } from "@api/Settings";

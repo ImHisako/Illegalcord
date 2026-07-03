@@ -17,11 +17,12 @@
 */
 
 import { Flex } from "@components/Flex";
+import { Text } from "@webpack/common";
+import React from "react";
+
 import { AuthorUserSummaryItem } from "../../philsPluginLibrary/components/AuthorSummaryItem";
 import { Author, Contributor } from "../../philsPluginLibrary/types";
 import { openURL } from "../../philsPluginLibrary/utils";
-import { Text } from "@webpack/common";
-import React from "react";
 
 export interface ContributorAuthorSummaryProps {
     author?: Author;

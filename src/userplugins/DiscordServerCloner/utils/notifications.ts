@@ -1,7 +1,14 @@
-import { state } from "../store";
-import { escapeHtml } from "./helpers";
-import { NotificationAction } from "../types";
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { RestAPI } from "@webpack/common";
+
+import { state } from "../store";
+import { NotificationAction } from "../types";
+import { escapeHtml } from "./helpers";
 
 export function cleanupContainer() {
     const container = document.getElementById("vc-pill-container");
@@ -59,26 +66,26 @@ export function notify(
 
     const icons: Record<string, string> = { success: "✓", error: "✕", info: "⚡" };
     const actionButtons = actions.map((action, index) => {
-        const safeId = `btn-${index}-${action.label.replace(/\\s+/g, '-')}`;
-        return `<button id="${safeId}" class="cloner-btn ${action.type || 'default'}" style="padding: 4px 10px; font-size: 11px;">${action.label}</button>`;
+        const safeId = `btn-${index}-${action.label.replace(/\\s+/g, "-")}`;
+        return `<button id="${safeId}" class="cloner-btn ${action.type || "default"}" style="padding: 4px 10px; font-size: 11px;">${action.label}</button>`;
     }).join("");
 
     notification.innerHTML = `
         <div class="cloner-sub-pill-icon ${type}">${icons[type]}</div>
         <div class="cloner-sub-pill-content">
             <div class="cloner-sub-pill-title">${escapeHtml(title)}</div>
-            ${body ? `<div class="cloner-sub-pill-body">${escapeHtml(body)}</div>` : ''}
-            ${actions.length > 0 ? `<div style="display:flex; gap: 6px; margin-top: 6px;">${actionButtons}</div>` : ''}
+            ${body ? `<div class="cloner-sub-pill-body">${escapeHtml(body)}</div>` : ""}
+            ${actions.length > 0 ? `<div style="display:flex; gap: 6px; margin-top: 6px;">${actionButtons}</div>` : ""}
         </div>
     `;
 
     container.appendChild(notification);
 
     actions.forEach((action, index) => {
-        const safeId = `btn-${index}-${action.label.replace(/\\s+/g, '-')}`;
+        const safeId = `btn-${index}-${action.label.replace(/\\s+/g, "-")}`;
         const btn = notification.querySelector(`#${safeId}`);
         if (btn) {
-            btn.addEventListener("click", (e) => {
+            btn.addEventListener("click", e => {
                 e.stopPropagation();
                 action.onClick(notificationId);
             });
@@ -100,12 +107,12 @@ export function createMainProgressNotification(title: string, initialBody: strin
     const notificationId = `main-pill-${Date.now()}`;
 
     const pill = document.createElement("div");
-    pill.className = `cloner-pill`;
+    pill.className = "cloner-pill";
     pill.id = notificationId;
 
     const cancelBtnText = isExistingServer ? "Cancel" : "Cancel & Delete";
     const cancelBtnClass = isExistingServer ? "cloner-btn" : "cloner-btn danger";
-    const skipRolesBtnHtml = showSkipRoles ? `<button class="cloner-btn cloner-skip-roles-btn" style="display:none">Skip Roles</button>` : '';
+    const skipRolesBtnHtml = showSkipRoles ? "<button class=\"cloner-btn cloner-skip-roles-btn\" style=\"display:none\">Skip Roles</button>" : "";
 
     pill.innerHTML = `
         <div class="cloner-pill-compact">
@@ -202,7 +209,7 @@ export function completeMainProgress(id: string, body: string, success: boolean,
         progressBar.style.width = "100%";
     }
 
-    pill.classList.add(success ? 'success' : 'error');
+    pill.classList.add(success ? "success" : "error");
 
     // Single close timer (3s for cancel, 6s for success/error)
     const delay = customPercentText === "Cancelled" ? 3000 : 6000;

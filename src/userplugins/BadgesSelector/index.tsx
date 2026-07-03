@@ -1,8 +1,13 @@
-import { Devs } from "@utils/constants";
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import * as DataStore from "@api/DataStore";
 import definePlugin from "@utils/types";
 import { findStoreLazy } from "@webpack";
 import { Menu, Toasts } from "@webpack/common";
-import * as DataStore from "@api/DataStore";
 const UserProfileStore = findStoreLazy("UserProfileStore");
 const userBadgesMap = new Map<string, any[]>();
 
@@ -22,7 +27,7 @@ function getBoostSinceDate(months: number): string {
     const currentDate = new Date();
     const sinceDate = new Date(currentDate);
     sinceDate.setMonth(currentDate.getMonth() - months);
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     return `${monthNames[sinceDate.getMonth()]} ${sinceDate.getDate()}, ${sinceDate.getFullYear()}`;
 }
 
@@ -445,9 +450,9 @@ export default definePlugin({
     description: "Customize user badges - add, remove, or hide any Discord badge",
     tags: ["Appearance", "Customisation", "Friends"],
     authors: [
-        { id: 1263457746829705310n, name: '.q1' },
-        { id: 1147940825330876538n, name: 'Jelly' },
-        { id: 1403404140461297816n, name: 'Sami' },
+        { id: 1263457746829705310n, name: ".q1" },
+        { id: 1147940825330876538n, name: "Jelly" },
+        { id: 1403404140461297816n, name: "Sami" },
     ],
 
     async start() {

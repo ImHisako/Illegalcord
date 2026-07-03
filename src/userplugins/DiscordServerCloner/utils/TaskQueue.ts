@@ -1,5 +1,11 @@
-import { sleep, randomDelay } from "./helpers";
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { state } from "../store";
+import { randomDelay,sleep } from "./helpers";
 
 export class TaskQueue {
     private maxConcurrency: number;
@@ -27,7 +33,7 @@ export class TaskQueue {
         while (this.activeWorkers >= this.currentConcurrency || Date.now() < this.pausedUntil) {
             if (!state.isCloning) throw new Error("Cancelled");
             if (exitCondition && exitCondition()) throw new Error("Skipped");
-            
+
             if (Date.now() < this.pausedUntil) {
                 const sleepMs = Math.max(100, this.pausedUntil - Date.now());
                 await sleep(Math.min(sleepMs, 500));
@@ -53,7 +59,7 @@ export class TaskQueue {
 
                     const result = await fn();
                     this.consecutive429 = 0; // reset on success
-                    
+
                     // Success-based Upscaling
                     this.successCount++;
                     if (this.successCount >= TaskQueue.SUCCESSES_TO_UPSCALE) {
@@ -66,7 +72,7 @@ export class TaskQueue {
 
                     // Add a slightly larger base jitter to prevent "bursting"
                     await sleep(randomDelay(200, 500));
-                    
+
                     return result;
                 } catch (e: any) {
                     if (!state.isCloning) throw new Error("Cancelled");

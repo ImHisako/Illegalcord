@@ -1,6 +1,13 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { DataStore } from "@api/index";
-import { PLUGIN_VERSION, GITHUB_RELEASE_URL } from "../constants";
 import { ChannelStore, NavigationRouter } from "@webpack/common";
+
+import { PLUGIN_VERSION } from "../constants";
 
 export function showUpdateModal(version: string, releaseNotes: string) {
     if (typeof document !== "undefined" && !document.getElementById("update-pill-styles")) {
@@ -40,18 +47,18 @@ export function showUpdateModal(version: string, releaseNotes: string) {
 
     pill.innerHTML = `
         <div class="cloner-pill-compact" style="justify-content: center; position: relative; margin-bottom: 12px; width: 100%;">
-            <span class="cloner-pill-title" style="color: ${isMandatory ? '#ed4245' : '#2dc770'}; font-size: 14px; flex: unset;">ServerCloner Update</span>
-            <span class="cloner-pill-percent" style="position: absolute; right: 0; color: white; background: ${isMandatory ? '#ed4245' : '#2dc770'}; padding: 2px 8px; border-radius: 12px; font-size: 11px; min-width: unset;">v${version}</span>
+            <span class="cloner-pill-title" style="color: ${isMandatory ? "#ed4245" : "#2dc770"}; font-size: 14px; flex: unset;">ServerCloner Update</span>
+            <span class="cloner-pill-percent" style="position: absolute; right: 0; color: white; background: ${isMandatory ? "#ed4245" : "#2dc770"}; padding: 2px 8px; border-radius: 12px; font-size: 11px; min-width: unset;">v${version}</span>
         </div>
         <div class="cloner-pill-expanded" style="grid-template-rows: 1fr; opacity: 1; pointer-events: auto;">
             <div class="cloner-pill-expanded-inner">
                 <div class="cloner-pill-body" style="text-align: left; line-height: 1.4; margin-bottom: 4px;">
                     <strong style="color: #fff">Current: v${PLUGIN_VERSION}</strong><br/><br/>
                     <span style="opacity: 0.8">${formattedNotes}</span>
-                    ${isMandatory ? '<br/><br/><strong style="color: #ed4245;">This is a mandatory update.</strong>' : ''}
+                    ${isMandatory ? '<br/><br/><strong style="color: #ed4245;">This is a mandatory update.</strong>' : ""}
                 </div>
                 <div class="cloner-pill-actions" style="margin-top: 8px;">
-                    ${!isMandatory ? `<button class="cloner-btn danger" id="sc-update-dismiss-${version.replace(/\./g, "")}">Not Now</button>` : ''}
+                    ${!isMandatory ? `<button class="cloner-btn danger" id="sc-update-dismiss-${version.replace(/\./g, "")}">Not Now</button>` : ""}
                     <button class="cloner-btn success" id="sc-update-now-${version.replace(/\./g, "")}">View Update</button>
                 </div>
             </div>
@@ -63,7 +70,7 @@ export function showUpdateModal(version: string, releaseNotes: string) {
 
     if (!isMandatory) {
         pill.querySelector("#sc-update-dismiss-" + version.replace(/\./g, ""))?.addEventListener("click", () => {
-            DataStore.set('ServerCloner-dismissed-version', version);
+            DataStore.set("ServerCloner-dismissed-version", version);
             pill.style.animation = "none";
             pill.classList.add("hiding");
             setTimeout(() => pillRow.remove(), 500);
@@ -79,7 +86,7 @@ export function showUpdateModal(version: string, releaseNotes: string) {
             const { openInviteModal } = require("@utils/discord");
             openInviteModal("9ra6MwHTHy");
         }
-        DataStore.set('ServerCloner-dismissed-version', version);
+        DataStore.set("ServerCloner-dismissed-version", version);
         pill.style.animation = "none";
         pill.classList.add("hiding");
         setTimeout(() => pillRow.remove(), 500);

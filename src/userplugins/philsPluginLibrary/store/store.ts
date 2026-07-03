@@ -50,7 +50,6 @@ function createObjectProxy<T extends object>(obj1: T, onUpdate: (updatedObject: 
     return new Proxy(obj1, handler);
 }
 
-
 const startupStates = {};
 const settingStorage = new Map();
 export function createPluginStore<Z extends PluginSettings = {}>(pluginName: string, storeName: string, f: PluginInitializer<Z>): PluginStore<Z> {

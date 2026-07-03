@@ -1,7 +1,14 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { React } from "@webpack/common";
+
+import { PLUGIN_VERSION,UPDATE_CHECK_URL } from "../constants";
 import { compareVersions } from "../utils/helpers";
 import { showUpdateModal } from "./UpdateModal";
-import { UPDATE_CHECK_URL, PLUGIN_VERSION } from "../constants";
 
 export const VersionDisplay = () => {
     const [updateStatus, setUpdateStatus] = React.useState<string | null>(null);
@@ -14,7 +21,7 @@ export const VersionDisplay = () => {
 
             const response = await fetch(UPDATE_CHECK_URL, {
                 signal: controller.signal,
-                headers: { 'Accept': 'application/vnd.github.v3+json' }
+                headers: { "Accept": "application/vnd.github.v3+json" }
             });
 
             clearTimeout(timeoutId);
@@ -26,7 +33,7 @@ export const VersionDisplay = () => {
 
             const data = await response.json();
             let latestVersion = data.tag_name || data.name || "";
-            latestVersion = latestVersion.replace(/^v/i, '').trim();
+            latestVersion = latestVersion.replace(/^v/i, "").trim();
 
             if (!latestVersion) {
                 setUpdateStatus("No releases found");

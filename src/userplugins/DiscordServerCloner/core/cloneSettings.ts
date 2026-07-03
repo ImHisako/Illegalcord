@@ -1,13 +1,18 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { RestAPI } from "@webpack/common";
-import { updateWithTime } from "../utils/notifications";
+
 import { handleCloneError } from "../utils/errorHandler";
-import { sleep } from "../utils/helpers";
-import { throwIfCancelled } from "../store";
+import { updateWithTime } from "../utils/notifications";
 import { CloneContext } from "./types";
 
 export async function cloneSettings(ctx: CloneContext) {
     const { fullGuildData, newGuildId, channelIdMap, taskQueue, settingsProgressEnd, estimateChannels } = ctx;
-    
+
     try {
         const settingsPayload: any = {};
 
@@ -59,15 +64,15 @@ export async function cloneSettings(ctx: CloneContext) {
         const positionUpdates: any[] = [];
         const categories = estimateChannels.filter((c: any) => c.type === 4);
         const otherChannels = estimateChannels.filter((c: any) => c.type !== 4);
-        
+
         for (const cat of categories) {
             if (channelIdMap[cat.id]) {
-                positionUpdates.push({ id: channelIdMap[cat.id], position: typeof cat.position === 'number' ? cat.position : 0 });
+                positionUpdates.push({ id: channelIdMap[cat.id], position: typeof cat.position === "number" ? cat.position : 0 });
             }
         }
         for (const ch of otherChannels) {
             if (channelIdMap[ch.id]) {
-                positionUpdates.push({ id: channelIdMap[ch.id], position: typeof ch.position === 'number' ? ch.position : 0 });
+                positionUpdates.push({ id: channelIdMap[ch.id], position: typeof ch.position === "number" ? ch.position : 0 });
             }
         }
 

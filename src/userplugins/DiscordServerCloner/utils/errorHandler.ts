@@ -1,5 +1,11 @@
-import { notify } from "./notifications";
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { state } from "../store";
+import { notify } from "./notifications";
 
 const DISCORD_ERROR_MAP: Record<number, string> = {
     10003: "Channel not found — it may have been deleted",

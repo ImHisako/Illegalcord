@@ -1,10 +1,8 @@
 /*
-Made with ❤️ by neoarz
-I am not responsible for any damage caused by this plugin; use at your own risk
-Vencord does not endorse/support this plugin (Works with Equicord as well)
-dm @neoarz if u need help or have any questions
-https://github.com/neoarz/NitroSniper
-*/
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
 
 import { showNotification } from "@api/Notifications";
 import { Logger } from "@utils/Logger";
@@ -55,9 +53,10 @@ function extractGiftCode(content: string) {
 }
 
 function shouldSkipCode(code: string) {
-    const repeated = seenCodes.has(code);
+    if (!settings.store.skipRepeatedCodes) return false;
+    if (seenCodes.has(code)) return true;
     seenCodes.add(code);
-    return settings.store.skipRepeatedCodes && repeated;
+    return false;
 }
 
 function createClaimRequest(message: Message): ClaimRequest | null {
@@ -124,6 +123,12 @@ function processQueue() {
     const request = claimQueue.shift();
     if (!request) return;
 
+    if (!GiftActions?.redeemGiftCode) {
+        logger.error("GiftActions module not found. Cannot redeem gift codes.");
+        claiming = false;
+        return;
+    }
+
     claiming = true;
     notifyClaimAttempt(request);
     GiftActions.redeemGiftCode({
@@ -145,6 +150,10 @@ export default definePlugin({
     settings,
 
     start() {
+        resetState();
+    },
+
+    stop() {
         resetState();
     },
 

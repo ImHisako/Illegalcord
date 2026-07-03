@@ -16,8 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import * as types from "../../philsPluginLibrary/types";
 import { findByPropsLazy } from "@webpack";
+
+import * as types from "../../philsPluginLibrary/types";
 
 export const panelClasses: types.PanelClasses = findByPropsLazy("button", "buttonContents", "buttonColor");
 

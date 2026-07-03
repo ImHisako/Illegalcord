@@ -1,5 +1,11 @@
-import { sleep, randomDelay } from "./helpers";
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { state } from "../store";
+import { randomDelay,sleep } from "./helpers";
 
 export class RateLimiter {
     private lastRequest = 0;

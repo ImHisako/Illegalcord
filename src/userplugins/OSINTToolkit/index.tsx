@@ -10,7 +10,6 @@ import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Margins } from "@components/margins";
 import { Notice } from "@components/Notice";
-import { EquicordDevs } from "@utils/constants";
 import { copyWithToast } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import { parseUrl } from "@utils/misc";
@@ -53,6 +52,7 @@ interface MessageContextProps {
 const REQUEST_TIMEOUT_MS = 12_000;
 const logger = new Logger("OSINTToolkit");
 const activeRequests = new Set<AbortController>();
+let pluginActive = true;
 
 const OSINT_TOOLS = [
     { id: "see-know", name: "See-Know", url: "https://see-know.eu/", description: "Searches public web signals." },
@@ -486,6 +486,11 @@ export default definePlugin({
         message: messageContextMenuPatch
     },
 
+    start() {
+        pluginActive = true;
+        activeRequests.clear();
+    },
+
     commands: [
         {
             name: "domain",
@@ -512,6 +517,7 @@ export default definePlugin({
 
                 try {
                     const info = await getDomainInfo(domain);
+                    if (!pluginActive) return;
 
                     if (!info) {
                         sendBotMessage(ctx.channel.id, { content: `Could not retrieve public RDAP information for **${domain}**.` });
@@ -549,6 +555,7 @@ export default definePlugin({
 
                 try {
                     const info = await getIPInfo(ip);
+                    if (!pluginActive) return;
 
                     if (!info) {
                         sendBotMessage(ctx.channel.id, { content: `Could not retrieve public IP information for **${ip}**.` });
@@ -569,6 +576,7 @@ export default definePlugin({
             execute: async (_args: CommandArgument[], ctx: CommandContext) => {
                 try {
                     const info = await getIPInfo();
+                    if (!pluginActive) return;
 
                     if (!info) {
                         sendBotMessage(ctx.channel.id, { content: "Could not retrieve your public IP information." });
@@ -609,6 +617,7 @@ export default definePlugin({
     ],
 
     stop() {
+        pluginActive = false;
         abortActiveRequests();
     }
 });

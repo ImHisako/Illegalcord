@@ -1,15 +1,22 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { RestAPI } from "@webpack/common";
+
+import { state } from "../store";
+import { handleCloneError } from "../utils/errorHandler";
 import { replaceEmojis } from "../utils/helpers";
 import { updateWithTime } from "../utils/notifications";
-import { handleCloneError } from "../utils/errorHandler";
-import { state, throwIfCancelled } from "../store";
 import { CloneContext } from "./types";
 
 export async function cloneOnboarding(ctx: CloneContext) {
     const { sourceGuild, newGuildId, channelIdMap, roleIdMap, taskQueue, onboardingProgressStart } = ctx;
 
     try {
-        updateWithTime(`Cloning onboarding settings...`, onboardingProgressStart);
+        updateWithTime("Cloning onboarding settings...", onboardingProgressStart);
 
         const onboardingResp = await RestAPI.get({ url: `/guilds/${sourceGuild.id}/onboarding` });
         const onboarding = (onboardingResp as any).body;
