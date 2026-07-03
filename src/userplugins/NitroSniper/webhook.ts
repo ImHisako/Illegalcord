@@ -63,6 +63,16 @@ function escapeMarkdown(value: string) {
     return value.replace(/([\\`*_{}[\\]()#+.!|>~-])/g, "\\$1");
 }
 
+function buildGiftTypeField(giftType: string | null): WebhookField | null {
+    if (!giftType) return null;
+
+    return {
+        name: "Gift Type:",
+        value: escapeMarkdown(giftType),
+        inline: false
+    };
+}
+
 function buildAuthorField(request: ClaimRequest): WebhookField | null {
     const label = request.authorName ?? request.authorUsername ?? request.authorId;
     if (!label) return null;
@@ -86,8 +96,9 @@ function buildMessageField(request: ClaimRequest): WebhookField | null {
     };
 }
 
-function buildClaimFields(request: ClaimRequest) {
+function buildClaimFields(request: ClaimRequest, giftType: string | null) {
     return [
+        buildGiftTypeField(giftType),
         buildAuthorField(request),
         buildMessageField(request)
     ].filter((field): field is WebhookField => field != null);
@@ -119,13 +130,13 @@ function buildEmbedAuthor(request: ClaimRequest) {
     };
 }
 
-function buildClaimEmbed(result: WebhookResult, request: ClaimRequest): WebhookEmbed {
+function buildClaimEmbed(result: WebhookResult, request: ClaimRequest, giftType: string | null): WebhookEmbed {
     const presentation = getResultPresentation(result);
 
     return {
         title: presentation.title,
         color: presentation.color,
-        fields: buildClaimFields(request),
+        fields: buildClaimFields(request, giftType),
         timestamp: new Date().toISOString(),
         author: buildEmbedAuthor(request),
         footer: {
@@ -148,9 +159,9 @@ function buildTestWebhookPayload(): WebhookPayload {
     ]);
 }
 
-function buildClaimWebhookPayload(result: WebhookResult, request: ClaimRequest): WebhookPayload {
+function buildClaimWebhookPayload(result: WebhookResult, request: ClaimRequest, giftType: string | null): WebhookPayload {
     return createPayload([
-        buildClaimEmbed(result, request)
+        buildClaimEmbed(result, request, giftType)
     ]);
 }
 
@@ -187,12 +198,13 @@ async function postWebhook(url: URL, payload: WebhookPayload) {
 export async function sendClaimWebhook(
     webhookUrl: string,
     result: WebhookResult,
-    request: ClaimRequest
+    request: ClaimRequest,
+    giftType: string | null
 ) {
     const url = parseWebhookUrl(webhookUrl);
     if (!url) return;
 
-    await postWebhook(url, buildClaimWebhookPayload(result, request));
+    await postWebhook(url, buildClaimWebhookPayload(result, request, giftType));
 }
 
 export async function sendTestWebhook(webhookUrl: string) {

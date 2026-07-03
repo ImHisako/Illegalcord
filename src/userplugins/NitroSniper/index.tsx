@@ -1,16 +1,18 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
+Made with ❤️ by neoarz
+I am not responsible for any damage caused by this plugin; use at your own risk
+Vencord does not endorse/support this plugin (Works with Equicord as well)
+dm @neoarz if u need help or have any questions
+https://github.com/neoarz/NitroSniper
+*/
 
-import { showNotification } from "@api/Notifications";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { Message } from "@vencord/discord-types";
 import { findByPropsLazy } from "@webpack";
-import { ChannelStore, UserStore } from "@webpack/common";
+import { UserStore } from "@webpack/common";
 
+import { resolveGiftType } from "./giftCode";
 import { settings } from "./settings";
 import type { ClaimRequest, WebhookResult } from "./types";
 import { sendClaimWebhook } from "./webhook";
@@ -23,12 +25,10 @@ const GiftActions = findByPropsLazy("redeemGiftCode");
 let startTime = 0;
 let claiming = false;
 const claimQueue: ClaimRequest[] = [];
-const seenCodes = new Set<string>();
 
 function resetState() {
     startTime = Date.now();
     claimQueue.length = 0;
-    seenCodes.clear();
     claiming = false;
 }
 
@@ -52,13 +52,6 @@ function extractGiftCode(content: string) {
     return content.match(GIFT_LINK_REGEX)?.[1] ?? null;
 }
 
-function shouldSkipCode(code: string) {
-    if (!settings.store.skipRepeatedCodes) return false;
-    if (seenCodes.has(code)) return true;
-    seenCodes.add(code);
-    return false;
-}
-
 function createClaimRequest(message: Message): ClaimRequest | null {
     const code = message.content ? extractGiftCode(message.content) : null;
     if (!code) return null;
@@ -75,28 +68,19 @@ function createClaimRequest(message: Message): ClaimRequest | null {
             ? `https://cdn.discordapp.com/avatars/${authorId}/${authorAvatar}.png?size=128`
             : undefined,
         channelId: message.channel_id,
-        guildId: ChannelStore.getChannel(message.channel_id)?.guild_id,
+        guildId: message.guild_id,
         messageId: message.id
     };
 }
 
-function notifyClaim(result: WebhookResult, request: ClaimRequest) {
+function notifyClaim(result: WebhookResult, request: ClaimRequest, giftType: string | null) {
     void sendClaimWebhook(
         settings.store.webhookUrl,
         result,
-        request
+        request,
+        giftType
     ).catch(webhookError => {
         logger.error("Failed to send NitroSniper webhook notification", webhookError);
-    });
-}
-
-function notifyClaimAttempt(request: ClaimRequest) {
-    const sender = request.authorName ?? request.authorUsername;
-    showNotification({
-        title: "Nitro redemption attempt",
-        body: sender
-            ? `Trying to redeem a Nitro gift code sent by ${sender}.`
-            : "Trying to redeem a Nitro gift code."
     });
 }
 
@@ -105,15 +89,15 @@ function continueQueue() {
     processQueue();
 }
 
-function handleClaimSuccess(request: ClaimRequest) {
+function handleClaimSuccess(request: ClaimRequest, giftType: Promise<string | null>) {
     logger.log(`Successfully redeemed code: ${request.code}`);
-    notifyClaim("claimed", request);
+    void giftType.then(type => notifyClaim("claimed", request, type));
     continueQueue();
 }
 
-function handleClaimFailure(request: ClaimRequest, error: Error) {
+function handleClaimFailure(request: ClaimRequest, error: Error, giftType: Promise<string | null>) {
     logger.error(`Failed to redeem code: ${request.code}`, error);
-    notifyClaim("failed", request);
+    void giftType.then(type => notifyClaim("failed", request, type));
     continueQueue();
 }
 
@@ -123,18 +107,15 @@ function processQueue() {
     const request = claimQueue.shift();
     if (!request) return;
 
-    if (!GiftActions?.redeemGiftCode) {
-        logger.error("GiftActions module not found. Cannot redeem gift codes.");
-        claiming = false;
-        return;
-    }
-
     claiming = true;
-    notifyClaimAttempt(request);
+    const giftType = settings.store.webhookUrl.trim()
+        ? resolveGiftType(request.code)
+        : Promise.resolve(null);
+
     GiftActions.redeemGiftCode({
         code: request.code,
-        onRedeemed: () => handleClaimSuccess(request),
-        onError: (error: unknown) => handleClaimFailure(request, toError(error))
+        onRedeemed: () => handleClaimSuccess(request, giftType),
+        onError: (error: unknown) => handleClaimFailure(request, toError(error), giftType)
     });
 }
 
@@ -153,16 +134,12 @@ export default definePlugin({
         resetState();
     },
 
-    stop() {
-        resetState();
-    },
-
     flux: {
         MESSAGE_CREATE({ message }: { message: Message; }) {
             if (!message.content || shouldSkipMessage(message) || isMessageOlderThanStart(message)) return;
 
             const request = createClaimRequest(message);
-            if (!request || shouldSkipCode(request.code)) return;
+            if (!request) return;
 
             claimQueue.push(request);
             processQueue();

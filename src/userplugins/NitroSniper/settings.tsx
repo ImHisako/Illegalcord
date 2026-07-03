@@ -45,12 +45,6 @@ export const settings = definePluginSettings({
         default: false,
         restartNeeded: false
     },
-    skipRepeatedCodes: {
-        type: OptionType.BOOLEAN,
-        description: "Do not redeem Nitro gift codes already seen since the plugin started.",
-        default: true,
-        restartNeeded: false
-    },
     webhookUrl: {
         type: OptionType.STRING,
         description: "Discord webhook URL to notify after each redeem attempt. Leave empty to disable.",

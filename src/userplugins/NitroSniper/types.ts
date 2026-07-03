@@ -50,3 +50,14 @@ export interface NativeWebhookResponse {
     status: number;
     data: string;
 }
+
+export interface GiftCodeResolution {
+    store_listing?: {
+        sku?: {
+            name?: string;
+        };
+    };
+    subscription_plan?: {
+        name?: string;
+    };
+}
