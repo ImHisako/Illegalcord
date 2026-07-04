@@ -12,6 +12,8 @@ Questo client include anche un plugin per configurare l’audio stereo su Discor
 
 Telegram x News: https://t.me/Illegalcord
 
+Sito Illegalcord : https://illegalcord.mintlify.site/
+
 ### Plugin Inclusi
 
 I plugin inclusi possono essere trovati [qui](https://equicord.org/plugins).
