@@ -12,6 +12,8 @@ This client also has a plugin for setting up stereo audio on Discord and offers 
 
 Telegram x News: https://t.me/Illegalcord
 
+Illegalcord Website : https://illegalcord.mintlify.site/
+
 ### Included Plugins
 
 Our included plugins can be found [here](https://equicord.org/plugins).
