@@ -152,7 +152,8 @@ Vencord is not connected to Equicord & Illegalcord and as such.
 > [!WARNING]
 > **Illegalcord is not an illegal client.** The word **"Illegal"** is only part of the project's name and does not mean the software is illegal in itself.  
 > The name refers to the idea of a Discord client without the limitations and rules typically imposed by other modded clients, similar to the customization philosophy of Equicord and Vencord.  
-> However, using modified clients can still violate Discord's Terms of Service, so they should be used with caution.
+> However, using modified clients can still violate Discord's Terms of Service, so they should be used with caution.  
+> If any feature of this client is used for illegal purposes, the owner and contributors of the project do not accept any responsibility for such misuse.
 
 <details>
 <summary>Using Illegalcord violates Discord's terms of service</summary>
