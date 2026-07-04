@@ -149,6 +149,11 @@ Discord is trademark of Discord Inc., and solely mentioned for the sake of descr
 Mentioning it does not imply any affiliation with or endorsement by Discord Inc.
 Vencord is not connected to Equicord & Illegalcord and as such.
 
+> [!WARNING]
+> **Illegalcord is not an illegal client.** The word **"Illegal"** is only part of the project's name and does not mean the software is illegal in itself.  
+> The name refers to the idea of a Discord client without the limitations and rules typically imposed by other modded clients, similar to the customization philosophy of Equicord and Vencord.  
+> However, using modified clients can still violate Discord's Terms of Service, so they should be used with caution.
+
 <details>
 <summary>Using Illegalcord violates Discord's terms of service</summary>
 
