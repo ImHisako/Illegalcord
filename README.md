@@ -29,7 +29,6 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **FloeP2PService** | Based on Floe.one service the best P2P file sharing service.
 - **WebCord Hardened**
 - **StereoInstaller** More Methods!
-- **Nitro Sniper**: | (https://github.com/neoarz/NitroSniper/tree/main)
 - **FakeMuteAndDeafen**
 - **BetterMic**
 - **BetterScreenshare**
@@ -62,10 +61,12 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **OsintToolKit**
 - **LarpCord**
 - **Hisako's Optimizations**
-- **SilentDelete**
 - **ScreenshareAlert**
 - **CrashHandlerEnhanched**
-- **BoosterCount** (https://github.com/Reathe/BoosterCount/tree/main)
+- **SilentDelete**
+- **SilentEdit** | ( https://github.com/aurickk/SilentEdit-Vencord ) 
+- **BoosterCount** | (https://github.com/Reathe/BoosterCount/tree/main)
+- **Nitro Sniper**: | (https://github.com/neoarz/NitroSniper/tree/main)
 - **BadgeSelector** | (https://github.com/002-sans/VencordPlugins/tree/b8c7c98a50c0700f7389b0484e5659fe5ec0f99e/BadgesSelector)
 - **CustomStream** | (https://github.com/MrTopQ/customStream-Vencord)
 - **TypingFriends** | (https://github.com/debxylen/Vencord/tree/main/src/plugins/typingFriends)
