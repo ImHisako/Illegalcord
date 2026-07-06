@@ -1,11 +1,4 @@
-/*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 import { Guild } from "@vencord/discord-types";
-
 import { CloneOptions } from "../types";
 import { TaskQueue } from "../utils/TaskQueue";
 
@@ -25,4 +18,8 @@ export interface CloneContext {
     channelsProgressEnd: number;
     settingsProgressEnd: number;
     onboardingProgressStart: number;
+    stickersProgressStart: number;
+    stickersProgressEnd: number;
+    soundboardProgressStart: number;
+    soundboardProgressEnd: number;
 }

@@ -1,94 +1,91 @@
-/*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 import { DataStore } from "@api/index";
-import { ChannelStore, NavigationRouter } from "@webpack/common";
-
-import { PLUGIN_VERSION } from "../constants";
+import { PLUGIN_VERSION, UPDATES_CHANNEL_ID, SUPPORT_INVITE_CODE } from "../constants";
+import { ChannelStore, NavigationRouter, InviteActions } from "@webpack/common";
+import { openInviteModal } from "@utils/discord";
+import { getPillContainer } from "../utils/notifications";
+import { escapeHtml } from "../utils/helpers";
 
 export function showUpdateModal(version: string, releaseNotes: string) {
-    if (typeof document !== "undefined" && !document.getElementById("update-pill-styles")) {
-        const style = document.createElement("style");
-        style.id = "update-pill-styles";
-        style.textContent = `
-            @keyframes updatePillEntry {
-                0% { opacity: 0; transform: translateY(-20px); scale: 0.95; }
-                100% { opacity: 1; transform: translateY(0); scale: 1; }
-            }
-        `;
-        document.head.appendChild(style);
-    }
-    let container = document.getElementById("vc-pill-container");
-    if (!container) {
-        container = document.createElement("div");
-        container.id = "vc-pill-container";
-        container.className = "vc-pill-container";
-        document.body.appendChild(container);
-    }
-
-    const pillRow = document.createElement("div");
-    pillRow.className = "cloner-pill-row";
-
-    const pill = document.createElement("div");
-    pill.className = "cloner-pill";
-    pill.style.minWidth = "320px";
-    pill.style.animation = "updatePillEntry 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards";
+    const container = getPillContainer();
 
     const isMandatory = releaseNotes.includes("[MANDATORY]");
+    const saferId     = version.replace(/\./g, "");
 
-    const formattedNotes = releaseNotes
-        .replace(/\[MANDATORY\]/gi, "")
-        .replace(/#{1,6}\s/g, "")
-        .replace(/\*\*(.*?)\*\*/g, "$1")
-        .substring(0, 150) + "...";
+    const formattedNotes = escapeHtml(
+        releaseNotes
+            .replace(/\[MANDATORY\]/gi, "")
+            .replace(/#{1,6}\s/g, "")
+            .replace(/\*\*(.*?)\*\*/g, "$1")
+            .substring(0, 150) + "…"
+    );
+
+    const accentColor = isMandatory ? "#ed4245" : "#2dc770";
+
+    const pill = document.createElement("div");
+    pill.className = "cloner-pill always-expanded";
+
+    pill.style.cssText = "min-width:320px; animation:pillEntry 0.6s cubic-bezier(0.25,1,0.5,1) both;";
 
     pill.innerHTML = `
-        <div class="cloner-pill-compact" style="justify-content: center; position: relative; margin-bottom: 12px; width: 100%;">
-            <span class="cloner-pill-title" style="color: ${isMandatory ? "#ed4245" : "#2dc770"}; font-size: 14px; flex: unset;">ServerCloner Update</span>
-            <span class="cloner-pill-percent" style="position: absolute; right: 0; color: white; background: ${isMandatory ? "#ed4245" : "#2dc770"}; padding: 2px 8px; border-radius: 12px; font-size: 11px; min-width: unset;">v${version}</span>
+        <div class="cloner-pill-compact" style="justify-content:center; position:relative; margin-bottom:12px; width:100%;">
+            <span class="cloner-pill-title" style="color:${accentColor}; flex:unset;">ServerCloner Update</span>
+            <span class="cloner-pill-percent" style="
+                position:absolute; right:0;
+                color:#fff;
+                background:${accentColor};
+                padding:2px 8px; border-radius:12px;
+                font-size:11px;
+            ">v${escapeHtml(version)}</span>
         </div>
-        <div class="cloner-pill-expanded" style="grid-template-rows: 1fr; opacity: 1; pointer-events: auto;">
+        <div class="cloner-pill-expanded" style="grid-template-rows:1fr; opacity:1; pointer-events:auto;">
             <div class="cloner-pill-expanded-inner">
-                <div class="cloner-pill-body" style="text-align: left; line-height: 1.4; margin-bottom: 4px;">
-                    <strong style="color: #fff">Current: v${PLUGIN_VERSION}</strong><br/><br/>
-                    <span style="opacity: 0.8">${formattedNotes}</span>
-                    ${isMandatory ? '<br/><br/><strong style="color: #ed4245;">This is a mandatory update.</strong>' : ""}
+                <div class="cloner-pill-body" style="text-align:left; line-height:1.5;">
+                    <strong style="color:#fff;">Current: v${escapeHtml(PLUGIN_VERSION)}</strong><br/><br/>
+                    <span style="opacity:0.8;">${formattedNotes}</span>
+                    ${isMandatory ? '<br/><br/><strong style="color:#ed4245;">This is a mandatory update.</strong>' : ""}
                 </div>
-                <div class="cloner-pill-actions" style="margin-top: 8px;">
-                    ${!isMandatory ? `<button class="cloner-btn danger" id="sc-update-dismiss-${version.replace(/\./g, "")}">Not Now</button>` : ""}
-                    <button class="cloner-btn success" id="sc-update-now-${version.replace(/\./g, "")}">View Update</button>
+                <div class="cloner-pill-actions">
+                    ${!isMandatory ? `<button class="cloner-btn danger" id="sc-dismiss-${saferId}">Not Now</button>` : ""}
+                    <button class="cloner-btn success" id="sc-update-${saferId}">View Update</button>
                 </div>
             </div>
         </div>
     `;
 
-    pillRow.appendChild(pill);
-    container.insertBefore(pillRow, container.firstChild);
+    container.insertBefore(pill, container.firstChild);
 
-    if (!isMandatory) {
-        pill.querySelector("#sc-update-dismiss-" + version.replace(/\./g, ""))?.addEventListener("click", () => {
-            DataStore.set("ServerCloner-dismissed-version", version);
-            pill.style.animation = "none";
-            pill.classList.add("hiding");
-            setTimeout(() => pillRow.remove(), 500);
-        });
+    function dismiss() {
+        DataStore.set("ServerCloner-dismissed-version", version);
+        pill.classList.add("hiding");
+        setTimeout(() => pill.remove(), 700);
     }
 
-    pill.querySelector("#sc-update-now-" + version.replace(/\./g, ""))?.addEventListener("click", () => {
-        const channelId = "1475959035298840576";
-        const channel = ChannelStore.getChannel(channelId);
-        if (channel && channel.guild_id) {
-            NavigationRouter.transitionTo(`/channels/${channel.guild_id}/${channelId}`);
+    if (!isMandatory) {
+        document.getElementById(`sc-dismiss-${saferId}`)?.addEventListener("click", dismiss);
+    }
+
+    document.getElementById(`sc-update-${saferId}`)?.addEventListener("click", async () => {
+        dismiss();
+
+        const channel = ChannelStore.getChannel(UPDATES_CHANNEL_ID);
+        if (channel?.guild_id) {
+            NavigationRouter.transitionTo(`/channels/${channel.guild_id}/${UPDATES_CHANNEL_ID}`);
         } else {
-            const { openInviteModal } = require("@utils/discord");
-            openInviteModal("9ra6MwHTHy");
+            try {
+
+                const { invite } = await InviteActions.resolveInvite(SUPPORT_INVITE_CODE, "Desktop Modal");
+                if (invite?.guild?.id) {
+
+
+                    NavigationRouter.transitionTo(`/channels/${invite.guild.id}/${UPDATES_CHANNEL_ID}`);
+                } else {
+
+                    openInviteModal(SUPPORT_INVITE_CODE);
+                }
+            } catch (e) {
+                console.error("[ServerCloner] Failed to resolve invite for preview mode:", e);
+                openInviteModal(SUPPORT_INVITE_CODE);
+            }
         }
-        DataStore.set("ServerCloner-dismissed-version", version);
-        pill.style.animation = "none";
-        pill.classList.add("hiding");
-        setTimeout(() => pillRow.remove(), 500);
     });
 }

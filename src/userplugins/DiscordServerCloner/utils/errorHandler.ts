@@ -1,11 +1,5 @@
-/*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
-import { state } from "../store";
 import { notify } from "./notifications";
+import { state } from "../store";
 
 const DISCORD_ERROR_MAP: Record<number, string> = {
     10003: "Channel not found — it may have been deleted",
@@ -95,10 +89,13 @@ export function translateError(error: any): string {
 }
 
 export function handleCloneError(context: string, error: any, itemName?: string): void {
-    if (!state.isCloning && state.abortController?.signal.aborted) return;
+    if (!state.isCloning || state.abortController?.signal.aborted) return;
 
     const translated = translateError(error);
     if (!translated) return;
+
+    const errorMsg = itemName ? `[${context}] ${itemName}: ${translated}` : `[${context}]: ${translated}`;
+    state.cloneErrors.push(errorMsg);
 
     if (isFatalError(error)) {
         state.isCloning = false;

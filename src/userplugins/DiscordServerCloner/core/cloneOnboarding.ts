@@ -1,22 +1,15 @@
-/*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 import { RestAPI } from "@webpack/common";
-
-import { state } from "../store";
-import { handleCloneError } from "../utils/errorHandler";
 import { replaceEmojis } from "../utils/helpers";
 import { updateWithTime } from "../utils/notifications";
+import { throwIfCancelled, state } from "../store";
+import { handleCloneError } from "../utils/errorHandler";
 import { CloneContext } from "./types";
 
 export async function cloneOnboarding(ctx: CloneContext) {
     const { sourceGuild, newGuildId, channelIdMap, roleIdMap, taskQueue, onboardingProgressStart } = ctx;
 
     try {
-        updateWithTime("Cloning onboarding settings...", onboardingProgressStart);
+        updateWithTime(`Cloning onboarding settings...`, onboardingProgressStart);
 
         const onboardingResp = await RestAPI.get({ url: `/guilds/${sourceGuild.id}/onboarding` });
         const onboarding = (onboardingResp as any).body;
@@ -24,6 +17,8 @@ export async function cloneOnboarding(ctx: CloneContext) {
         if (onboarding) {
             let sfI = 0;
             const genId = (existingId?: string) => existingId || ((BigInt(Date.now()) - 1420070400000n) << 22n | BigInt(sfI++)).toString();
+
+            const filteredOptions: string[] = [];
 
             const mappedPrompts = (onboarding.prompts || [])
                 .map((prompt: any) => ({
@@ -44,31 +39,39 @@ export async function cloneOnboarding(ctx: CloneContext) {
                                 channel_ids: (opt.channel_ids || [])
                                     .map((id: string) => channelIdMap[id])
                                     .filter(Boolean)
-                            };
-                            if (opt.description) mappedOpt.description = replaceEmojis(opt.description);
-                            const origEmojiId = opt.emoji_id || opt.emoji?.id || null;
-                            const origEmojiName = opt.emoji_name || opt.emoji?.name || null;
-                            const origEmojiAnimated = opt.emoji_animated || opt.emoji?.animated || false;
+                             };
+                             if (opt.description) mappedOpt.description = replaceEmojis(opt.description);
+                             const origEmojiId = opt.emoji_id || opt.emoji?.id || null;
+                             const origEmojiName = opt.emoji_name || opt.emoji?.name || null;
+                             const origEmojiAnimated = opt.emoji_animated || opt.emoji?.animated || false;
 
-                            if (origEmojiId && state.emojiIdMap[origEmojiId]) {
-                                mappedOpt.emoji_id = state.emojiIdMap[origEmojiId];
-                                mappedOpt.emoji_name = origEmojiName;
-                                mappedOpt.emoji_animated = origEmojiAnimated;
-                            } else if (origEmojiId) {
-                                mappedOpt.emoji_id = null;
-                                mappedOpt.emoji_name = null;
-                                mappedOpt.emoji_animated = false;
-                            } else {
-                                mappedOpt.emoji_id = null;
-                                mappedOpt.emoji_name = origEmojiName;
-                                mappedOpt.emoji_animated = origEmojiAnimated;
-                            }
+                             if (origEmojiId && state.emojiIdMap[origEmojiId]) {
+                                 mappedOpt.emoji_id = state.emojiIdMap[origEmojiId];
+                                 mappedOpt.emoji_name = origEmojiName;
+                                 mappedOpt.emoji_animated = origEmojiAnimated;
+                             } else if (origEmojiId) {
+                                 mappedOpt.emoji_id = null;
+                                 mappedOpt.emoji_name = null;
+                                 mappedOpt.emoji_animated = false;
+                             } else {
+                                 mappedOpt.emoji_id = null;
+                                 mappedOpt.emoji_name = origEmojiName;
+                                 mappedOpt.emoji_animated = origEmojiAnimated;
+                             }
 
-                            return mappedOpt;
-                        })
-                        .filter((opt: any) => opt.role_ids.length > 0 || opt.channel_ids.length > 0)
+                             return mappedOpt;
+                         })
+                         .filter((opt: any) => {
+                             const keep = opt.role_ids.length > 0 || opt.channel_ids.length > 0;
+                             if (!keep) filteredOptions.push(opt.title);
+                             return keep;
+                         })
                 }))
                 .filter((prompt: any) => prompt.options.length > 0);
+
+            if (filteredOptions.length > 0) {
+                console.log(`[ServerCloner] Filtered out ${filteredOptions.length} onboarding options due to missing roles/channels:`, filteredOptions);
+            }
 
             const mappedDefaultChannels = (onboarding.default_channel_ids || [])
                 .map((id: string) => channelIdMap[id])
@@ -90,14 +93,11 @@ export async function cloneOnboarding(ctx: CloneContext) {
                 try {
                     await doOnboardingPut(onboarding.enabled);
                 } catch (err: any) {
-                    console.error("[ServerCloner] Onboarding update failed - Payload:", { prompts: mappedPrompts, default_channel_ids: mappedDefaultChannels, enabled: onboarding.enabled, mode: onboarding.mode || 0 });
-                    console.error("[ServerCloner] Onboarding update failed - Response:", err.body || err.text);
+                    console.log("[ServerCloner] Onboarding requirements check failed. Attempting auto-fix and fallback...", err.body || err.text);
 
                     let fixedAny = false;
                     if (err.body?.code === 50035 && err.body?.errors?.default_channel_ids) {
                         const errs = err.body.errors.default_channel_ids;
-                        console.error("[ServerCloner] default_channel_ids error structure:", JSON.stringify(errs, null, 2));
-
                         const rootErrors = errs._errors || [];
                         const hasRootPermissionError = rootErrors.some((e: any) =>
                             e.code === "DEFAULT_CHANNEL_REQUIRES_EVERYONE_ACCESS" ||
@@ -144,17 +144,17 @@ export async function cloneOnboarding(ctx: CloneContext) {
                             console.log("[ServerCloner] Retrying onboarding after fixing permissions...");
                             return await doOnboardingPut(onboarding.enabled);
                         } catch (retryErr: any) {
-                            console.error("[ServerCloner] Retry onboarding failed:", retryErr.body || retryErr.text);
+                            console.warn("[ServerCloner] Retry onboarding failed:", retryErr.body || retryErr.text);
                             err = retryErr;
                         }
                     }
 
                     if (onboarding.enabled) {
-                        console.warn("[ServerCloner] Retrying Onboarding with enabled: false", err);
+                        console.log("[ServerCloner] Onboarding requirements still not met. Retrying with enabled: false (prompts will still be cloned).");
                         try {
                             await doOnboardingPut(false);
                         } catch (err2: any) {
-                            console.error("[ServerCloner] Second Onboarding update failed:", err2.body || err2.text);
+                            console.error("[ServerCloner] Onboarding fallback failed:", err2.body || err2.text);
                             throw err2;
                         }
                     } else {
@@ -163,6 +163,7 @@ export async function cloneOnboarding(ctx: CloneContext) {
                 }
             });
         }
+
     } catch (e) {
         handleCloneError("Onboarding", e);
     }

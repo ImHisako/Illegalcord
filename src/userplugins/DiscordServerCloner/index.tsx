@@ -1,25 +1,22 @@
-/*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
+import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
+import { ModalProps, openModal } from "@utils/modal";
+import definePlugin from "@utils/types";
+import { Guild } from "@vencord/discord-types";
+import { Menu, React } from "@webpack/common";
+import { DataStore } from "@api/index";
 
 import "./styles.css";
 
-import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { DataStore } from "@api/index";
-import definePlugin from "@utils/types";
-import type { Guild } from "@vencord/discord-types";
-import { Menu, openModal, React } from "@webpack/common";
-
-import { CloneModal } from "./components/CloneModal";
-import { showUpdateModal } from "./components/UpdateModal";
 import { PLUGIN_VERSION, UPDATE_CHECK_ENABLED, UPDATE_CHECK_URL } from "./constants";
-import { cloneServer } from "./core/clone";
 import { settings } from "./settings";
+import { showUpdateModal } from "./components/UpdateModal";
+import { CloneModal } from "./components/CloneModal";
+import { cloneServer } from "./core/clone";
 import { state } from "./store";
-import { compareVersions } from "./utils/helpers";
 import { cleanupContainer } from "./utils/notifications";
+import { compareVersions } from "./utils/helpers";
+import { registerDevTools, unregisterDevTools } from "./devTools";
+
 
 async function checkForUpdates(): Promise<void> {
     if (!UPDATE_CHECK_ENABLED) return;
@@ -32,7 +29,7 @@ async function checkForUpdates(): Promise<void> {
 
         const response = await fetch(UPDATE_CHECK_URL, {
             signal: controller.signal,
-            headers: { "Accept": "application/vnd.github.v3+json" }
+            headers: { 'Accept': 'application/vnd.github.v3+json' }
         });
 
         clearTimeout(timeoutId);
@@ -41,7 +38,7 @@ async function checkForUpdates(): Promise<void> {
 
         const data = await response.json();
         let latestVersion = data.tag_name || data.name || "";
-        latestVersion = latestVersion.replace(/^v/i, "").trim();
+        latestVersion = latestVersion.replace(/^v/i, '').trim();
 
         if (!latestVersion) return;
 
@@ -58,7 +55,6 @@ async function checkForUpdates(): Promise<void> {
 
 const guildContextMenuPatch: NavContextMenuPatchCallback = (children: any[], props: { guild?: Guild; }) => {
     if (!props?.guild) return;
-    const { guild } = props;
 
     const group = findGroupChildrenByChildId("privacy", children);
     const menuItem = (
@@ -66,11 +62,11 @@ const guildContextMenuPatch: NavContextMenuPatchCallback = (children: any[], pro
             id="clone-server-pro"
             label="Clone Server"
             action={() => {
-                openModal(modalProps => (
+                openModal((modalProps: ModalProps) => (
                     <CloneModal
                         props={modalProps}
-                        guild={guild}
-                        onClone={options => cloneServer(guild, options)}
+                        guild={props.guild!}
+                        onClone={(options) => cloneServer(props.guild!, options)}
                     />
                 ));
             }}
@@ -87,16 +83,22 @@ const guildContextMenuPatch: NavContextMenuPatchCallback = (children: any[], pro
 export default definePlugin({
     name: "ServerCloner",
     description: "Clone servers with channels, roles, permissions and community features",
-    authors: [{ name: "Moret", id: 1449096170646536233n }],
+    authors: [{ name: "Block", id: 1449096170646536233n }],
     tags: ["Utility", "Customisation"],
     settings,
 
     start() {
+        state.settings = settings;
         setTimeout(() => checkForUpdates(), 5000);
+        registerDevTools();
     },
 
+
+
     stop() {
+        unregisterDevTools();
         cleanupContainer();
+
         if (state.abortController) {
             state.abortController.abort();
             state.abortController = null;

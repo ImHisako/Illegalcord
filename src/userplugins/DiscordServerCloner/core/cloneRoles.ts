@@ -1,16 +1,9 @@
-/*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
-import { GuildStore,RestAPI } from "@webpack/common";
-
-import { state } from "../store";
-import { checkGuildExistence } from "../utils/api";
-import { handleCloneError } from "../utils/errorHandler";
-import { arrayBufferToBase64,replaceEmojis } from "../utils/helpers";
+import { RestAPI } from "@webpack/common";
+import { replaceEmojis, arrayBufferToBase64, sleep } from "../utils/helpers";
+import { checkGuildExistence, fetchGuildRoles } from "../utils/api";
 import { updateWithTime } from "../utils/notifications";
+import { throwIfCancelled, state } from "../store";
+import { handleCloneError } from "../utils/errorHandler";
 import { CloneContext } from "./types";
 
 export async function extractAndCloneEmojis(ctx: CloneContext) {
@@ -105,9 +98,7 @@ export async function extractAndCloneEmojis(ctx: CloneContext) {
                     const response = await fetch(emojiUrl);
                     if (response.ok) {
                         const buffer = await response.arrayBuffer();
-                        const base64 = typeof window !== "undefined"
-                            ? btoa(new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), ""))
-                            : Buffer.from(buffer).toString("base64");
+                        const base64 = arrayBufferToBase64(buffer);
                         const imageStr = `data:image/${ext};base64,${base64}`;
 
                         await taskQueue.execute(async () => {
@@ -122,7 +113,7 @@ export async function extractAndCloneEmojis(ctx: CloneContext) {
                             if (createResp?.body?.id) {
                                 state.emojiIdMap[emoji.id] = createResp.body.id;
                             }
-                        }, msg => updateWithTime(msg, 20 + (emojiStep / emojisToClone.length) * 5));
+                        }, (msg) => updateWithTime(msg, 20 + (emojiStep / emojisToClone.length) * 5));
 
                         emojiStep++;
                         updateWithTime(`Cloned emoji ${emoji.name} (${emojiStep}/${emojisToClone.length})...`, 20 + (emojiStep / emojisToClone.length) * 5);
@@ -148,7 +139,7 @@ export async function cloneRoles(ctx: CloneContext): Promise<number> {
         const skipBtn = document.getElementById(state.mainProgressNotificationId)?.querySelector(".cloner-skip-roles-btn") as HTMLElement;
         if (skipBtn) skipBtn.style.display = "";
 
-        // Hijack the skip callback to work inside this function context
+
         const ogSkip = state.skipRolesCallback;
         state.skipRolesCallback = () => {
             skipRoles = true;
@@ -248,7 +239,7 @@ export async function cloneRoles(ctx: CloneContext): Promise<number> {
                     }
                     throw e;
                 }
-            }, msg => updateWithTime(msg, rolesProgressStart + ((roleStep / Math.max(rolesToCreate.length, 1)) * (rolesProgressEnd - rolesProgressStart))), () => skipRoles, 5);
+            }, (msg) => updateWithTime(msg, rolesProgressStart + ((roleStep / Math.max(rolesToCreate.length, 1)) * (rolesProgressEnd - rolesProgressStart))), () => skipRoles, 5);
 
             if (response?.body?.id) {
                 roleIdMap[role.id] = response.body.id;
@@ -260,7 +251,7 @@ export async function cloneRoles(ctx: CloneContext): Promise<number> {
         } catch (e: any) {
             if (e?.rateLimitExhausted) {
                 rolesFailed += (rolesToCreate.length - roleStep);
-                updateWithTime("Rate limited, skipping remaining roles...", rolesProgressEnd);
+                updateWithTime(`Rate limited, skipping remaining roles...`, rolesProgressEnd);
                 skipRoles = true;
                 return;
             }
@@ -271,8 +262,22 @@ export async function cloneRoles(ctx: CloneContext): Promise<number> {
 
     await Promise.all(rolePromises);
 
+
+    const positionUpdates = estimateRoles
+        .filter(r => r.name !== "@everyone" && roleIdMap[r.id])
+        .map(r => ({ id: roleIdMap[r.id], position: r.position }));
+    if (positionUpdates.length > 0) {
+        try {
+            await taskQueue.execute(async () => {
+                await RestAPI.patch({ url: `/guilds/${newGuildId}/roles`, body: positionUpdates });
+            });
+        } catch (e) {
+            console.warn("[ServerCloner] Failed to sync role positions:", e);
+        }
+    }
+
     if (options.resumeMode && rolesToCreate.length === 0) {
-        updateWithTime("All roles already exist, skipping...", rolesProgressEnd);
+        updateWithTime(`All roles already exist, skipping...`, rolesProgressEnd);
     }
 
     if (state.mainProgressNotificationId) {

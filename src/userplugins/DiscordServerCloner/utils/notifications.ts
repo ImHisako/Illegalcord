@@ -1,14 +1,41 @@
-/*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
+import { state } from "../store";
+import { escapeHtml } from "./helpers";
+import { NotificationAction } from "../types";
 import { RestAPI } from "@webpack/common";
 
-import { state } from "../store";
-import { NotificationAction } from "../types";
-import { escapeHtml } from "./helpers";
+
+
+
+export function formatElapsed(ms: number): string {
+    const totalSeconds = Math.floor(ms / 1000);
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    if (mins === 0) return `${secs}s`;
+    return `${mins}m ${secs}s`;
+}
+
+
+function startProgressTimer(notificationId: string) {
+    if (state.timerInterval) clearInterval(state.timerInterval);
+    state.cloneStartTime = Date.now();
+
+    state.timerInterval = setInterval(() => {
+        if (!state.cloneStartTime) return;
+        const elapsed = Date.now() - state.cloneStartTime;
+        const formatted = formatElapsed(elapsed);
+
+        const pill = document.getElementById(notificationId);
+        if (!pill || pill.classList.contains("completed")) {
+            clearInterval(state.timerInterval!);
+            state.timerInterval = null;
+            return;
+        }
+
+        const timerCompact = pill.querySelector(".cloner-pill-timer");
+        if (timerCompact) timerCompact.textContent = formatted;
+    }, 1000);
+}
+
 
 export function cleanupContainer() {
     const container = document.getElementById("vc-pill-container");
@@ -48,8 +75,8 @@ export function notify(
     actions: NotificationAction[] = []
 ): string {
     const container = getPillContainer();
-    const actualDuration = type === "error" ? 8000 : duration;
-    const notificationId = `sub-pill-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const actualDuration = type === "error" ? Math.max(duration, 8000) : duration;
+    const notificationId = `sub-pill-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 
     if (duration !== 0) {
         const existingNotifications = container.querySelectorAll(".cloner-sub-pill:not(.hiding)");
@@ -64,28 +91,29 @@ export function notify(
     notification.className = `cloner-sub-pill ${type}`;
     notification.id = notificationId;
 
-    const icons: Record<string, string> = { success: "✓", error: "✕", info: "⚡" };
+    const icons: Record<string, string> = { success: "✓", error: "✕", info: "i" };
+
     const actionButtons = actions.map((action, index) => {
-        const safeId = `btn-${index}-${action.label.replace(/\\s+/g, "-")}`;
-        return `<button id="${safeId}" class="cloner-btn ${action.type || "default"}" style="padding: 4px 10px; font-size: 11px;">${action.label}</button>`;
+        const safeId = `btn-${notificationId}-${index}`;
+        return `<button id="${safeId}" class="cloner-btn ${action.type || 'default'}" style="padding: 4px 10px; font-size: 11px;">${escapeHtml(action.label)}</button>`;
     }).join("");
 
     notification.innerHTML = `
         <div class="cloner-sub-pill-icon ${type}">${icons[type]}</div>
         <div class="cloner-sub-pill-content">
             <div class="cloner-sub-pill-title">${escapeHtml(title)}</div>
-            ${body ? `<div class="cloner-sub-pill-body">${escapeHtml(body)}</div>` : ""}
-            ${actions.length > 0 ? `<div style="display:flex; gap: 6px; margin-top: 6px;">${actionButtons}</div>` : ""}
+            ${body ? `<div class="cloner-sub-pill-body">${escapeHtml(body)}</div>` : ''}
+            ${actions.length > 0 ? `<div style="display:flex; gap: 6px; margin-top: 6px;">${actionButtons}</div>` : ''}
         </div>
     `;
 
     container.appendChild(notification);
 
     actions.forEach((action, index) => {
-        const safeId = `btn-${index}-${action.label.replace(/\\s+/g, "-")}`;
-        const btn = notification.querySelector(`#${safeId}`);
+        const safeId = `btn-${notificationId}-${index}`;
+        const btn = document.getElementById(safeId);
         if (btn) {
-            btn.addEventListener("click", e => {
+            btn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 action.onClick(notificationId);
             });
@@ -107,17 +135,18 @@ export function createMainProgressNotification(title: string, initialBody: strin
     const notificationId = `main-pill-${Date.now()}`;
 
     const pill = document.createElement("div");
-    pill.className = "cloner-pill";
+    pill.className = `cloner-pill`;
     pill.id = notificationId;
 
     const cancelBtnText = isExistingServer ? "Cancel" : "Cancel & Delete";
     const cancelBtnClass = isExistingServer ? "cloner-btn" : "cloner-btn danger";
-    const skipRolesBtnHtml = showSkipRoles ? "<button class=\"cloner-btn cloner-skip-roles-btn\" style=\"display:none\">Skip Roles</button>" : "";
+    const skipRolesBtnHtml = showSkipRoles ? `<button class="cloner-btn cloner-skip-roles-btn" style="display:none">Skip Roles</button>` : '';
 
     pill.innerHTML = `
         <div class="cloner-pill-compact">
             <div class="cloner-pill-spinner"></div>
             <span class="cloner-pill-title">${escapeHtml(title)}</span>
+            <span class="cloner-pill-timer">0s</span>
             <span class="cloner-pill-percent">0%</span>
         </div>
         <div class="cloner-pill-expanded">
@@ -133,6 +162,7 @@ export function createMainProgressNotification(title: string, initialBody: strin
             </div>
         </div>
     `;
+
 
     container.insertBefore(pill, container.firstChild);
 
@@ -154,7 +184,7 @@ export function createMainProgressNotification(title: string, initialBody: strin
                 state.abortController = null;
             }
 
-            // Mark completed IMMEDIATELY to lock hover
+
             pill.classList.add("completed");
 
             if (!isExistingServer && state.currentCloneGuildId) {
@@ -171,8 +201,13 @@ export function createMainProgressNotification(title: string, initialBody: strin
         });
     }
 
+
+
+    startProgressTimer(notificationId);
+
     return notificationId;
 }
+
 
 export function updateMainProgress(id: string, body: string, percent: number) {
     const safePercent = isNaN(percent) ? 0 : Math.min(100, Math.max(0, Math.round(percent)));
@@ -185,36 +220,57 @@ export function updateMainProgress(id: string, body: string, percent: number) {
     const percentEl = pill.querySelector(".cloner-pill-percent");
     if (percentEl) percentEl.textContent = `${safePercent}%`;
 
+
     const progressBar = pill.querySelector(".cloner-pill-progress-fill") as HTMLElement;
     if (progressBar) {
-        progressBar.style.width = `${safePercent}%`;
+        progressBar.style.transform = `scaleX(${safePercent / 100})`;
     }
 }
+
 
 export function completeMainProgress(id: string, body: string, success: boolean, customPercentText?: string) {
     const pill = document.getElementById(id);
     if (!pill) return;
 
-    // Lock hover expansion
+
+    if (state.timerInterval) {
+        clearInterval(state.timerInterval);
+        state.timerInterval = null;
+    }
+
+
+    const elapsedText = state.cloneStartTime
+        ? ` • ${formatElapsed(Date.now() - state.cloneStartTime)}`
+        : "";
+    state.cloneStartTime = null;
+
+
     pill.classList.add("completed");
 
     const titleEl = pill.querySelector(".cloner-pill-title");
     if (titleEl) titleEl.textContent = body;
 
+
+    const timerCompact = pill.querySelector(".cloner-pill-timer") as HTMLElement;
+    if (timerCompact) timerCompact.style.display = "none";
+
     const percentEl = pill.querySelector(".cloner-pill-percent");
-    if (percentEl) percentEl.textContent = customPercentText || (success ? "Done" : "Error");
+    if (percentEl) percentEl.textContent = customPercentText
+        ? customPercentText
+        : (success ? `Done${elapsedText}` : "Error");
 
     const progressBar = pill.querySelector(".cloner-pill-progress-fill") as HTMLElement;
     if (progressBar) {
-        progressBar.style.width = "100%";
+        progressBar.style.transform = "scaleX(1)";
     }
 
-    pill.classList.add(success ? "success" : "error");
+    pill.classList.add(success ? 'success' : 'error');
 
-    // Single close timer (3s for cancel, 6s for success/error)
+
     const delay = customPercentText === "Cancelled" ? 3000 : 6000;
     setTimeout(() => closePill(id), delay);
 }
+
 
 export function updateProgress(percent: number, message?: string) {
     if (state.mainProgressNotificationId) {

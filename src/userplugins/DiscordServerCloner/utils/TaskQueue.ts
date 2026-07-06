@@ -1,11 +1,5 @@
-/*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
+import { sleep, randomDelay } from "./helpers";
 import { state } from "../store";
-import { randomDelay,sleep } from "./helpers";
 
 export class TaskQueue {
     private maxConcurrency: number;
@@ -14,12 +8,49 @@ export class TaskQueue {
     private pausedUntil = 0;
     private consecutive429 = 0;
     private successCount = 0;
+
+
+
+
+    private requestTimestamps: number[] = [];
+    private static readonly WINDOW_MS = 5000;
+    private static readonly MAX_REQUESTS_PER_WINDOW = 5;
+
     private static readonly MAX_CONSECUTIVE_429 = 15;
-    private static readonly SUCCESSES_TO_UPSCALE = 5;
+    private static readonly SUCCESSES_TO_UPSCALE = 2;
 
     constructor(concurrency = 5) {
         this.maxConcurrency = concurrency;
         this.currentConcurrency = concurrency;
+    }
+
+
+
+
+
+
+
+    private async waitForRateLimitWindow(exitCondition?: () => boolean): Promise<void> {
+        while (true) {
+            if (!state.isCloning) throw new Error("Cancelled");
+            if (exitCondition && exitCondition()) throw new Error("Skipped");
+
+            const now = Date.now();
+
+            this.requestTimestamps = this.requestTimestamps.filter(
+                t => now - t < TaskQueue.WINDOW_MS
+            );
+
+            if (this.requestTimestamps.length < TaskQueue.MAX_REQUESTS_PER_WINDOW) {
+
+                this.requestTimestamps.push(Date.now());
+                return;
+            }
+
+
+            const waitMs = (this.requestTimestamps[0] + TaskQueue.WINDOW_MS) - Date.now() + 50;
+            await sleep(Math.max(waitMs, 50));
+        }
     }
 
     async execute<T>(
@@ -28,8 +59,7 @@ export class TaskQueue {
         exitCondition?: () => boolean,
         retries = 3
     ): Promise<T> {
-        // Wait for an available worker slot or rate limit pause
-        // Use currentConcurrency instead of maxConcurrency for adaptive scaling
+
         while (this.activeWorkers >= this.currentConcurrency || Date.now() < this.pausedUntil) {
             if (!state.isCloning) throw new Error("Cancelled");
             if (exitCondition && exitCondition()) throw new Error("Skipped");
@@ -50,30 +80,34 @@ export class TaskQueue {
                     if (!state.isCloning) throw new Error("Cancelled");
                     if (exitCondition && exitCondition()) throw new Error("Skipped");
 
-                    // Double-check pause state immediately before execution
+
                     if (Date.now() < this.pausedUntil) {
                         const sleepMs = Math.max(100, this.pausedUntil - Date.now());
                         await sleep(sleepMs);
                         if (!state.isCloning) throw new Error("Cancelled");
                     }
 
-                    const result = await fn();
-                    this.consecutive429 = 0; // reset on success
 
-                    // Success-based Upscaling
+
+
+
+                    await this.waitForRateLimitWindow(exitCondition);
+
+
+                    const result = await fn();
+                    this.consecutive429 = 0;
+
+
                     this.successCount++;
                     if (this.successCount >= TaskQueue.SUCCESSES_TO_UPSCALE) {
                         if (this.currentConcurrency < this.maxConcurrency) {
                             this.currentConcurrency++;
                             this.successCount = 0;
-                            console.log(`[TaskQueue] Upscaling concurrency to ${this.currentConcurrency}`);
                         }
                     }
 
-                    // Add a slightly larger base jitter to prevent "bursting"
-                    await sleep(randomDelay(200, 500));
-
                     return result;
+
                 } catch (e: any) {
                     if (!state.isCloning) throw new Error("Cancelled");
                     if (exitCondition && exitCondition()) throw new Error("Skipped");
@@ -83,11 +117,11 @@ export class TaskQueue {
                         this.consecutive429++;
                         this.successCount = 0;
 
-                        // Downscale immediately on 429
+
                         const oldConcurrency = this.currentConcurrency;
                         this.currentConcurrency = Math.max(1, Math.floor(this.currentConcurrency / 2));
                         if (oldConcurrency !== this.currentConcurrency) {
-                            console.warn(`[TaskQueue] Rate limited! Downscaling concurrency from ${oldConcurrency} to ${this.currentConcurrency}`);
+                            console.warn(`[TaskQueue] 429 received — downscaling concurrency ${oldConcurrency} → ${this.currentConcurrency}`);
                         }
 
                         if (this.consecutive429 >= TaskQueue.MAX_CONSECUTIVE_429) {
@@ -96,19 +130,17 @@ export class TaskQueue {
                             throw err;
                         }
 
-                        // Determine pause duration
+
                         const retryAfter = ((e.retry_after || e.body?.retry_after || 1) * 1000) + randomDelay(500, 1500);
                         const newPauseUntil = Date.now() + retryAfter;
 
-                        // Only the first failing worker should update the global pause
                         if (newPauseUntil > this.pausedUntil) {
                             this.pausedUntil = newPauseUntil;
-                            const msg = `Rate limited, slowing down... waiting ${Math.ceil(retryAfter / 1000)}s`;
+                            const msg = `Rate limited — waiting ${Math.ceil(retryAfter / 1000)}s`;
                             if (statusUpdateCb) statusUpdateCb(msg);
-                            console.warn(`[TaskQueue] Global pause initiated for ${retryAfter}ms`);
+                            console.warn(`[TaskQueue] Global pause for ${retryAfter}ms`);
                         }
 
-                        // Wait it out and retry
                         await sleep(retryAfter);
 
                         if (i < retries - 1) continue;
@@ -119,11 +151,10 @@ export class TaskQueue {
                         if (!errorCode && e?.text) {
                             try { errorCode = JSON.parse(e.text)?.code || 0; } catch (_) { }
                         }
-                        if (errorCode === 50101) throw e; // Missing Access / Not Allowed (unrecoverable)
+                        if (errorCode === 50101) throw e;
 
                         if (i < retries - 1) {
                             const backoff = Math.min(2000 + (i * 2000), 10000);
-                            console.warn(`[ServerCloner] 403 Forbidden (code: ${errorCode}), retrying ${i + 1}/${retries}...`);
                             await sleep(backoff);
                             continue;
                         }
@@ -131,7 +162,6 @@ export class TaskQueue {
                     }
 
                     if (e?.status === 400) throw e;
-
                     if (i === retries - 1) throw e;
                     await sleep(1000 + randomDelay(500, 1000));
                 }

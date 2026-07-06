@@ -1,11 +1,4 @@
-/*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
-import { GuildChannelStore, GuildRoleStore, GuildStore,RestAPI } from "@webpack/common";
-
+import { RestAPI, GuildRoleStore, GuildChannelStore, GuildStore } from "@webpack/common";
 import { arrayBufferToBase64 } from "./helpers";
 
 export async function fetchGuildRoles(guildId: string): Promise<any[]> {
@@ -32,7 +25,7 @@ export async function fetchGuildData(guildId: string): Promise<any> {
 
 export function extractChannels(guildId: string, includeHidden = false): any[] {
     try {
-        const channelsData = GuildChannelStore.getChannels(guildId);
+        const channelsData = (GuildChannelStore as any).getChannels(guildId, includeHidden);
         if (!channelsData) return [];
 
         const channels: any[] = [];
@@ -83,4 +76,66 @@ export async function fetchAssetBase64(url: string, fallback: string | null = nu
         console.warn(`[ServerCloner] Failed to fetch asset from ${url}:`, e);
     }
     return fallback;
+}
+
+export function normalizeChannel(ch: any): any {
+    if (!ch) return ch;
+
+    let permissionOverwrites = ch.permission_overwrites;
+    if (!permissionOverwrites && ch.permissionOverwrites) {
+        permissionOverwrites = Object.values(ch.permissionOverwrites).map((ow: any) => ({
+            id: ow.id,
+            type: ow.type,
+            allow: ow.allow?.toString() ?? "0",
+            deny: ow.deny?.toString() ?? "0"
+        }));
+    } else if (Array.isArray(permissionOverwrites)) {
+        permissionOverwrites = permissionOverwrites.map((ow: any) => ({
+            id: ow.id,
+            type: ow.type,
+            allow: ow.allow?.toString() ?? "0",
+            deny: ow.deny?.toString() ?? "0"
+        }));
+    }
+
+    let defaultReactionEmoji = ch.default_reaction_emoji ?? ch.defaultReactionEmoji;
+    if (defaultReactionEmoji) {
+        defaultReactionEmoji = {
+            emoji_id: defaultReactionEmoji.emoji_id ?? defaultReactionEmoji.emojiId ?? null,
+            emoji_name: defaultReactionEmoji.emoji_name ?? defaultReactionEmoji.emojiName ?? null
+        };
+    }
+
+    let availableTags = ch.available_tags ?? ch.availableTags;
+    if (availableTags && Array.isArray(availableTags)) {
+        availableTags = availableTags.map((tag: any) => ({
+            id: tag.id,
+            name: tag.name,
+            emoji_id: tag.emoji_id ?? tag.emojiId ?? null,
+            emoji_name: tag.emoji_name ?? tag.emojiName ?? null,
+            moderated: tag.moderated ?? false
+        }));
+    }
+
+    return {
+        ...ch,
+        id: ch.id,
+        type: ch.type,
+        guild_id: ch.guild_id ?? ch.guildId,
+        name: ch.name,
+        position: ch.position,
+        parent_id: ch.parent_id ?? ch.parentId ?? null,
+        topic: ch.topic ?? null,
+        nsfw: ch.nsfw ?? false,
+        last_message_id: ch.last_message_id ?? ch.lastMessageId ?? null,
+        bitrate: ch.bitrate ?? null,
+        user_limit: ch.user_limit ?? ch.userLimit ?? null,
+        rate_limit_per_user: ch.rate_limit_per_user ?? ch.rateLimitPerUser ?? null,
+        permission_overwrites: permissionOverwrites || [],
+        default_auto_archive_duration: ch.default_auto_archive_duration ?? ch.defaultAutoArchiveDuration ?? null,
+        available_tags: availableTags ?? null,
+        default_reaction_emoji: defaultReactionEmoji ?? null,
+        default_sort_order: ch.default_sort_order ?? ch.defaultSortOrder ?? null,
+        default_forum_layout: ch.default_forum_layout ?? ch.defaultForumLayout ?? null
+    };
 }

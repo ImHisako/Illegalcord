@@ -2,8 +2,8 @@
 
 A powerful Vencord plugin that allows you to clone Discord servers with all their channels, roles, permissions, and community features.
 
-![Version](https://img.shields.io/badge/version-1.0.0-5865F2?style=for-the-badge)
-[![Discord](https://img.shields.io/badge/Discord-Join_Server-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/VyQQKxhuTC)
+![Version](https://img.shields.io/badge/version-3.0.0-5865F2?style=for-the-badge)
+[![Discord](https://img.shields.io/badge/Discord-Join_Server-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/9ra6MwHTHy)
 
 ---
 
@@ -22,6 +22,7 @@ A powerful Vencord plugin that allows you to clone Discord servers with all thei
 ### Included
 - Server name, icon, banner, and splash
 - All roles with colors, icons, and permissions
+- Stickers & Soundboard sounds
 - All channel categories
 - Text channels with topics, slowmode, and NSFW settings
 - Voice channels with bitrate and user limits
@@ -39,7 +40,6 @@ A powerful Vencord plugin that allows you to clone Discord servers with all thei
 - Members and their individual assigned roles
 - Threads
 - Unused Emojis (To save rate limits, emojis not used in the server's configuration are ignored)
-- Stickers & Soundboard sounds
 - Webhooks
 - Integrations / Bots
 - Bans
@@ -54,5 +54,5 @@ A powerful Vencord plugin that allows you to clone Discord servers with all thei
 
 ##  Author
 
-**Moret**
+**Block**
 - GitHub: [@BlockTol](https://github.com/BlockTol)

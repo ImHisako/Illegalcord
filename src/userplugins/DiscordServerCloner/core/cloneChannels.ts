@@ -1,16 +1,9 @@
-/*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 import { RestAPI } from "@webpack/common";
-
-import { state } from "../store";
-import { checkGuildExistence } from "../utils/api";
-import { handleCloneError } from "../utils/errorHandler";
 import { replaceEmojis, sleep } from "../utils/helpers";
+import { checkGuildExistence } from "../utils/api";
 import { updateWithTime } from "../utils/notifications";
+import { throwIfCancelled, state } from "../store";
+import { handleCloneError } from "../utils/errorHandler";
 import { CloneContext } from "./types";
 
 export async function cloneChannels(ctx: CloneContext): Promise<number> {
@@ -43,7 +36,7 @@ export async function cloneChannels(ctx: CloneContext): Promise<number> {
     const actionLabel = options.resumeMode ? "Resuming" : "Cloning";
 
     if (options.resumeMode && totalChannels === 0) {
-        updateWithTime("All channels already exist, skipping...", channelsProgressEnd);
+        updateWithTime(`All channels already exist, skipping...`, channelsProgressEnd);
     } else {
         updateWithTime(`${actionLabel} ${totalChannels} channels...`, channelsProgressStart);
     }
@@ -63,10 +56,11 @@ export async function cloneChannels(ctx: CloneContext): Promise<number> {
             };
 
             if (cat.permission_overwrites) {
+
                 const mappedOverwrites = cat.permission_overwrites
-                    .filter((ow: any) => ow.type === 0 && roleIdMap[ow.id])
+                    .filter((ow: any) => ow.type === 0 && (roleIdMap[ow.id] || ow.id === sourceGuild.id))
                     .map((ow: any) => ({
-                        id: roleIdMap[ow.id],
+                        id: ow.id === sourceGuild.id ? newGuildId : roleIdMap[ow.id],
                         type: 0,
                         allow: ow.allow,
                         deny: ow.deny
@@ -76,7 +70,7 @@ export async function cloneChannels(ctx: CloneContext): Promise<number> {
 
             const response = await taskQueue.execute(async () => {
                 return await RestAPI.post({ url: `/guilds/${newGuildId}/channels`, body: catPayload });
-            }, msg => updateWithTime(msg, (channelsProgressStart + ((catStored / Math.max(categoriesToCreate.length, 1)) * ((channelsProgressEnd - channelsProgressStart) * 0.2)))));
+            }, (msg) => updateWithTime(msg, (channelsProgressStart + ((catStored / Math.max(categoriesToCreate.length, 1)) * ((channelsProgressEnd - channelsProgressStart) * 0.2)))));
 
             if (response?.body?.id) {
                 channelIdMap[cat.id] = response.body.id;
@@ -229,7 +223,10 @@ export async function cloneChannels(ctx: CloneContext): Promise<number> {
             }
 
             if (ch.type === 2 || ch.type === 13) {
-                chPayload.bitrate = Math.min(ch.bitrate || 64000, 96000);
+                const targetGuildForBitrate = GuildStore.getGuild(newGuildId);
+                const targetTier = (targetGuildForBitrate as any)?.premiumTier || 0;
+                const maxBitrate = targetTier >= 3 ? 384000 : targetTier >= 2 ? 256000 : targetTier >= 1 ? 128000 : 96000;
+                chPayload.bitrate = Math.min(ch.bitrate || 64000, maxBitrate);
                 chPayload.user_limit = ch.user_limit || 0;
             }
 
@@ -260,10 +257,11 @@ export async function cloneChannels(ctx: CloneContext): Promise<number> {
             }
 
             if (ch.permission_overwrites) {
+
                 const mappedOverwrites = ch.permission_overwrites
-                    .filter((ow: any) => ow.type === 0 && roleIdMap[ow.id])
+                    .filter((ow: any) => ow.type === 0 && (roleIdMap[ow.id] || ow.id === sourceGuild.id))
                     .map((ow: any) => ({
-                        id: roleIdMap[ow.id],
+                        id: ow.id === sourceGuild.id ? newGuildId : roleIdMap[ow.id],
                         type: 0,
                         allow: ow.allow,
                         deny: ow.deny
@@ -273,7 +271,7 @@ export async function cloneChannels(ctx: CloneContext): Promise<number> {
 
             const response = await taskQueue.execute(async () => {
                 return await RestAPI.post({ url: `/guilds/${newGuildId}/channels`, body: chPayload });
-            }, msg => updateWithTime(msg, channelsProgressStart + ((channelsProgressEnd - channelsProgressStart) * 0.2) + ((chStored / Math.max(remainingChannels.length, 1)) * ((channelsProgressEnd - channelsProgressStart) * 0.8))));
+            }, (msg) => updateWithTime(msg, channelsProgressStart + ((channelsProgressEnd - channelsProgressStart) * 0.2) + ((chStored / Math.max(remainingChannels.length, 1)) * ((channelsProgressEnd - channelsProgressStart) * 0.8))));
 
             if (response?.body?.id) {
                 channelIdMap[ch.id] = response.body.id;
@@ -286,7 +284,7 @@ export async function cloneChannels(ctx: CloneContext): Promise<number> {
         } catch (e: any) {
             if (e?.rateLimitExhausted) {
                 channelsFailed += (remainingChannels.length - chStored);
-                updateWithTime("Rate limited, skipping remaining channels...", channelsProgressEnd);
+                updateWithTime(`Rate limited, skipping remaining channels...`, channelsProgressEnd);
                 skipRemaining = true;
                 return;
             }
