@@ -144,6 +144,12 @@ Note: Firefox extension zip requires Firefox for developers
 - [clrxxo ](https://github.com/clrxxo) for creating [Kamidere](https://github.com/clrxxo/Kamidere)
 - [Nightcord](https://nightcord.ru/) For the ideas and the foundation of some plugins.
 
+## Special Thanks
+
+We are proudly partnered with [Nightcord](https://nightcord.ru/).  
+Their ideas, design choices, and pieces of their code have been directly integrated into the development philosophy of Illegalcord, influencing several plugins and features.  
+This partnership has been more than a name: it has been a concrete contribution to the direction and quality of this client.
+
 ## Disclaimer
 
 Discord is trademark of Discord Inc., and solely mentioned for the sake of descriptivity.
