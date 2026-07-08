@@ -30,7 +30,7 @@ import { ContextMenuApi, Menu, Toasts, UserStore } from "@webpack/common";
 
 import Plugins, { PluginMeta } from "~plugins";
 
-import { EquicordDonorModal, EquicordTranslatorModal, IllegalcordDonorModal, TrashCordDonorModal, VencordDonorModal } from "./modals";
+import { EquicordDonorModal, EquicordTranslatorModal, IllegalcordDonorModal, NightcordBadgeModal, TrashCordDonorModal, VencordDonorModal } from "./modals";
 
 const CONTRIBUTOR_BADGE = "https://cdn.discordapp.com/emojis/1092089799109775453.png?size=64";
 const EQUICORD_CONTRIBUTOR_BADGE = "https://equicord.org/assets/favicon.png";
@@ -85,6 +85,12 @@ const UserPluginContributorBadge: ProfileBadge = {
 let DonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
 let EquicordDonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
 let IllegalcordDonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
+let NightcordBadges = {} as Record<string, Array<{
+    icon: string;
+    placeholder: string;
+    uuid: string;
+    visible: boolean;
+}>>;
 const TrashCordDonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
 
 async function loadBadges(url: string, noCache = false) {
@@ -98,11 +104,13 @@ async function loadAllBadges(noCache = false) {
     const vencordBadges = await loadBadges("https://badges.vencord.dev/badges.json", noCache);
     const equicordBadges = await loadBadges("https://badge.equicord.org/badges.json", noCache);
     const illegalcordBadges = await loadBadges("https://raw.githubusercontent.com/ImHisako/ImHisako/refs/heads/main/Images/badges.json", noCache);
+    const nightcordBadges = await loadBadges("https://api.nightcord.st/badges", noCache);
     // const TrashCordBadges = await loadBadges("https://raw.githubusercontent.com/zFrxncesck1/zFrxncesck1/refs/heads/main/host/files/badges.json", noCache);
 
     DonorBadges = vencordBadges;
     EquicordDonorBadges = equicordBadges;
     IllegalcordDonorBadges = illegalcordBadges;
+    NightcordBadges = nightcordBadges;
     // TrashCordDonorBadges = TrashCordBadges;
 }
 
@@ -292,6 +300,27 @@ export default definePlugin({
             },
             onClick(_event: React.MouseEvent, badge: ProfileBadge & BadgeUserArgs) {
                 return IllegalcordDonorModal(badge);
+            },
+        } satisfies ProfileBadge));
+    },
+
+    getNightcordBadges(userId: string) {
+        return NightcordBadges[userId]?.filter(badge => badge.visible).map((badge, idx) => ({
+            id: `nightcord_badge_${idx}`,
+            iconSrc: badge.icon,
+            description: badge.placeholder,
+            position: BadgePosition.START,
+            props: {
+                style: {
+                    borderRadius: "50%",
+                    transform: "scale(0.9)"
+                }
+            },
+            onContextMenu(event, badge) {
+                ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={badge} />);
+            },
+            onClick(_event: React.MouseEvent, badge: ProfileBadge & BadgeUserArgs) {
+                return NightcordBadgeModal(badge);
             },
         } satisfies ProfileBadge));
     },

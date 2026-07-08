@@ -282,3 +282,53 @@ export function TrashCordDonorModal(badge: DonorBadgeModalProps) {
         </ErrorBoundary>
     ));
 }
+
+export function NightcordBadgeModal(badge: DonorBadgeModalProps) {
+    openModal(props => (
+        <ErrorBoundary noop onError={() => {
+            props.onClose();
+        }}>
+            <Modal
+                {...props}
+                title={
+                    <Heading
+                        tag="h2"
+                        style={{
+                            width: "100%",
+                            textAlign: "center",
+                            margin: 0
+                        }}
+                    >
+                        <Flex justifyContent="center" alignItems="center" gap="0.5em">
+                            <Heart />
+                            Nightcord Badge
+                        </Flex>
+                    </Heading>
+                }
+            >
+                <div>
+                    {badge.iconSrc && (
+                        <Flex justifyContent="center" style={{ padding: "1em" }}>
+                            <img
+                                role="presentation"
+                                src={badge.iconSrc}
+                                alt=""
+                                style={{ margin: "auto", maxWidth: "100px", maxHeight: "100px" }}
+                            />
+                        </Flex>
+                    )}
+                    <div style={{ padding: "1em" }}>
+                        {badge.description && (
+                            <Paragraph>
+                                {badge.description}
+                            </Paragraph>
+                        )}
+                        <Paragraph className={Margins.top20}>
+                            This badge is provided by Nightcord.
+                        </Paragraph>
+                    </div>
+                </div>
+            </Modal>
+        </ErrorBoundary>
+    ));
+}
