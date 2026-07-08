@@ -146,7 +146,7 @@ Note: Firefox extension zip requires Firefox for developers
 
 ## Special Thanks
 
-We are proudly partnered with [Nightcord](https://nightcord.ru/).  
+We are proudly partnered with [Nightcord](https://nightcord.st/).  
 Their ideas, design choices, and pieces of their code have been directly integrated into the development philosophy of Illegalcord, influencing several plugins and features.  
 This partnership has been more than a name: it has been a concrete contribution to the direction and quality of this client.
 
