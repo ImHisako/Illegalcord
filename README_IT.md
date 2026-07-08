@@ -152,7 +152,7 @@ Vencord non è connesso a Equicord & Illegalcord e come tali.
 
 ## Ringraziamenti speciali
 
-Siamo orgogliosi di collaborare con [Nightcord](https://nightcord.ru/).  
+Siamo orgogliosi di collaborare con [Nightcord](https://nightcord.st/).  
 Le loro idee, le loro scelte di progettazione e parti del loro codice sono state integrate direttamente nella filosofia di sviluppo di Illegalcord, influenzando diversi plugin e funzionalità.  
 Questa collaborazione è stata ben più di un semplice nome: ha rappresentato un contributo concreto alla direzione e alla qualità di questo client.
 
