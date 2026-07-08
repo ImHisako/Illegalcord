@@ -150,6 +150,12 @@ Discord è un marchio di Discord Inc., e menzionato esclusivamente a scopo descr
 Menzionarlo non implica alcuna affiliazione o approvazione da parte di Discord Inc.
 Vencord non è connesso a Equicord & Illegalcord e come tali.
 
+## Ringraziamenti speciali
+
+Siamo orgogliosi di collaborare con [Nightcord](https://nightcord.ru/).  
+Le loro idee, le loro scelte di progettazione e parti del loro codice sono state integrate direttamente nella filosofia di sviluppo di Illegalcord, influenzando diversi plugin e funzionalità.  
+Questa collaborazione è stata ben più di un semplice nome: ha rappresentato un contributo concreto alla direzione e alla qualità di questo client.
+
 > [!WARNING]
 > **Illegalcord non è un client illegale.** La parola **"Illegal"** fa parte solo del nome del progetto e non significa che il software sia illegale di per sé.  
 > Il nome richiama l'idea di un client Discord senza le limitazioni e le regole tipicamente imposte da altri client mod, in modo simile alla filosofia di personalizzazione di Equicord e Vencord.  
