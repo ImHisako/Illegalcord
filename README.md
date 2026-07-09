@@ -84,6 +84,8 @@ Illegalcord has his personal badges btw
 
 ### Dependencies
 
+Installer : https://github.com/ImHisako/IllegalcordInstaller
+
 [Git](https://git-scm.com/download) and [Node.JS LTS](https://nodejs.dev/en/) are required.
 
 Install `pnpm`:
