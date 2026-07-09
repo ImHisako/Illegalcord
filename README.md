@@ -43,7 +43,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **Client Diagnostics**
 - **AutoModBypass**
 - **Securecord** | (AES 256 on messages)
-- **Securecord Opossum Blazing Edition** | BlazingOpossum, block size + IV + MAC Tag 128 bits, key 256 bits. Based on AVX2 instructions, highly-performant, post-quantum symmetric cryptographic algorithm. Advanced, and modern.  | https://github.com/ZygoteCode/BlazingOpossum)
+- **Securecord Opossum Blazing Edition** | BlazingOpossum, block size + IV + MAC Tag 128 bits, key 256 bits. Based on AVX2 instructions, highly-performant, post-quantum symmetric cryptographic algorithm. Advanced, and modern.  | https://github.com/ZygoteCode/BlazingOpossum )
 - **GhostSelfbot** | Launch Ghost Selfbot (exe or source) with auto-setup, Python requirements installer, and token management | https://ghostt.cc/
 - **IGP** ( pgp plugin )
 - **Mullvad DNS Over Discord** (Privacy & Security)
@@ -64,7 +64,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **ScreenshareAlert**
 - **CrashHandlerEnhanched**
 - **SilentDelete**
-- **SilentEdit** | ( https://github.com/aurickk/SilentEdit-Vencord ) 
+- **SilentEdit** | ( https://github.com/aurickk/SilentEdit-Vencord )
 - **BoosterCount** | ( https://github.com/Reathe/BoosterCount/tree/main )
 - **Nitro Sniper**: | ( https://github.com/neoarz/NitroSniper/tree/main )
 - **BadgeSelector** | ( https://github.com/002-sans/VencordPlugins/tree/b8c7c98a50c0700f7389b0484e5659fe5ec0f99e/BadgesSelector )
@@ -146,8 +146,8 @@ Note: Firefox extension zip requires Firefox for developers
 
 ## Special Thanks
 
-We are proudly partnered with [Nightcord](https://nightcord.st/).  
-Their ideas, design choices, and pieces of their code have been directly integrated into the development philosophy of Illegalcord, influencing several plugins and features.  
+We are proudly partnered with [Nightcord](https://nightcord.st/).
+Their ideas, design choices, and pieces of their code have been directly integrated into the development philosophy of Illegalcord, influencing several plugins and features.
 This partnership has been more than a name: it has been a concrete contribution to the direction and quality of this client.
 
 ## Disclaimer
@@ -157,9 +157,9 @@ Mentioning it does not imply any affiliation with or endorsement by Discord Inc.
 Vencord is not connected to Equicord & Illegalcord and as such.
 
 > [!WARNING]
-> **Illegalcord is not an illegal client.** The word **"Illegal"** is only part of the project's name and does not mean the software is illegal in itself.  
-> The name refers to the idea of a Discord client without the limitations and rules typically imposed by other modded clients, similar to the customization philosophy of Equicord and Vencord.  
-> However, using modified clients can still violate Discord's Terms of Service, so they should be used with caution.  
+> **Illegalcord is not an illegal client.** The word **"Illegal"** is only part of the project's name and does not mean the software is illegal in itself.
+> The name refers to the idea of a Discord client without the limitations and rules typically imposed by other modded clients, similar to the customization philosophy of Equicord and Vencord.
+> However, using modified clients can still violate Discord's Terms of Service, so they should be used with caution.
 > If any feature of this client is used for illegal purposes, the owner and contributors of the project do not accept any responsibility for such misuse.
 
 <details>
