@@ -12,7 +12,7 @@ This client also has a plugin for setting up stereo audio on Discord and offers 
 
 Telegram x News: https://t.me/Illegalcord
 
-Illegalcord Website : https://illegalcord.mintlify.site/
+Illegalcord Website : https://illegalcord.netlify.app/
 
 ### Included Plugins
 
