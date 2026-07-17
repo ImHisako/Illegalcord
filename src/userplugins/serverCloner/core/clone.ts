@@ -1,8 +1,7 @@
 import { NavigationRouter, RestAPI, GuildStore } from "@webpack/common";
 import { findByPropsLazy } from "@webpack";
 
-import { notify, createMainProgressNotification, completeMainProgress, updateProgress, updateWithTime } from "../utils/notifications";
-import { formatElapsed } from "../utils/notifications";
+import { completeMainProgress, createMainProgressNotification, formatElapsed, notify, updateProgress, updateWithTime } from "../utils/notifications";
 
 import { fetchGuildData, fetchGuildRoles, extractChannels, normalizeChannel, fetchAssetBase64 } from "../utils/api";
 import { TaskQueue } from "../utils/TaskQueue";
