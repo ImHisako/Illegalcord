@@ -1,6 +1,5 @@
-import { React, GuildStore, GuildRoleStore, UserStore, SearchableSelect, Checkbox, Button } from "@webpack/common";
-import { ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot } from "@utils/modal";
-import { Guild } from "@vencord/discord-types";
+import { Checkbox, GuildRoleStore, GuildStore, Modal, openModal, React, SearchableSelect, UserStore } from "@webpack/common";
+import { Guild, RenderModalProps } from "@vencord/discord-types";
 import { CloneOptions } from "../types";
 import { extractChannels } from "../utils/api";
 import { getTheme, Theme } from "@utils/discord";
@@ -13,7 +12,7 @@ function ConfirmOverwriteModal({
     deletingText,
     onConfirm,
 }: {
-    props: ModalProps;
+    props: RenderModalProps;
     targetName: string;
     sourceName: string;
     deletingText: string;
@@ -21,14 +20,32 @@ function ConfirmOverwriteModal({
 }) {
     const themeClass = getTheme() === Theme.Light ? "theme-light" : "theme-dark";
     return (
-        <ModalRoot {...props} className={themeClass}>
-            <ModalHeader>
-                <span className="sc-modal-title" style={{ color: "var(--status-danger)" }}>
-                    Confirm Overwrite
+        <Modal
+            {...props}
+            title={
+                <span className={themeClass}>
+                    <span className="sc-modal-title" style={{ color: "var(--status-danger)" }}>
+                        Confirm Overwrite
+                    </span>
                 </span>
-            </ModalHeader>
-
-            <ModalContent>
+            }
+            actions={[
+                {
+                    text: "Cancel",
+                    variant: "secondary",
+                    onClick: props.onClose
+                },
+                {
+                    text: "Delete & Overwrite",
+                    variant: "critical-primary",
+                    onClick: () => {
+                        onConfirm();
+                        props.onClose();
+                    }
+                }
+            ]}
+        >
+            <div className={themeClass}>
                 <div className="sc-modal-text" style={{ padding: "16px 0" }}>
                     <p>
                         This will <strong style={{ color: "var(--status-danger)" }}>permanently delete</strong> all{" "}
@@ -37,24 +54,8 @@ function ConfirmOverwriteModal({
                     </p>
                     <p className="sc-modal-subtext" style={{ marginTop: "12px" }}>This action cannot be undone.</p>
                 </div>
-            </ModalContent>
-            <ModalFooter>
-                <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-                    <Button color={Button.Colors.PRIMARY} onClick={props.onClose}>
-                        Cancel
-                    </Button>
-                    <Button
-                        color={Button.Colors.RED}
-                        onClick={() => {
-                            onConfirm();
-                            props.onClose();
-                        }}
-                    >
-                        Delete &amp; Overwrite
-                    </Button>
-                </div>
-            </ModalFooter>
-        </ModalRoot>
+            </div>
+        </Modal>
     );
 }
 
@@ -157,7 +158,7 @@ export const CloneModal = ({
     onClone,
     initialOptions,
 }: {
-    props: ModalProps;
+    props: RenderModalProps;
     guild: Guild;
     onClone: (options: CloneOptions) => void;
     initialOptions?: Partial<CloneOptions>;
@@ -242,7 +243,7 @@ export const CloneModal = ({
             if (cloneSoundboard) deletingParts.push("soundboard sounds");
 
             props.onClose();
-            openModal((confirmProps: ModalProps) => (
+            openModal((confirmProps: RenderModalProps) => (
                 <ConfirmOverwriteModal
                     props={confirmProps}
                     targetName={targetName}
@@ -272,14 +273,37 @@ export const CloneModal = ({
     const themeClass = getTheme() === Theme.Light ? "theme-light" : "theme-dark";
 
     return (
-        <ModalRoot {...props} className={themeClass}>
-            <ModalHeader>
-                <span className="sc-modal-title">
-                    Clone Server: {guild.name}
+        <Modal
+            {...props}
+            title={
+                <span className={themeClass}>
+                    <span className="sc-modal-title">Clone Server: {guild.name}</span>
                 </span>
-            </ModalHeader>
-
-            <ModalContent>
+            }
+            actionBarInput={!nothingSelected && (
+                <div className={themeClass}>
+                    <div className="sc-modal-estimate-box">
+                        <span>Estimated time: <strong>{estimatedTime}</strong></span>
+                    </div>
+                </div>
+            )}
+            actions={[
+                {
+                    text: "Cancel",
+                    variant: "secondary",
+                    onClick: props.onClose
+                },
+                {
+                    text: targetGuildId
+                        ? resumeMode ? "Resume Clone" : "Overwrite & Clone"
+                        : "Create & Clone",
+                    variant: "primary",
+                    onClick: handleClone,
+                    disabled: nothingSelected
+                }
+            ]}
+        >
+            <div className={themeClass}>
                 <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "8px 0", minHeight: "450px" }}>
 
                     {}
@@ -406,28 +430,7 @@ export const CloneModal = ({
                     <BoostWarning guild={guild} targetGuildId={targetGuildId} ownedGuilds={ownedGuilds} sourceStickersCount={sourceStickersCount} sourceSoundsCount={sourceSoundsCount} />
 
                 </div>
-            </ModalContent>
-
-            <ModalFooter>
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px", width: "100%" }}>
-                    {!nothingSelected && (
-                        <div className="sc-modal-estimate-box">
-                            <span>Estimated time: <strong>{estimatedTime}</strong></span>
-                        </div>
-                    )}
-
-                    <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-                        <Button color={Button.Colors.PRIMARY} onClick={props.onClose}>
-                            Cancel
-                        </Button>
-                        <Button color={Button.Colors.BRAND} onClick={handleClone} disabled={nothingSelected}>
-                            {targetGuildId
-                                ? resumeMode ? "Resume Clone" : "Overwrite & Clone"
-                                : "Create & Clone"}
-                        </Button>
-                    </div>
-                </div>
-            </ModalFooter>
-        </ModalRoot>
+            </div>
+        </Modal>
     );
 };

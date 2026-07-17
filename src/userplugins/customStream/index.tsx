@@ -21,11 +21,10 @@ import { DataStore } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { ImageIcon } from "@components/Icons";
-import { Alerts } from "@webpack/common";
-import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import definePlugin, { OptionType } from "@utils/types";
+import type { RenderModalProps } from "@vencord/discord-types";
 import { findComponentByCodeLazy } from "@webpack";
-import { Button, Menu, React, showToast, Text, Toasts, UserStore, useState, useEffect, useRef } from "@webpack/common";
+import { Alerts, Button, Menu, Modal, openModal, React, showToast, Text, Toasts, UserStore, useEffect, useRef, useState } from "@webpack/common";
 
 // Компонент кнопки в панели
 const PanelButton = findComponentByCodeLazy(".GREEN,positionKeyStemOverride:");
@@ -449,7 +448,7 @@ async function processImage(blob: Blob): Promise<Blob> {
     });
 }
 
-function ImagePickerModal({ rootProps }: { rootProps: any; }) {
+function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
     // Сохраняем исходные значения для отката
     const initialSettingsRef = useRef({
         enabled: settings.store.replaceEnabled,
@@ -886,7 +885,29 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
     const nextIndex = getNextIndex();
 
     return (
-        <ModalRoot {...rootProps} size={ModalSize.LARGE}>
+        <Modal
+            {...rootProps}
+            onClose={handleCancel}
+            size="lg"
+            title="Stream Preview"
+            actionBarInput={
+                <Text variant="text-xs/normal" style={{ color: "var(--text-muted)" }}>
+                    📁 {profiles.get(currentProfileId)?.name || "Default"}: {images.length} / {MAX_IMAGES_PER_PROFILE} images
+                </Text>
+            }
+            actions={[
+                {
+                    text: "Cancel",
+                    variant: "secondary",
+                    onClick: handleCancel
+                },
+                {
+                    text: "Save",
+                    variant: "primary",
+                    onClick: handleSave
+                }
+            ]}
+        >
             {/* Полноэкранный просмотр изображения */}
             {previewImage && (
                 <div
@@ -943,19 +964,12 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
                 </div>
             )}
 
-            <ModalHeader>
-                <Text variant="heading-lg/semibold" style={{ flexGrow: 1 }}>
-                    Stream Preview
-                </Text>
-                <ModalCloseButton onClick={handleCancel} />
-            </ModalHeader>
-            <ModalContent>
-                <div
-                    style={{ padding: "20px", position: "relative" }}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                >
+            <div
+                style={{ padding: "20px", position: "relative" }}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+            >
 
                     {/* Оверлей для drag & drop файлов - только верх до галереи */}
                     {isDragging && draggedIndex === null && (
@@ -1831,40 +1845,13 @@ function ImagePickerModal({ rootProps }: { rootProps: any; }) {
                             Images stored locally • Limit: {MAX_IMAGES_PER_PROFILE} images per profile
                         </Text>
                     </div>
-                </div>
-            </ModalContent>
-            <ModalFooter>
-                <div style={{ display: "flex", gap: "12px", width: "100%", justifyContent: "space-between", alignItems: "center" }}>
-                    <Text variant="text-xs/normal" style={{ color: "var(--text-muted)" }}>
-                        📁 {profiles.get(currentProfileId)?.name || "Default"}: {images.length} / {MAX_IMAGES_PER_PROFILE} images
-                    </Text>
-                    <div style={{ display: "flex", gap: "10px" }}>
-                        <Button
-                            onClick={handleCancel}
-                            style={{
-                                padding: "10px 20px"
-                            }}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            color={Button.Colors.GREEN}
-                            onClick={handleSave}
-                            style={{
-                                padding: "10px 24px"
-                            }}
-                        >
-                            ✓ Save
-                        </Button>
-                    </div>
-                </div>
-            </ModalFooter>
-        </ModalRoot>
+            </div>
+        </Modal>
     );
 }
 
 function openImagePicker() {
-    openModal((props: any) => <ImagePickerModal rootProps={props} />);
+    openModal(props => <ImagePickerModal rootProps={props} />);
 }
 
 // Иконка для кнопки панели с бейджем количества

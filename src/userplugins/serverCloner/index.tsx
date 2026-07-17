@@ -1,8 +1,7 @@
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { ModalProps, openModal } from "@utils/modal";
 import definePlugin from "@utils/types";
-import { Guild } from "@vencord/discord-types";
-import { Menu, React } from "@webpack/common";
+import { Guild, RenderModalProps } from "@vencord/discord-types";
+import { Menu, openModal, React } from "@webpack/common";
 import { DataStore } from "@api/index";
 
 import "./styles.css";
@@ -62,7 +61,7 @@ const guildContextMenuPatch: NavContextMenuPatchCallback = (children: any[], pro
             id="clone-server-pro"
             label="Clone Server"
             action={() => {
-                openModal((modalProps: ModalProps) => (
+                openModal((modalProps: RenderModalProps) => (
                     <CloneModal
                         props={modalProps}
                         guild={props.guild!}

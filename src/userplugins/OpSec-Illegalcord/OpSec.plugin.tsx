@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import type { MessageOptions, MessageSendListener } from "@api/MessageEvents";
+import type { MessageSendListener, SendMessageOptions } from "@api/MessageEvents";
 import { definePluginSettings } from "@api/Settings";
 import { escapeRegExp } from "@utils/text";
 import definePlugin, { OptionType } from "@utils/types";
@@ -487,15 +487,15 @@ function levenshteinDistance(first: string, second: string) {
     return previous[second.length];
 }
 
-function getReplyVocabulary(options: MessageOptions) {
-    const reference = options.replyOptions?.messageReference;
+function getReplyVocabulary(options: SendMessageOptions) {
+    const reference = options.messageReference;
     if (!reference) return [];
 
     const repliedMessage = MessageStore.getMessage(reference.channel_id, reference.message_id);
     return Array.from(new Set(repliedMessage?.content.toLowerCase().match(WORD_PATTERN) ?? []));
 }
 
-function applyContextCorrections(text: string, options: MessageOptions) {
+function applyContextCorrections(text: string, options: SendMessageOptions) {
     if (!settings.store.contextualCorrection) return text;
 
     const vocabulary = getReplyVocabulary(options);
@@ -521,7 +521,7 @@ function shouldProcess(content: string) {
     return Boolean(content.trim()) && !content.trimStart().startsWith("/");
 }
 
-function processMessage(content: string, options: MessageOptions) {
+function processMessage(content: string, options: SendMessageOptions) {
     if (!settings.store.enable || !shouldProcess(content)) return content;
 
     const { text: protectedContent, values } = protectText(content);
