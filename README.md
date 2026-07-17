@@ -40,6 +40,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **MassMention**
 - **WebRTCLeakPrevent**
 - **MultiInstance**
+- **IllegalcordAnnouncements**
 - **Client Diagnostics**
 - **AutoModBypass**
 - **Securecord** | (AES 256 on messages)
