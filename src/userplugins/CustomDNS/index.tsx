@@ -408,6 +408,8 @@ export default definePlugin({
         const originalFetch = window.fetch;
         let fetchPatched: typeof window.fetch | null = null;
         let isActive = false;
+        let isStarting = false;
+        let lifecycleToken = 0;
         let startTimer: number | undefined;
         const dnsCache = new Map<string, CacheEntry>();
         const statistics: DnsStatistics = {
@@ -417,6 +419,10 @@ export default definePlugin({
             cacheHits: 0,
             nativeCalls: 0
         };
+
+        function isCurrentLifecycle(token: number) {
+            return token === lifecycleToken;
+        }
 
         function cacheResult(cacheKey: string, result: DnsResolveResult) {
             dnsCache.set(cacheKey, {
@@ -428,7 +434,9 @@ export default definePlugin({
             });
         }
 
-        async function resolveHostname(hostname: string, shouldWarn = true): Promise<CacheEntry | null> {
+        async function resolveHostname(hostname: string, shouldWarn = true, token?: number): Promise<CacheEntry | null> {
+            if (token != null && !isCurrentLifecycle(token)) return null;
+
             const cacheKey = getCacheKey(hostname);
             const cached = dnsCache.get(cacheKey);
 
@@ -453,6 +461,7 @@ export default definePlugin({
 
                 statistics.nativeCalls++;
                 const result = await Native.resolveDNS(hostname, servers, family, getTimeoutMs());
+                if (token != null && !isCurrentLifecycle(token)) return null;
 
                 if (result.success && result.addresses.length) {
                     cacheResult(cacheKey, result);
@@ -472,10 +481,13 @@ export default definePlugin({
             return null;
         }
 
-        async function preloadRecords() {
+        async function preloadRecords(token: number) {
             const domains = getTrackedDomains();
-            await Promise.all(domains.map(domain => resolveHostname(domain, false)));
+            await Promise.all(domains.map(domain => resolveHostname(domain, false, token)));
+            if (!isCurrentLifecycle(token)) return false;
+
             log.info(`Preloaded ${dnsCache.size} DNS cache entries.`);
+            return true;
         }
 
         function patchFetch() {
@@ -527,7 +539,7 @@ export default definePlugin({
             isActive: () => isActive,
 
             async start() {
-                if (isActive) {
+                if (isActive || isStarting) {
                     log.warn("Plugin is already active.");
                     return;
                 }
@@ -544,34 +556,51 @@ export default definePlugin({
                     return;
                 }
 
-                log.info(`Starting ${PLUGIN_NAME} ${VERSION} with ${getProviderName()}.`);
+                const token = ++lifecycleToken;
+                isStarting = true;
 
-                if (settings.store.preloadOnStart) {
-                    await preloadRecords();
-                }
+                try {
+                    log.info(`Starting ${PLUGIN_NAME} ${VERSION} with ${getProviderName()}.`);
 
-                if (settings.store.rewriteFetch) {
-                    log.warn("Fetch URL rewriting is experimental and can break HTTPS requests.");
-
-                    if (!patchFetch()) {
-                        showPluginToast("Fetch patch failed.", Toasts.Type.FAILURE);
-                        return;
+                    if (settings.store.preloadOnStart) {
+                        const didPreload = await preloadRecords(token);
+                        if (!didPreload) return;
                     }
-                } else {
-                    log.info("Fetch rewrite is disabled. DNS results are available through the debug API.");
-                }
 
-                isActive = true;
-                showPluginToast(`${PLUGIN_NAME} activated with ${getProviderName()}.`, Toasts.Type.SUCCESS);
+                    if (!isCurrentLifecycle(token)) return;
+
+                    if (settings.store.rewriteFetch) {
+                        log.warn("Fetch URL rewriting is experimental and can break HTTPS requests.");
+
+                        if (!patchFetch()) {
+                            showPluginToast("Fetch patch failed.", Toasts.Type.FAILURE);
+                            return;
+                        }
+                    } else {
+                        log.info("Fetch rewrite is disabled. DNS results are available through the debug API.");
+                    }
+
+                    isActive = true;
+                    showPluginToast(`${PLUGIN_NAME} activated with ${getProviderName()}.`, Toasts.Type.SUCCESS);
+                } finally {
+                    if (isCurrentLifecycle(token)) {
+                        isStarting = false;
+                    }
+                }
             },
 
             stop() {
+                const wasRunning = isActive || isStarting || fetchPatched !== null;
+
+                lifecycleToken++;
+                isStarting = false;
+
                 if (startTimer != null) {
                     window.clearTimeout(startTimer);
                     startTimer = undefined;
                 }
 
-                if (!isActive) {
+                if (!wasRunning) {
                     log.warn("Plugin is not active.");
                     return;
                 }
