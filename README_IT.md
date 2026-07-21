@@ -76,6 +76,10 @@ I plugin inclusi possono essere trovati [qui](https://equicord.org/plugins).
 - **stereoScreenshareAudio** | ( https://github.com/nerdwave-nick/Vencord-Stereo-Fix/blob/main/src/plugins/stereoScreenshareAudio/index.ts )
 - **DiscordLock** | ( https://github.com/vejcowski/DiscordLock/tree/main )
 - **Opsec Plugin** | ( https://github.com/ItzSolace/OpSec-Vencord/tree/main ) | (Abbiamo una versione diversa con supporto italiano)
+- **PluginStars** | ( https://github.com/Nightwielder23/discord-plugin-stars )
+- **ServerBadges** | ( https://github.com/TomFront/ServerBadges )
+- **SilentCall** | ( https://github.com/yahyepanna/Silent-call )
+- **SpatialAudio** ( https://github.com/onewhobridges/vc-spatial-audio/tree/main )
 
 </details>
 
