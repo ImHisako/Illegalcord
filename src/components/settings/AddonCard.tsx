@@ -22,10 +22,18 @@ import { Badge } from "@components/Badge";
 import { BaseText } from "@components/BaseText";
 import { Switch } from "@components/Switch";
 import { classNameFactory } from "@utils/css";
+import type { Plugin } from "@utils/types";
 import { Tooltip, useRef } from "@webpack/common";
 import type { MouseEventHandler, ReactNode } from "react";
 
+import Plugins from "~plugins";
+
 const cl = classNameFactory("vc-addon-");
+const pluginCl = classNameFactory("vc-plugins-");
+
+interface NightcordPortPlugin extends Plugin {
+    isNightcordPlugin(name: string): boolean;
+}
 
 interface Props {
     name: ReactNode;
@@ -47,6 +55,11 @@ interface Props {
 export function AddonCard({ disabled, isNew, sourceBadge, tooltip, name, infoButton, footer, author, enabled, setEnabled, description, onMouseEnter, onMouseLeave }: Props) {
     const titleRef = useRef<HTMLDivElement>(null);
     const titleContainerRef = useRef<HTMLDivElement>(null);
+    const isNightcordPlugin = typeof name === "string" && (Plugins.NightcordPort as NightcordPortPlugin).isNightcordPlugin(name);
+    const resolvedSourceBadge = isNightcordPlugin
+        ? <img src="https://nightcord.st/image.png" alt="Nightcord" className={pluginCl("source")} />
+        : sourceBadge;
+    const resolvedTooltip = isNightcordPlugin ? "Nightcord Plugin" : tooltip;
 
     return (
         <div
@@ -82,14 +95,14 @@ export function AddonCard({ disabled, isNew, sourceBadge, tooltip, name, infoBut
                     )}
                 </div>
 
-                <Tooltip text={tooltip}>
+                <Tooltip text={resolvedTooltip}>
                     {({ onMouseEnter, onMouseLeave }) => (
                         <div
                             className={cl("source")}
                             onMouseEnter={onMouseEnter}
                             onMouseLeave={onMouseLeave}
                         >
-                            {sourceBadge}
+                            {resolvedSourceBadge}
                         </div>
                     )}
                 </Tooltip>

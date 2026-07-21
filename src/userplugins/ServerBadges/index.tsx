@@ -1,6 +1,6 @@
 /*
- * ServerBadges, a Vencord userplugin
- * Copyright (c) 2026 tomfront
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
@@ -29,6 +29,7 @@
 
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType } from "@utils/types";
+import type { Guild, GuildFeatures } from "@vencord/discord-types";
 import { findStoreLazy } from "@webpack";
 import { GuildStore, React, UserStore } from "@webpack/common";
 
@@ -41,7 +42,7 @@ const InviteStore = findStoreLazy("InviteStore");
 
 type Override = "none" | "verified" | "partner" | "both";
 
-const FEATURES_FOR: Record<Exclude<Override, "none">, string[]> = {
+const FEATURES_FOR: Record<Exclude<Override, "none">, GuildFeatures[]> = {
     verified: ["VERIFIED"],
     partner: ["PARTNERED"],
     both: ["VERIFIED", "PARTNERED"]
@@ -141,11 +142,11 @@ function OwnedServersSetting() {
 const settings = definePluginSettings({
     overrides: {
         type: OptionType.CUSTOM,
+        description: "Badge overrides for servers you own.",
         default: {} as Record<string, Override>
     },
     manageServers: {
         type: OptionType.COMPONENT,
-        description: "Per-server badge (only servers you own are listed)",
         component: OwnedServersSetting
     },
     profileBadge: {
@@ -159,14 +160,14 @@ const settings = definePluginSettings({
 
 // Track exactly which feature strings WE added to each guild, so we never
 // remove a server's genuine features.
-const injectedFeatures = new Map<string, Set<string>>();
+const injectedFeatures = new Map<string, Set<GuildFeatures>>();
 
 function ownedOverriddenGuilds() {
     const me = UserStore.getCurrentUser();
-    const guilds = GuildStore.getGuilds() as Record<string, any>;
+    const guilds = GuildStore.getGuilds();
     const overrides = settings.store.overrides ?? {};
 
-    const result: { guild: any; features: string[]; }[] = [];
+    const result: { guild: Guild; features: GuildFeatures[]; }[] = [];
     for (const [id, ov] of Object.entries(overrides)) {
         if (ov === "none") continue;
         const guild = guilds[id];
@@ -181,13 +182,13 @@ function ownsPartneredServer() {
 }
 
 function syncGuildFeatures() {
-    const wanted = new Map<string, { guild: any; features: Set<string>; }>();
+    const wanted = new Map<string, { guild: Guild; features: Set<GuildFeatures>; }>();
     for (const { guild, features } of ownedOverriddenGuilds())
         wanted.set(guild.id, { guild, features: new Set(features) });
 
     // Remove features we previously injected that are no longer wanted.
     for (const [id, mine] of [...injectedFeatures]) {
-        const want = wanted.get(id)?.features ?? new Set<string>();
+        const want = wanted.get(id)?.features ?? new Set<GuildFeatures>();
         const guild = GuildStore.getGuild(id);
         for (const f of [...mine]) {
             if (!want.has(f)) {
@@ -268,13 +269,13 @@ function syncProfileBadge() {
     const profile = me && UserProfileStore?.getUserProfile?.(me.id);
     if (!profile || !Array.isArray(profile.badges)) return;
 
-    const badges: any[] = profile.badges;
+    const { badges } = profile;
     const hasReal = badges.some(b => b?.id === PARTNER_BADGE.id && !b?.[OUR_MARK]);
     const hasOurs = badges.some(b => b?.[OUR_MARK]);
     const want = settings.store.profileBadge && ownsPartneredServer() && !hasReal;
 
-    if (want && hasOurs) return;      // already added
-    if (!want && !hasOurs) return;    // nothing to remove
+    if (want && hasOurs) return; // already added
+    if (!want && !hasOurs) return; // nothing to remove
 
     const cleaned = badges.filter(b => !b?.[OUR_MARK]);
 

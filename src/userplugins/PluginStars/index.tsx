@@ -31,7 +31,7 @@ export default definePlugin({
     },
 
     sortWithStarred(plugins: Plugin[]): Plugin[] {
-        const starred = this.starred;
+        const { starred } = this;
         return [
             ...plugins.filter(p => starred.includes(p.name)),
             ...plugins.filter(p => !starred.includes(p.name)).sort((a, b) => a.name.localeCompare(b.name))
