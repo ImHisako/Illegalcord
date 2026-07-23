@@ -5,34 +5,70 @@
  */
 
 .vc-multi-instance-body {
+    --mi-accent: var(--brand-500, #5865f2);
+    --mi-border: color-mix(in srgb, var(--mi-accent) 24%, var(--background-modifier-accent));
+    --mi-border-strong: color-mix(in srgb, var(--mi-accent) 48%, var(--background-modifier-accent));
+    --mi-surface: color-mix(in srgb, var(--background-secondary) 94%, var(--mi-accent) 6%);
+    --mi-surface-raised: color-mix(in srgb, var(--background-primary) 90%, var(--mi-accent) 10%);
+    --mi-shadow: 0 12px 32px color-mix(in srgb, var(--black-500, #000) 22%, transparent);
+
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 16px;
     width: min(920px, calc(100vw - 96px));
     max-width: 100%;
-    padding-bottom: 4px;
+    padding: 6px;
+    border-radius: 20px;
+    background:
+        radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--mi-accent) 11%, transparent), transparent 34%),
+        linear-gradient(180deg, color-mix(in srgb, var(--background-primary) 96%, var(--mi-accent) 4%), var(--background-primary));
+    isolation: isolate;
 }
 
 .vc-multi-instance-hero {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 24px;
-    padding: 18px;
+    min-height: 84px;
+    padding: 20px;
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--brand-500) 38%, var(--background-modifier-accent));
-    border-radius: 16px;
+    border: 1px solid var(--mi-border-strong);
+    border-radius: 18px;
     background:
-        radial-gradient(circle at 85% 10%, color-mix(in srgb, var(--brand-500) 24%, transparent), transparent 44%),
-        linear-gradient(135deg, var(--background-secondary), var(--background-tertiary));
-    box-shadow: var(--elevation-low);
+        radial-gradient(circle at 88% 0%, color-mix(in srgb, var(--mi-accent) 30%, transparent), transparent 44%),
+        linear-gradient(135deg, var(--mi-surface-raised), var(--background-tertiary));
+    box-shadow: var(--mi-shadow), inset 0 1px 0 color-mix(in srgb, var(--text-normal) 8%, transparent);
+}
+
+.vc-multi-instance-hero::after {
+    position: absolute;
+    right: -48px;
+    bottom: -76px;
+    width: 210px;
+    height: 160px;
+    border: 30px solid color-mix(in srgb, var(--mi-accent) 8%, transparent);
+    border-radius: 50%;
+    content: "";
+    pointer-events: none;
 }
 
 .vc-multi-instance-current {
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
     gap: 13px;
     min-width: 0;
+}
+
+.vc-multi-instance-current > :first-child {
+    border-radius: 50%;
+    box-shadow:
+        0 0 0 3px var(--background-primary),
+        0 0 0 5px color-mix(in srgb, var(--mi-accent) 65%, transparent);
 }
 
 .vc-multi-instance-current > div {
@@ -65,15 +101,19 @@
 }
 
 .vc-multi-instance-active-badge {
+    margin-left: 5px;
     padding: 5px 9px;
+    border: 1px solid color-mix(in srgb, var(--status-positive) 42%, transparent);
     border-radius: 999px;
     color: var(--status-positive-text);
-    background: color-mix(in srgb, var(--status-positive) 18%, transparent);
+    background: color-mix(in srgb, var(--status-positive) 20%, var(--background-primary));
     font-size: 11px;
     font-weight: 700;
 }
 
 .vc-multi-instance-stats {
+    position: relative;
+    z-index: 1;
     display: flex;
     flex: 0 0 auto;
     gap: 8px;
@@ -85,9 +125,10 @@
     align-items: center;
     min-width: 74px;
     padding: 10px 12px;
-    border: 1px solid var(--background-modifier-accent);
+    border: 1px solid var(--mi-border);
     border-radius: 12px;
-    background: color-mix(in srgb, var(--background-primary) 72%, transparent);
+    background: color-mix(in srgb, var(--background-primary) 82%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-normal) 6%, transparent);
 }
 
 .vc-multi-instance-stats strong {
@@ -106,24 +147,42 @@
 .vc-multi-instance-modes {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: 12px;
 }
 
 .vc-multi-instance-mode-card {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 13px 14px;
-    border: 1px solid color-mix(in srgb, var(--brand-500) 30%, var(--background-modifier-accent));
-    border-radius: 13px;
-    background: var(--background-secondary);
-    transition: border-color .16s ease, transform .16s ease, background .16s ease;
+    min-height: 66px;
+    padding: 14px 16px;
+    overflow: hidden;
+    border: 1px solid var(--mi-border-strong);
+    border-radius: 15px;
+    background:
+        linear-gradient(115deg, color-mix(in srgb, var(--mi-accent) 8%, transparent), transparent 52%),
+        var(--mi-surface);
+    box-shadow: 0 5px 16px color-mix(in srgb, var(--black-500, #000) 12%, transparent);
+    transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease, background .16s ease;
+}
+
+.vc-multi-instance-mode-card::after {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: var(--mi-accent);
+    content: "";
+    opacity: .8;
 }
 
 .vc-multi-instance-mode-card:hover {
-    border-color: color-mix(in srgb, var(--brand-500) 48%, var(--background-modifier-accent));
-    background: var(--background-modifier-hover);
-    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--mi-accent) 72%, var(--background-modifier-accent));
+    background:
+        linear-gradient(115deg, color-mix(in srgb, var(--mi-accent) 13%, transparent), transparent 58%),
+        var(--mi-surface-raised);
+    box-shadow: 0 8px 22px color-mix(in srgb, var(--black-500, #000) 16%, transparent);
+    transform: translateY(-2px);
 }
 
 .vc-multi-instance-mode-icon {
@@ -132,9 +191,11 @@
     width: 38px;
     height: 38px;
     place-items: center;
+    border: 1px solid color-mix(in srgb, var(--mi-accent) 24%, transparent);
     border-radius: 11px;
     color: var(--brand-360);
-    background: color-mix(in srgb, var(--brand-500) 15%, var(--background-primary));
+    background: color-mix(in srgb, var(--mi-accent) 17%, var(--background-primary));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-normal) 8%, transparent);
 }
 
 .vc-multi-instance-mode-copy {
@@ -167,7 +228,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding-top: 2px;
+    padding: 2px 4px 0;
 }
 
 .vc-multi-instance-toolbar-copy {
@@ -194,32 +255,50 @@
 .vc-multi-instance-list {
     display: flex;
     flex-direction: column;
-    gap: 9px;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid color-mix(in srgb, var(--mi-border) 66%, transparent);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--background-tertiary) 58%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-normal) 4%, transparent);
 }
 
 .vc-multi-instance-row {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    min-height: 78px;
-    padding: 13px 14px;
-    border: 1px solid var(--background-modifier-accent);
-    border-radius: 14px;
-    background: var(--background-secondary);
+    min-height: 82px;
+    padding: 14px 16px;
+    overflow: hidden;
+    border: 1px solid var(--mi-border);
+    border-radius: 15px;
+    background:
+        linear-gradient(110deg, color-mix(in srgb, var(--mi-accent) 4%, transparent), transparent 46%),
+        var(--mi-surface);
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--black-500, #000) 10%, transparent);
     cursor: context-menu;
     transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease, background .16s ease;
 }
 
 .vc-multi-instance-row:hover {
-    border-color: color-mix(in srgb, var(--brand-500) 42%, var(--background-modifier-accent));
-    background: var(--background-modifier-hover);
-    transform: translateY(-1px);
+    border-color: var(--mi-border-strong);
+    background:
+        linear-gradient(110deg, color-mix(in srgb, var(--mi-accent) 9%, transparent), transparent 54%),
+        var(--mi-surface-raised);
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--black-500, #000) 14%, transparent);
+    transform: translateY(-2px);
 }
 
 .vc-multi-instance-row-open {
-    border-color: color-mix(in srgb, var(--brand-500) 62%, var(--background-modifier-accent));
-    box-shadow: inset 3px 0 0 var(--brand-500), var(--elevation-low);
+    border-color: color-mix(in srgb, var(--mi-accent) 72%, var(--background-modifier-accent));
+    background:
+        linear-gradient(110deg, color-mix(in srgb, var(--mi-accent) 13%, transparent), transparent 58%),
+        var(--mi-surface-raised);
+    box-shadow:
+        inset 4px 0 0 var(--mi-accent),
+        0 8px 24px color-mix(in srgb, var(--mi-accent) 13%, transparent);
 }
 
 .vc-multi-instance-row-info,
@@ -250,12 +329,13 @@
     width: 48px;
     height: 48px;
     place-items: center;
-    border: 1px solid var(--background-modifier-accent);
+    border: 1px solid var(--mi-border-strong);
     border-radius: 50%;
     color: var(--interactive-normal);
     background:
-        radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--brand-500) 25%, transparent), transparent 55%),
-        var(--background-primary);
+        radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--mi-accent) 32%, transparent), transparent 55%),
+        var(--mi-surface-raised);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-normal) 8%, transparent);
 }
 
 .vc-multi-instance-dot {
@@ -309,10 +389,10 @@
 
 .vc-multi-instance-tags span {
     padding: 3px 7px;
-    border: 1px solid var(--background-modifier-accent);
+    border: 1px solid color-mix(in srgb, var(--mi-accent) 18%, var(--background-modifier-accent));
     border-radius: 999px;
     color: var(--text-muted);
-    background: var(--background-primary);
+    background: color-mix(in srgb, var(--background-primary) 88%, var(--mi-accent) 12%);
     font-size: 10px;
     font-weight: 650;
     line-height: 13px;
@@ -342,10 +422,13 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    padding: 14px;
-    border: 1px dashed color-mix(in srgb, var(--brand-500) 52%, var(--background-modifier-accent));
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--brand-500) 5%, var(--background-secondary));
+    padding: 16px;
+    border: 1px dashed color-mix(in srgb, var(--mi-accent) 68%, var(--background-modifier-accent));
+    border-radius: 16px;
+    background:
+        linear-gradient(115deg, color-mix(in srgb, var(--mi-accent) 10%, transparent), transparent 60%),
+        var(--mi-surface);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-normal) 5%, transparent);
 }
 
 .vc-multi-instance-add > div:first-child {
