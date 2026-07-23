@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { app, BrowserWindow, session, shell } from "electron";
+import { app, BrowserWindow, nativeImage, session, shell } from "electron";
+import illegalcordIcon from "file://../../../browser/Illegalcord.png?base64";
 import { join } from "path";
 
 export interface NativeResult {
@@ -12,14 +13,34 @@ export interface NativeResult {
     error?: string;
 }
 
+export type InstanceMode = "detached" | "grouped";
+
+export interface InstanceUser {
+    id: string;
+    username: string;
+    globalName?: string | null;
+    avatarUrl: string;
+}
+
+export interface InstanceStatus {
+    id: string;
+    mode: InstanceMode;
+    user?: InstanceUser;
+}
+
 const DISCORD_DOMAINS = ["discord.com", "ptb.discord.com", "canary.discord.com"] as const;
 const DISCORD_HOSTS = new Set<string>(DISCORD_DOMAINS);
+const DISCORD_ATTACHMENT_HOSTS = new Set(["cdn.discordapp.com", "media.discordapp.net"]);
 const EXTERNAL_HOSTS = new Set(["discord.com", "ptb.discord.com", "canary.discord.com", "support.discord.com", "discord.gg"]);
 const PROFILE_ID_RE = /^[a-z0-9_-]{1,32}$/i;
+const DISCORD_USER_ID_RE = /^\d{17,20}$/;
+const ILLEGALCORD_ICON = nativeImage.createFromDataURL(`data:image/png;base64,${illegalcordIcon}`);
 const openWindows = new Map<string, {
     ses: Electron.Session;
     win: BrowserWindow;
     saveSession: boolean;
+    mode: InstanceMode;
+    user?: InstanceUser;
 }>();
 const configuredSessions = new Set<string>();
 
@@ -56,6 +77,49 @@ function normalizeDomain(value: unknown): DiscordDomain {
         : "discord.com";
 }
 
+function normalizeInstanceMode(value: unknown): InstanceMode {
+    return value === "grouped" ? "grouped" : "detached";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+}
+
+function normalizeInstanceUser(value: unknown): InstanceUser | undefined {
+    if (!isRecord(value)) return;
+
+    const user = value;
+    if (
+        typeof user.id !== "string" ||
+        !DISCORD_USER_ID_RE.test(user.id) ||
+        typeof user.username !== "string" ||
+        !user.username.trim() ||
+        user.username.length > 64 ||
+        typeof user.avatarUrl !== "string"
+    ) return;
+
+    try {
+        const avatarUrl = new URL(user.avatarUrl);
+        if (
+            avatarUrl.protocol !== "https:" ||
+            !DISCORD_ATTACHMENT_HOSTS.has(avatarUrl.hostname) ||
+            !avatarUrl.pathname.startsWith("/avatars/") &&
+            !avatarUrl.pathname.startsWith("/embed/avatars/")
+        ) return;
+    } catch {
+        return;
+    }
+
+    return {
+        id: user.id,
+        username: user.username.trim(),
+        globalName: typeof user.globalName === "string" && user.globalName.trim()
+            ? user.globalName.trim().slice(0, 64)
+            : undefined,
+        avatarUrl: user.avatarUrl
+    };
+}
+
 function getDiscordUrl(domain: DiscordDomain) {
     return `https://${domain}/channels/@me`;
 }
@@ -64,6 +128,28 @@ function isDiscordUrl(url: string) {
     try {
         const parsed = new URL(url);
         return parsed.protocol === "https:" && DISCORD_HOSTS.has(parsed.hostname);
+    } catch {
+        return false;
+    }
+}
+
+function isDiscordPopoutUrl(url: string) {
+    try {
+        const parsed = new URL(url);
+        return parsed.protocol === "https:" &&
+            parsed.pathname === "/popout" &&
+            (DISCORD_HOSTS.has(parsed.hostname) || parsed.hostname === "discord.gg");
+    } catch {
+        return false;
+    }
+}
+
+function isDiscordAttachmentUrl(url: string) {
+    try {
+        const parsed = new URL(url);
+        return parsed.protocol === "https:" &&
+            DISCORD_ATTACHMENT_HOSTS.has(parsed.hostname) &&
+            (parsed.pathname.startsWith("/attachments/") || parsed.pathname.startsWith("/ephemeral-attachments/"));
     } catch {
         return false;
     }
@@ -165,7 +251,8 @@ export async function openInstance(
     rawSaveSession: unknown = true,
     rawDomain: unknown = "discord.com",
     rawBlockExternalTokenAccess: unknown = false,
-    rawPerformanceMode: unknown = false
+    rawPerformanceMode: unknown = false,
+    rawMode: unknown = "detached"
 ): Promise<NativeResult> {
     const profileId = normalizeProfileId(rawProfileId);
     if (!profileId) return { ok: false, error: "Invalid instance profile." };
@@ -175,9 +262,14 @@ export async function openInstance(
     const performanceMode = rawPerformanceMode === true;
     const saveSession = !blockExternalTokenAccess && rawSaveSession !== false;
     const domain = normalizeDomain(rawDomain);
+    const mode = normalizeInstanceMode(rawMode);
     const existing = openWindows.get(profileId);
 
     if (existing && !existing.win.isDestroyed()) {
+        if (existing.mode !== mode) {
+            return { ok: false, error: `Close this instance before reopening it as ${mode}.` };
+        }
+
         if (blockExternalTokenAccess && existing.saveSession) {
             return { ok: false, error: "Close this instance before opening it with token protection." };
         }
@@ -210,6 +302,7 @@ export async function openInstance(
             autoHideMenuBar: true,
             backgroundColor: "#313338",
             darkTheme: true,
+            icon: mode === "detached" ? ILLEGALCORD_ICON : undefined,
             show: false,
             webPreferences: {
                 preload: join(__dirname, "preload.js"),
@@ -224,9 +317,9 @@ export async function openInstance(
         const cleanupWindowControls = registerWindowControls(win);
         const { webContents } = win;
 
-        openWindows.set(profileId, { ses, win, saveSession });
+        openWindows.set(profileId, { ses, win, saveSession, mode });
 
-        if (process.platform === "win32") {
+        if (process.platform === "win32" && mode === "detached") {
             win.setAppDetails({
                 appId: `${app.name}.multiInstance.${profileId}`,
                 relaunchDisplayName: displayName
@@ -248,10 +341,25 @@ export async function openInstance(
         win.on("leave-html-full-screen", () => win.setFullScreen(false));
 
         webContents.on("will-navigate", (event, url) => {
+            if (isDiscordAttachmentUrl(url)) {
+                event.preventDefault();
+                webContents.downloadURL(url);
+                return;
+            }
+
             if (!isDiscordUrl(url)) event.preventDefault();
         });
 
         webContents.setWindowOpenHandler(({ url }) => {
+            if (isDiscordPopoutUrl(url)) {
+                return { action: isDiscordUrl(url) ? "allow" : "deny" };
+            }
+
+            if (isDiscordAttachmentUrl(url)) {
+                webContents.downloadURL(url);
+                return { action: "deny" };
+            }
+
             if (isAllowedExternalUrl(url)) {
                 void shell.openExternal(url);
             }
@@ -272,10 +380,21 @@ export async function openInstance(
     }
 }
 
-export async function getOpenInstances(_event: Electron.IpcMainInvokeEvent): Promise<string[]> {
+export async function getOpenInstances(_event: Electron.IpcMainInvokeEvent): Promise<InstanceStatus[]> {
     return [...openWindows.entries()]
         .filter(([, { win }]) => !win.isDestroyed())
-        .map(([profileId]) => profileId);
+        .map(([id, { mode, user }]) => ({ id, mode, user }));
+}
+
+export async function reportInstanceUser(
+    event: Electron.IpcMainInvokeEvent,
+    rawUser: unknown
+): Promise<NativeResult> {
+    const entry = [...openWindows.values()].find(({ win }) => !win.isDestroyed() && win.webContents.id === event.sender.id);
+    if (!entry) return { ok: true };
+
+    entry.user = normalizeInstanceUser(rawUser);
+    return { ok: true };
 }
 
 export async function closeInstance(

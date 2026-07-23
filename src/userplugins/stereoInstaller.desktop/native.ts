@@ -7,8 +7,6 @@
 import { VENCORD_USER_AGENT } from "@shared/vencordUserAgent";
 import { spawn } from "child_process";
 import { app, dialog, type IpcMainInvokeEvent } from "electron";
-import method128 from "file://StereoMethods/Discord-Voice/(128) discord_voice.node?base64&trim=false";
-import method384 from "file://StereoMethods/Discord-Voice/(384) discord_voice.node?base64&trim=false";
 import method512 from "file://StereoMethods/Discord-Voice/(512) discord_voice.node?base64&trim=false";
 import method2Index from "file://StereoMethods/Discord-Voice/index.js?base64&trim=false";
 import { appendFileSync, constants, type Dirent, existsSync, mkdirSync } from "fs";
@@ -44,7 +42,6 @@ export interface ActionInfo extends InstallInfo {
     logPath: string;
 }
 
-export type StereoMethod2Quality = "128" | "384" | "512";
 export type StereoInstallStatus = "installed" | "notInstalled" | "needsReinstall";
 export type PatchMethod = "discordAudioCollective" | "voicePlayground";
 type SingleFileName = "discord_voice.node" | "index.js";
@@ -97,6 +94,7 @@ interface WorkerConfig {
     targetDir: string;
     copyMode: "directory" | "singleFile";
     fileName?: SingleFileName;
+    copyMethod2Index?: boolean;
     metaPath?: string;
     statePath: string;
     activeMethod?: PatchMethod;
@@ -211,9 +209,8 @@ export async function readLogs(_: IpcMainInvokeEvent): Promise<NativeResult<stri
 
 export async function clearLogs(_: IpcMainInvokeEvent): Promise<NativeResult<true>> {
     try {
-        for (const pathValue of logPaths()) {
-            await mkdir(dirname(pathValue), { recursive: true });
-            await writeFile(pathValue, "", "utf8");
+        for (const pathValue of [...logPaths(), `${logPath()}.launcher.log`]) {
+            await rm(pathValue, { force: true });
         }
 
         return ok(true, []);
@@ -243,7 +240,7 @@ export async function patch(_: IpcMainInvokeEvent, rootPath: string): Promise<Na
     }
 }
 
-export async function patchMethod2(_: IpcMainInvokeEvent, rootPath: string, quality: StereoMethod2Quality): Promise<NativeResult<ActionInfo>> {
+export async function patchMethod2(_: IpcMainInvokeEvent, rootPath: string): Promise<NativeResult<ActionInfo>> {
     const log = new ActionLog();
 
     try {
@@ -254,16 +251,16 @@ export async function patchMethod2(_: IpcMainInvokeEvent, rootPath: string, qual
         log.info("=== Patch Voice Playground Method ===");
         log.info(`Discord root: ${methodTarget.discordRoot}`);
         log.info(`Voice dir: ${methodTarget.voiceDir}`);
-        log.info(`Stereo quality: ${quality}`);
+        log.info("Stereo quality: 512");
 
         if (!await looksLikeDiscordVoiceDir(methodTarget.voiceDir)) {
             throw new Error(`Voice Playground Method target folder was not found or is incomplete: ${methodTarget.voiceDir}`);
         }
 
         await ensurePermanentUnpatchedBackup(methodTarget, log);
-        const patchedVoiceDir = await prepareMethod2Payload(quality, log);
-        await scheduleWorker("Patch", patchedVoiceDir, methodTarget, "voicePlayground", log, "singleFile");
-        log.ok("Patch scheduled. Discord will close, install Voice Playground Method, then reopen.");
+        const patchedVoiceDir = await prepareMethod2Payload(log);
+        await scheduleWorker("Patch", patchedVoiceDir, methodTarget, "voicePlayground", log, "singleFile", "discord_voice.node", true);
+        log.ok("Patch scheduled. Discord will close, install Voice Playground Method with index.js, then reopen.");
 
         return ok({ ...await installInfoFromTarget(methodTarget), logPath: logPath() }, log.lines);
     } catch (error) {
@@ -1064,26 +1061,22 @@ async function method2Target(target: Target): Promise<Target> {
     };
 }
 
-function method2Payload(quality: StereoMethod2Quality): string {
-    if (quality === "128") return method128;
-    if (quality === "384") return method384;
-    if (quality === "512") return method512;
-
-    throw new Error("Invalid Voice Playground Method quality selected.");
-}
-
-async function prepareMethod2Payload(quality: StereoMethod2Quality, log: ActionLog): Promise<string> {
+async function prepareMethod2Payload(log: ActionLog): Promise<string> {
     const staging = join(hubDataDir(), "staging", "method2_payload");
-    const targetFile = join(staging, "discord_voice.node");
+    const voiceFile = join(staging, "discord_voice.node");
+    const indexFile = join(staging, "index.js");
     assertPathInside(hubDataDir(), staging);
-    assertPathInside(staging, targetFile);
+    assertPathInside(staging, voiceFile);
+    assertPathInside(staging, indexFile);
 
     await mkdir(staging, { recursive: true });
     await clearDirContents(staging, hubDataDir());
-    await writeFile(targetFile, Buffer.from(method2Payload(quality), "base64"));
-    validateDownloadPayload("discord_voice.node", await readFile(targetFile));
+    await writeFile(voiceFile, Buffer.from(method512, "base64"));
+    await writeFile(indexFile, Buffer.from(method2Index, "base64"));
+    validateDownloadPayload("discord_voice.node", await readFile(voiceFile));
+    validateDownloadPayload("index.js", await readFile(indexFile));
 
-    log.ok(`Prepared Voice Playground Method payload: ${quality}.`);
+    log.ok("Prepared Voice Playground Method payload with index.js: 512.");
 
     return staging;
 }
@@ -1182,7 +1175,7 @@ async function downloadPatchedPayload(log: ActionLog): Promise<string> {
     return payloadVoice;
 }
 
-async function scheduleWorker(actionName: "Patch" | "Revert", sourceDir: string, target: Target, metaMethod: PatchMethod | undefined, log: ActionLog, copyMode: WorkerConfig["copyMode"] = "directory", fileName: SingleFileName = "discord_voice.node"): Promise<void> {
+async function scheduleWorker(actionName: "Patch" | "Revert", sourceDir: string, target: Target, metaMethod: PatchMethod | undefined, log: ActionLog, copyMode: WorkerConfig["copyMode"] = "directory", fileName: SingleFileName = "discord_voice.node", copyMethod2Index = false): Promise<void> {
     assertPathInside(hubDataDir(), sourceDir);
     assertPathInside(target.discordRoot, target.voiceDir);
 
@@ -1201,6 +1194,7 @@ async function scheduleWorker(actionName: "Patch" | "Revert", sourceDir: string,
         targetDir: target.voiceDir,
         copyMode,
         fileName: copyMode === "singleFile" ? fileName : undefined,
+        copyMethod2Index: copyMode === "singleFile" && copyMethod2Index || undefined,
         metaPath: metaMethod ? metaPathForRoot(target.discordRoot, metaMethod) : undefined,
         statePath: statePathForRoot(target.discordRoot),
         activeMethod: metaMethod,
@@ -1506,6 +1500,9 @@ try {
 
     if ($config.copyMode -eq "singleFile") {
         Copy-SingleFile -SourceDir ([string] $config.sourceDir) -TargetDir ([string] $config.targetDir) -FileName ([string] $config.fileName)
+        if ($config.copyMethod2Index) {
+            Copy-SingleFile -SourceDir ([string] $config.sourceDir) -TargetDir ([string] $config.targetDir) -FileName "index.js"
+        }
     } else {
         Clear-DirContents -PathValue ([string] $config.targetDir)
         Write-InstallerLog "Cleared target directory."
@@ -1718,6 +1715,10 @@ async function main() {
         if (config.copyMode === "singleFile") {
             const result = await copySingleFile(config.sourceDir, config.targetDir, singleFileName(config));
             await appendLog(config, "Copied " + result.src + " -> " + result.dst + " (before " + result.beforeSize + " bytes, after " + result.afterSize + " bytes).");
+            if (config.copyMethod2Index) {
+                const indexResult = await copySingleFile(config.sourceDir, config.targetDir, "index.js");
+                await appendLog(config, "Copied " + indexResult.src + " -> " + indexResult.dst + " (before " + indexResult.beforeSize + " bytes, after " + indexResult.afterSize + " bytes).");
+            }
         } else {
             await clearDirContents(config.targetDir);
             await appendLog(config, "Cleared target directory.");

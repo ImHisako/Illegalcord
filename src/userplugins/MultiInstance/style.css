@@ -7,70 +7,159 @@
 .vc-multi-instance-body {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    width: min(900px, calc(100vw - 96px));
+    gap: 14px;
+    width: min(920px, calc(100vw - 96px));
     max-width: 100%;
+    padding-bottom: 4px;
 }
 
-.vc-multi-instance-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex: 0 0 auto;
-    background: var(--status-danger);
+.vc-multi-instance-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 18px;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--brand-500) 38%, var(--background-modifier-accent));
+    border-radius: 16px;
+    background:
+        radial-gradient(circle at 85% 10%, color-mix(in srgb, var(--brand-500) 24%, transparent), transparent 44%),
+        linear-gradient(135deg, var(--background-secondary), var(--background-tertiary));
+    box-shadow: var(--elevation-low);
 }
 
-.vc-multi-instance-dot-open {
-    background: var(--status-positive);
+.vc-multi-instance-current {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    min-width: 0;
 }
 
-.vc-multi-instance-text {
-    flex: 1 1 320px;
-    margin: 0;
-    color: var(--text-muted);
-    font-size: 15px;
-    line-height: 18px;
-}
-
-.vc-multi-instance-explainer {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-}
-
-.vc-multi-instance-explainer > div {
+.vc-multi-instance-current > div {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    min-height: 58px;
-    padding: 14px;
-    border: 1px solid var(--background-modifier-accent);
-    border-radius: 8px;
-    background: var(--background-secondary);
+    min-width: 0;
 }
 
-.vc-multi-instance-explainer strong {
-    color: var(--text-normal);
+.vc-multi-instance-current strong {
+    overflow: hidden;
+    color: var(--header-primary);
+    font-size: 18px;
+    line-height: 22px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.vc-multi-instance-explainer span {
+.vc-multi-instance-current-handle {
     color: var(--text-muted);
     font-size: 13px;
+}
+
+.vc-multi-instance-kicker {
+    color: var(--brand-360);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .07em;
+    line-height: 15px;
+    text-transform: uppercase;
+}
+
+.vc-multi-instance-active-badge {
+    padding: 5px 9px;
+    border-radius: 999px;
+    color: var(--status-positive-text);
+    background: color-mix(in srgb, var(--status-positive) 18%, transparent);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.vc-multi-instance-stats {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 8px;
+}
+
+.vc-multi-instance-stats > div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 74px;
+    padding: 10px 12px;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--background-primary) 72%, transparent);
+}
+
+.vc-multi-instance-stats strong {
+    color: var(--header-primary);
+    font-size: 20px;
+    line-height: 22px;
+}
+
+.vc-multi-instance-stats span {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.vc-multi-instance-modes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.vc-multi-instance-mode-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 14px;
+    border: 1px solid color-mix(in srgb, var(--brand-500) 30%, var(--background-modifier-accent));
+    border-radius: 13px;
+    background: var(--background-secondary);
+    transition: border-color .16s ease, transform .16s ease, background .16s ease;
+}
+
+.vc-multi-instance-mode-card:hover {
+    border-color: color-mix(in srgb, var(--brand-500) 48%, var(--background-modifier-accent));
+    background: var(--background-modifier-hover);
+    transform: translateY(-1px);
+}
+
+.vc-multi-instance-mode-icon {
+    display: grid;
+    flex: 0 0 auto;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    border-radius: 11px;
+    color: var(--brand-360);
+    background: color-mix(in srgb, var(--brand-500) 15%, var(--background-primary));
+}
+
+.vc-multi-instance-mode-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.vc-multi-instance-mode-card strong {
+    color: var(--header-primary);
+    font-size: 14px;
+}
+
+.vc-multi-instance-mode-card span {
+    color: var(--text-muted);
+    font-size: 12px;
     line-height: 16px;
 }
 
 .vc-multi-instance-warning {
-    padding: 12px 14px;
-    border: 1px solid var(--status-warning);
-    border-radius: 8px;
+    padding: 11px 14px;
+    border: 1px solid color-mix(in srgb, var(--status-warning) 65%, var(--background-modifier-accent));
+    border-radius: 11px;
     color: var(--text-normal);
-    background: var(--background-secondary);
-}
-
-.vc-multi-instance-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+    background: color-mix(in srgb, var(--status-warning) 9%, var(--background-secondary));
 }
 
 .vc-multi-instance-toolbar {
@@ -78,55 +167,117 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    flex-wrap: wrap;
+    padding-top: 2px;
+}
+
+.vc-multi-instance-toolbar-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.vc-multi-instance-toolbar strong {
+    color: var(--header-primary);
+    font-size: 15px;
+}
+
+.vc-multi-instance-toolbar span {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.vc-multi-instance-toolbar-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.vc-multi-instance-list {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
 }
 
 .vc-multi-instance-row {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 16px;
-    min-height: 76px;
-    padding: 16px;
+    min-height: 78px;
+    padding: 13px 14px;
     border: 1px solid var(--background-modifier-accent);
-    border-radius: 8px;
+    border-radius: 14px;
     background: var(--background-secondary);
+    cursor: context-menu;
+    transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease, background .16s ease;
+}
+
+.vc-multi-instance-row:hover {
+    border-color: color-mix(in srgb, var(--brand-500) 42%, var(--background-modifier-accent));
+    background: var(--background-modifier-hover);
+    transform: translateY(-1px);
+}
+
+.vc-multi-instance-row-open {
+    border-color: color-mix(in srgb, var(--brand-500) 62%, var(--background-modifier-accent));
+    box-shadow: inset 3px 0 0 var(--brand-500), var(--elevation-low);
 }
 
 .vc-multi-instance-row-info,
 .vc-multi-instance-actions,
-.vc-multi-instance-add,
-.vc-multi-instance-rename {
+.vc-multi-instance-rename,
+.vc-multi-instance-add-controls {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 9px;
 }
 
 .vc-multi-instance-row-info {
-    flex: 1 1 280px;
-    min-width: 0;
-    padding-top: 2px;
-}
-
-.vc-multi-instance-profile {
     flex: 1 1 auto;
     min-width: 0;
 }
 
-.vc-multi-instance-actions {
-    flex: 0 1 470px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
+.vc-multi-instance-avatar {
+    position: relative;
+    display: grid;
+    flex: 0 0 48px;
+    width: 48px;
+    height: 48px;
+    place-items: center;
 }
 
-.vc-multi-instance-actions button,
-.vc-multi-instance-add button,
-.vc-multi-instance-rename button {
-    min-height: 34px;
+.vc-multi-instance-avatar-placeholder {
+    display: grid;
+    width: 48px;
+    height: 48px;
+    place-items: center;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 50%;
+    color: var(--interactive-normal);
+    background:
+        radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--brand-500) 25%, transparent), transparent 55%),
+        var(--background-primary);
 }
 
-.vc-multi-instance-actions button {
-    min-width: 84px;
+.vc-multi-instance-dot {
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 12px;
+    height: 12px;
+    border: 3px solid var(--background-secondary);
+    border-radius: 50%;
+    background: var(--interactive-muted);
+}
+
+.vc-multi-instance-dot-open {
+    background: var(--status-positive);
+}
+
+.vc-multi-instance-profile {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
 }
 
 .vc-multi-instance-name,
@@ -137,47 +288,121 @@
 }
 
 .vc-multi-instance-name {
-    color: var(--text-normal);
+    color: var(--header-primary);
     font-size: 16px;
-    font-weight: 600;
+    font-weight: 650;
     line-height: 20px;
 }
 
 .vc-multi-instance-id {
     color: var(--text-muted);
-    font-size: 13px;
-    line-height: 17px;
+    font-size: 12px;
+    line-height: 16px;
+}
+
+.vc-multi-instance-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 6px;
+}
+
+.vc-multi-instance-tags span {
+    padding: 3px 7px;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 999px;
+    color: var(--text-muted);
+    background: var(--background-primary);
+    font-size: 10px;
+    font-weight: 650;
+    line-height: 13px;
+}
+
+.vc-multi-instance-actions {
+    flex: 0 0 auto;
+}
+
+.vc-multi-instance-actions button,
+.vc-multi-instance-add-controls button,
+.vc-multi-instance-rename button {
+    min-height: 34px;
+}
+
+.vc-multi-instance-rename {
+    margin-bottom: 4px;
+}
+
+.vc-multi-instance-rename-input {
+    flex: 1 1 auto;
+    min-width: 220px;
 }
 
 .vc-multi-instance-add {
-    align-items: stretch;
-    gap: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px;
+    border: 1px dashed color-mix(in srgb, var(--brand-500) 52%, var(--background-modifier-accent));
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--brand-500) 5%, var(--background-secondary));
 }
 
-.vc-multi-instance-add > div,
-.vc-multi-instance-rename > div {
+.vc-multi-instance-add > div:first-child {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.vc-multi-instance-add strong {
+    color: var(--header-primary);
+    font-size: 14px;
+}
+
+.vc-multi-instance-add span {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.vc-multi-instance-add-controls {
+    flex: 0 1 390px;
+}
+
+.vc-multi-instance-add-input {
     flex: 1 1 auto;
-    min-width: 240px;
+    min-width: 220px;
 }
 
-.vc-multi-instance-add button {
-    min-width: 122px;
-}
-
-@media (max-width: 760px) {
+@media (width <= 760px) {
     .vc-multi-instance-body {
-        width: min(900px, calc(100vw - 48px));
+        width: min(920px, calc(100vw - 48px));
     }
 
-    .vc-multi-instance-explainer {
-        grid-template-columns: 1fr;
-    }
-
-    .vc-multi-instance-row {
+    .vc-multi-instance-hero,
+    .vc-multi-instance-toolbar,
+    .vc-multi-instance-row,
+    .vc-multi-instance-add {
+        align-items: stretch;
         flex-direction: column;
     }
 
+    .vc-multi-instance-stats {
+        width: 100%;
+    }
+
+    .vc-multi-instance-stats > div {
+        flex: 1 1 0;
+    }
+
+    .vc-multi-instance-modes {
+        grid-template-columns: 1fr;
+    }
+
     .vc-multi-instance-actions {
-        justify-content: flex-start;
+        justify-content: flex-end;
+    }
+
+    .vc-multi-instance-add-controls {
+        flex-basis: auto;
     }
 }

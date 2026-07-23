@@ -11,15 +11,17 @@ import { definePluginSettings } from "@api/Settings";
 import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { classes } from "@utils/misc";
+import { useTimer } from "@utils/react";
 import definePlugin, { OptionType, type PluginNative } from "@utils/types";
 import type { RenderModalProps } from "@vencord/discord-types";
-import { Modal, openModal, React, showToast, TextInput, Toasts, UserStore, useStateFromStores } from "@webpack/common";
-import type { SVGProps } from "react";
+import { Avatar, ContextMenuApi, Menu, Modal, openModal, React, showToast, TextInput, Toasts, UserStore, useStateFromStores } from "@webpack/common";
+import type { MouseEvent as ReactMouseEvent, SVGProps } from "react";
+
+import type { InstanceMode, InstanceStatus, InstanceUser } from "./native";
 
 const Native = VencordNative?.pluginHelpers?.MultiInstance as PluginNative<typeof import("./native")> | undefined;
 
 const ICON_SETTING_KEYS: Array<"showIcon"> = ["showIcon"];
-const PROFILE_SETTING_KEYS: Array<"instances"> = ["instances"];
 const SESSION_SETTING_KEYS: Array<"blockExternalTokenAccess" | "performanceMode"> = ["blockExternalTokenAccess", "performanceMode"];
 const DOMAINS = ["discord.com", "ptb.discord.com", "canary.discord.com"] as const;
 const DOMAIN_LABELS: Record<DiscordDomain, string> = {
@@ -38,6 +40,8 @@ interface InstanceProfile {
     name: string;
     saveSession?: boolean;
     domain?: DiscordDomain;
+    mode?: InstanceMode;
+    user?: InstanceUser;
 }
 
 interface PrivateSettings {
@@ -56,6 +60,18 @@ function getDomain(profile: InstanceProfile) {
     return profile.domain ?? DEFAULT_DOMAIN;
 }
 
+function isInstanceUser(value: unknown): value is InstanceUser {
+    return typeof value === "object" &&
+        value !== null &&
+        "id" in value &&
+        "username" in value &&
+        "avatarUrl" in value &&
+        typeof value.id === "string" &&
+        typeof value.username === "string" &&
+        typeof value.avatarUrl === "string" &&
+        (!("globalName" in value) || typeof value.globalName === "string" || value.globalName == null);
+}
+
 function isProfile(value: unknown): value is InstanceProfile {
     return typeof value === "object" &&
         value !== null &&
@@ -65,6 +81,8 @@ function isProfile(value: unknown): value is InstanceProfile {
         typeof value.name === "string" &&
         (!("saveSession" in value) || typeof value.saveSession === "boolean") &&
         (!("domain" in value) || isDomain(value.domain)) &&
+        (!("mode" in value) || value.mode === "detached" || value.mode === "grouped") &&
+        (!("user" in value) || isInstanceUser(value.user)) &&
         /^[a-z0-9_-]{1,32}$/i.test(value.id) &&
         value.name.trim().length > 0;
 }
@@ -79,7 +97,9 @@ function getProfiles(value: unknown) {
             id: profile.id.toLowerCase(),
             name: profile.name.trim(),
             saveSession: profile.saveSession,
-            domain: getDomain(profile)
+            domain: getDomain(profile),
+            mode: profile.mode ?? "detached",
+            user: profile.user
         }))
         .filter(profile => {
             if (seen.has(profile.id)) return false;
@@ -126,6 +146,30 @@ export function MultiInstanceIcon({ width = 20, height = 20, className }: SVGPro
     );
 }
 
+function InstanceAvatar({ status }: { status?: InstanceStatus; }) {
+    if (status?.user) {
+        return <Avatar src={status.user.avatarUrl} size="SIZE_48" aria-label={`${status.user.username} avatar`} />;
+    }
+
+    return (
+        <div className="vc-multi-instance-avatar-placeholder">
+            <MultiInstanceIcon width={24} height={24} />
+        </div>
+    );
+}
+
+async function reportCurrentInstanceUser() {
+    if (!Native) return;
+
+    const user = UserStore.getCurrentUser();
+    await Native.reportInstanceUser(user ? {
+        id: user.id,
+        username: user.username,
+        globalName: user.globalName,
+        avatarUrl: user.getAvatarURL(null, 128, false)
+    } : null);
+}
+
 function saveProfiles(profiles: InstanceProfile[]) {
     settings.store.instances = profiles;
 }
@@ -168,46 +212,77 @@ const settings = definePluginSettings({
 
 function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
     const currentUser = useStateFromStores([UserStore], () => UserStore.getCurrentUser());
-    const profiles = getProfiles(settings.use(PROFILE_SETTING_KEYS).instances);
     const { blockExternalTokenAccess, performanceMode } = settings.use(SESSION_SETTING_KEYS);
-    const [openIds, setOpenIds] = React.useState<string[]>([]);
+    const [profiles, setProfiles] = React.useState(() => getProfiles(settings.plain.instances));
+    const profilesRef = React.useRef(profiles);
+    const [instances, setInstances] = React.useState<InstanceStatus[]>([]);
     const [busyId, setBusyId] = React.useState<string | null>(null);
     const [newName, setNewName] = React.useState("");
     const [editingId, setEditingId] = React.useState<string | null>(null);
     const [editingName, setEditingName] = React.useState("");
+    const refreshTick = useTimer({ interval: 1000 });
 
     const refreshInstances = React.useCallback(async () => {
         if (!Native) {
-            setOpenIds([]);
+            setInstances([]);
             return;
         }
 
-        const instances: string[] = await Native.getOpenInstances().catch((): string[] => []);
-        setOpenIds(instances);
+        const openInstances = await Native.getOpenInstances().catch((): InstanceStatus[] => []);
+        setInstances(openInstances);
+
+        let changed = false;
+        const nextProfiles = profilesRef.current.map(profile => {
+            const user = openInstances.find(instance => instance.id === profile.id)?.user;
+            if (
+                !user ||
+                profile.user?.id === user.id &&
+                profile.user.username === user.username &&
+                profile.user.globalName === user.globalName &&
+                profile.user.avatarUrl === user.avatarUrl
+            ) return profile;
+
+            changed = true;
+            return { ...profile, user };
+        });
+
+        if (changed) {
+            profilesRef.current = nextProfiles;
+            setProfiles(nextProfiles);
+            saveProfiles(nextProfiles);
+        }
     }, []);
 
     React.useEffect(() => {
         void refreshInstances();
-    }, [refreshInstances]);
+    }, [refreshInstances, refreshTick]);
 
-    function updateProfile(profileId: string, patch: Partial<Pick<InstanceProfile, "name" | "saveSession" | "domain">>) {
-        saveProfiles(profiles.map(profile => profile.id === profileId ? { ...profile, ...patch } : profile));
+    function changeProfiles(change: (profiles: InstanceProfile[]) => InstanceProfile[]) {
+        const nextProfiles = change(profilesRef.current);
+        profilesRef.current = nextProfiles;
+        setProfiles(nextProfiles);
+        saveProfiles(nextProfiles);
     }
 
-    async function openInstance(profile: InstanceProfile) {
+    function updateProfile(profileId: string, patch: Partial<Pick<InstanceProfile, "name" | "saveSession" | "domain" | "mode" | "user">>) {
+        changeProfiles(profiles => profiles.map(profile => profile.id === profileId ? { ...profile, ...patch } : profile));
+    }
+
+    async function openInstance(profile: InstanceProfile, mode: InstanceMode = profile.mode ?? "detached") {
         if (!Native) {
             showToast("Multi Instance native helper is not available in this build.", Toasts.Type.FAILURE);
             return;
         }
 
         setBusyId(profile.id);
+        updateProfile(profile.id, { mode });
 
         const saveSession = shouldSaveSession(profile);
-        const result = await Native.openInstance(profile.id, profile.name, saveSession, getDomain(profile), blockExternalTokenAccess, performanceMode)
+        const result = await Native.openInstance(profile.id, profile.name, saveSession, getDomain(profile), blockExternalTokenAccess, performanceMode, mode)
             .catch(error => ({ ok: false, error: getErrorMessage(error) }));
 
         if (result.ok) {
-            showToast(`${profile.name} opened${blockExternalTokenAccess ? " with token protection." : saveSession ? "." : " as a temporary session."}`, Toasts.Type.SUCCESS);
+            showToast(`${profile.name} opened as a ${mode} instance.`, Toasts.Type.SUCCESS);
         } else {
             showToast(result.error ?? `Could not open ${profile.name}.`, Toasts.Type.FAILURE);
         }
@@ -264,7 +339,7 @@ function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
             return;
         }
 
-        if (openIds.includes(profile.id)) {
+        if (instances.some(instance => instance.id === profile.id)) {
             showToast("Close this instance before clearing its saved session.", Toasts.Type.FAILURE);
             return;
         }
@@ -275,6 +350,7 @@ function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
             .catch(error => ({ ok: false, error: getErrorMessage(error) }));
 
         if (result.ok) {
+            updateProfile(profile.id, { user: undefined });
             showToast(`${profile.name} saved session cleared.`, Toasts.Type.SUCCESS);
         } else {
             showToast(result.error ?? `Could not clear ${profile.name}.`, Toasts.Type.FAILURE);
@@ -284,10 +360,14 @@ function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
     }
 
     function addInstance() {
-        const name = newName.trim() || `Discord Instance ${profiles.length + 1}`;
-        const id = makeProfileId(name, profiles);
+        const requestedName = newName.trim();
 
-        saveProfiles([...profiles, { id, name, saveSession: settings.store.saveSessionsByDefault, domain: DEFAULT_DOMAIN }]);
+        changeProfiles(profiles => {
+            const name = requestedName || `Discord Instance ${profiles.length + 1}`;
+            const id = makeProfileId(name, profiles);
+
+            return [...profiles, { id, name, saveSession: settings.store.saveSessionsByDefault, domain: DEFAULT_DOMAIN, mode: "detached" }];
+        });
         setNewName("");
     }
 
@@ -320,17 +400,91 @@ function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
     }
 
     async function removeInstance(profile: InstanceProfile) {
-        if (openIds.includes(profile.id)) await closeInstance(profile);
+        if (instances.some(instance => instance.id === profile.id)) await closeInstance(profile);
 
-        saveProfiles(profiles.filter(({ id }) => id !== profile.id));
+        changeProfiles(profiles => profiles.filter(({ id }) => id !== profile.id));
+    }
+
+    function openInstanceMenu(event: ReactMouseEvent, profile: InstanceProfile, status?: InstanceStatus) {
+        event.preventDefault();
+        const isBusy = busyId === profile.id || busyId === ALL_INSTANCES_BUSY_ID;
+
+        ContextMenuApi.openContextMenu(event, () => (
+            <Menu.Menu
+                navId="multi-instance-profile-menu"
+                onClose={ContextMenuApi.closeContextMenu}
+                aria-label={`${profile.name} options`}
+            >
+                <Menu.MenuItem
+                    id="multi-instance-open-grouped"
+                    label="Open grouped with Discord"
+                    disabled={!!status || isBusy}
+                    action={() => void openInstance(profile, "grouped")}
+                />
+                <Menu.MenuItem
+                    id="multi-instance-open-detached"
+                    label="Open separate Illegalcord window"
+                    disabled={!!status || isBusy}
+                    action={() => void openInstance(profile, "detached")}
+                />
+                {status && (
+                    <>
+                        <Menu.MenuItem
+                            id="multi-instance-focus"
+                            label="Focus instance"
+                            disabled={isBusy}
+                            action={() => void openInstance(profile, status.mode)}
+                        />
+                        <Menu.MenuItem
+                            id="multi-instance-close"
+                            label="Close instance"
+                            disabled={isBusy}
+                            action={() => void closeInstance(profile)}
+                        />
+                    </>
+                )}
+                <Menu.MenuSeparator />
+                <Menu.MenuItem
+                    id="multi-instance-rename"
+                    label="Rename profile"
+                    disabled={isBusy}
+                    action={() => startRename(profile)}
+                />
+                <Menu.MenuItem
+                    id="multi-instance-session"
+                    label={shouldSaveSession(profile) ? "Use a temporary session" : "Save this session"}
+                    disabled={isBusy || !!status || blockExternalTokenAccess}
+                    action={() => toggleSessionSaving(profile)}
+                />
+                <Menu.MenuItem
+                    id="multi-instance-domain"
+                    label={`Switch to ${DOMAIN_LABELS[DOMAINS[(DOMAINS.indexOf(getDomain(profile)) + 1) % DOMAINS.length]]}`}
+                    disabled={isBusy || !!status}
+                    action={() => cycleDomain(profile)}
+                />
+                <Menu.MenuItem
+                    id="multi-instance-clear"
+                    label="Clear saved session"
+                    disabled={isBusy || !!status}
+                    action={() => void clearSavedSession(profile)}
+                />
+                <Menu.MenuItem
+                    id="multi-instance-remove"
+                    label="Remove profile"
+                    color="danger"
+                    disabled={isBusy || profiles.length === 1}
+                    action={() => void removeInstance(profile)}
+                />
+            </Menu.Menu>
+        ));
     }
 
     return (
         <Modal
             {...rootProps}
             size="xl"
-            title="Multi Instance"
-            subtitle="Open separate Illegalcord windows, each with its own Discord login."
+            title="Multi Instance Studio"
+            subtitle="Left click Open to launch or focus. Right click a profile for grouped, separate and advanced options."
         >
             <div className="vc-multi-instance-body">
                 {!Native && (
@@ -339,68 +493,100 @@ function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
                     </div>
                 )}
 
-                <div className="vc-multi-instance-explainer">
-                    <div>
-                        <strong>Saved session</strong>
-                        <span>Keeps login, cookies, and local Discord data until you clear it.</span>
+                <div className="vc-multi-instance-hero">
+                    <div className="vc-multi-instance-current">
+                        {currentUser
+                            ? <Avatar src={currentUser.getAvatarURL(null, 128, false)} size="SIZE_48" aria-label={`${currentUser.username} avatar`} />
+                            : <InstanceAvatar />}
+                        <div>
+                            <span className="vc-multi-instance-kicker">Active account</span>
+                            <strong>{currentUser?.globalName ?? currentUser?.username ?? "Connecting..."}</strong>
+                            <span className="vc-multi-instance-current-handle">{currentUser ? `@${currentUser.username}` : "Waiting for Discord account"}</span>
+                        </div>
+                        <span className="vc-multi-instance-active-badge">Active</span>
                     </div>
-                    <div>
-                        <strong>Temporary session</strong>
-                        <span>Exists only while that instance window is open.</span>
+                    <div className="vc-multi-instance-stats">
+                        <div><strong>{profiles.length}</strong><span>Profiles</span></div>
+                        <div><strong>{instances.length}</strong><span>Running</span></div>
                     </div>
-                    <div>
-                        <strong>Token protection</strong>
-                        <span>Forces temporary sessions and clears saved login data before opening.</span>
+                </div>
+
+                <div className="vc-multi-instance-modes">
+                    <div className="vc-multi-instance-mode-card">
+                        <div className="vc-multi-instance-mode-icon"><MultiInstanceIcon /></div>
+                        <div className="vc-multi-instance-mode-copy">
+                            <strong>Grouped instance</strong>
+                            <span>Uses the Discord client taskbar group while keeping a separate login session.</span>
+                        </div>
                     </div>
-                    <div>
-                        <strong>Performance mode</strong>
-                        <span>Throttles background instances to reduce CPU usage after reopening.</span>
+                    <div className="vc-multi-instance-mode-card">
+                        <div className="vc-multi-instance-mode-icon"><MultiInstanceIcon /></div>
+                        <div className="vc-multi-instance-mode-copy">
+                            <strong>Separate Illegalcord instance</strong>
+                            <span>Gets its own taskbar identity and the Illegalcord app icon.</span>
+                        </div>
                     </div>
                 </div>
 
                 {blockExternalTokenAccess && (
                     <div className="vc-multi-instance-warning">
-                        Token protection is enabled. Instances will not use saved sessions while this setting is on.
+                        Token protection is enabled. Every alt will use a protected temporary session.
                     </div>
                 )}
 
                 <div className="vc-multi-instance-toolbar">
-                    <p className="vc-multi-instance-text">
-                        {currentUser
-                            ? `This window stays on @${currentUser.username}. Extra instances use their own Electron session.`
-                            : "Extra instances use their own Electron session."}
-                    </p>
-                    <Button
-                        size="small"
-                        variant="secondary"
-                        disabled={!openIds.length || busyId === ALL_INSTANCES_BUSY_ID}
-                        onClick={() => void closeAllInstances()}
-                    >
-                        Close all instances
-                    </Button>
+                    <div className="vc-multi-instance-toolbar-copy">
+                        <strong>Other accounts</strong>
+                        <span>Left click Open for quick switch. Right click any profile for the options menu.</span>
+                    </div>
+                    <div className="vc-multi-instance-toolbar-actions">
+                        <Button size="small" variant="secondary" onClick={() => void refreshInstances()}>
+                            Refresh
+                        </Button>
+                        <Button
+                            size="small"
+                            variant="secondary"
+                            disabled={!instances.length || busyId === ALL_INSTANCES_BUSY_ID}
+                            onClick={() => void closeAllInstances()}
+                        >
+                            Close all
+                        </Button>
+                    </div>
                 </div>
 
                 <div className="vc-multi-instance-list">
                     {profiles.map(profile => {
-                        const isOpen = openIds.includes(profile.id);
+                        const status = instances.find(instance => instance.id === profile.id);
+                        const isOpen = !!status;
                         const isBusy = busyId === profile.id || busyId === ALL_INSTANCES_BUSY_ID;
                         const saveSession = shouldSaveSession(profile);
                         const domain = getDomain(profile);
                         const isEditing = editingId === profile.id;
                         const sessionLabel = blockExternalTokenAccess ? "Protected temporary session" : saveSession ? "Saved session" : "Temporary session";
+                        const mode = status?.mode ?? profile.mode ?? "detached";
+                        const user = status?.user ?? profile.user;
 
                         return (
-                            <div className="vc-multi-instance-row" key={profile.id}>
+                            <div
+                                className={classes("vc-multi-instance-row", isOpen && "vc-multi-instance-row-open")}
+                                key={profile.id}
+                                onContextMenu={event => openInstanceMenu(event, profile, status)}
+                            >
                                 <div className="vc-multi-instance-row-info">
-                                    <span className={classes("vc-multi-instance-dot", isOpen && "vc-multi-instance-dot-open")} />
+                                    <div className="vc-multi-instance-avatar">
+                                        <InstanceAvatar status={status} />
+                                        <span className={classes("vc-multi-instance-dot", isOpen && "vc-multi-instance-dot-open")} />
+                                    </div>
                                     <div className="vc-multi-instance-profile">
                                         {isEditing ? (
                                             <div className="vc-multi-instance-rename">
-                                                <TextInput
-                                                    value={editingName}
-                                                    placeholder="Instance name"
-                                                    onChange={setEditingName}
-                                                />
+                                                <div className="vc-multi-instance-rename-input">
+                                                    <TextInput
+                                                        value={editingName}
+                                                        placeholder="Instance name"
+                                                        onChange={setEditingName}
+                                                    />
+                                                </div>
                                                 <Button size="small" disabled={isBusy} onClick={() => saveRename(profile)}>
                                                     Save
                                                 </Button>
@@ -409,34 +595,27 @@ function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                                 </Button>
                                             </div>
                                         ) : (
-                                            <div className="vc-multi-instance-name">{profile.name}</div>
+                                            <>
+                                                <span className="vc-multi-instance-kicker">{profile.name}</span>
+                                                <div className="vc-multi-instance-name">{user?.globalName ?? user?.username ?? "Ready for login"}</div>
+                                            </>
                                         )}
                                         <div className="vc-multi-instance-id">
-                                            {profile.id} · {DOMAIN_LABELS[domain]} · {sessionLabel}
+                                            {user ? `@${user.username}` : `Profile ${profile.id}`}
+                                        </div>
+                                        <div className="vc-multi-instance-tags">
+                                            <span>{DOMAIN_LABELS[domain]}</span>
+                                            <span>{sessionLabel}</span>
+                                            <span>{mode === "grouped" ? "Grouped" : "Separate"}</span>
                                         </div>
                                     </div>
                                 </div>
                                 <div className="vc-multi-instance-actions">
-                                    <Button size="small" variant="secondary" disabled={isBusy || isEditing} onClick={() => startRename(profile)}>
-                                        Rename
-                                    </Button>
-                                    <Button size="small" variant="secondary" disabled={isBusy || isOpen} onClick={() => cycleDomain(profile)}>
-                                        {DOMAIN_LABELS[domain]}
-                                    </Button>
-                                    <Button size="small" variant="secondary" disabled={isBusy || isOpen || blockExternalTokenAccess} onClick={() => toggleSessionSaving(profile)}>
-                                        {blockExternalTokenAccess ? "Protected" : saveSession ? "Use once" : "Save"}
-                                    </Button>
-                                    <Button size="small" disabled={isBusy || isEditing} onClick={() => void openInstance(profile)}>
+                                    <Button size="small" disabled={isBusy || isEditing} onClick={() => void openInstance(profile, mode)}>
                                         {isOpen ? "Focus" : "Open"}
                                     </Button>
-                                    <Button size="small" variant="secondary" disabled={isBusy || !isOpen} onClick={() => void closeInstance(profile)}>
-                                        Close
-                                    </Button>
-                                    <Button size="small" variant="dangerSecondary" disabled={isBusy || isOpen} onClick={() => void clearSavedSession(profile)}>
-                                        Clear saved session
-                                    </Button>
-                                    <Button size="small" variant="dangerSecondary" disabled={isBusy || profiles.length === 1} onClick={() => void removeInstance(profile)}>
-                                        Remove
+                                    <Button size="small" variant="secondary" disabled={isBusy} onClick={event => openInstanceMenu(event, profile, status)}>
+                                        Options
                                     </Button>
                                 </div>
                             </div>
@@ -445,14 +624,22 @@ function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
                 </div>
 
                 <div className="vc-multi-instance-add">
-                    <TextInput
-                        value={newName}
-                        placeholder="New instance name"
-                        onChange={setNewName}
-                    />
-                    <Button size="small" variant="secondary" onClick={addInstance}>
-                        Add instance
-                    </Button>
+                    <div>
+                        <strong>Create an alt profile</strong>
+                        <span>Its login data remains isolated from every other profile.</span>
+                    </div>
+                    <div className="vc-multi-instance-add-controls">
+                        <div className="vc-multi-instance-add-input">
+                            <TextInput
+                                value={newName}
+                                placeholder="Profile name"
+                                onChange={setNewName}
+                            />
+                        </div>
+                        <Button size="small" onClick={addInstance}>
+                            Add profile
+                        </Button>
+                    </div>
                 </div>
             </div>
         </Modal>
@@ -489,6 +676,17 @@ export default definePlugin({
         icon: MultiInstanceIcon,
         render: () => <MultiInstanceButtonWithBoundary />,
         priority: 9
+    },
+    start() {
+        void reportCurrentInstanceUser().catch(() => undefined);
+    },
+    flux: {
+        async CONNECTION_OPEN() {
+            await reportCurrentInstanceUser();
+        },
+        async CURRENT_USER_UPDATE() {
+            await reportCurrentInstanceUser();
+        }
     },
     toolboxActions: {
         "Open Multi Instance"() { openMultiInstanceModal(); }
