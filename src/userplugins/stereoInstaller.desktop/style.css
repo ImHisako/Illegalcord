@@ -4,15 +4,61 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+:where(.vc-stereo-installer-warning, .vc-stereo-installer-root) {
+    --si-base: var(--background-base-lowest, var(--background-primary, #111214));
+    --si-panel: var(--background-base-low, var(--background-secondary, #1e1f22));
+    --si-heading: var(--text-strong, var(--header-primary, #f2f3f5));
+    --si-text: var(--text-default, var(--text-normal, #dbdee1));
+    --si-muted: color-mix(in srgb, var(--si-text) 74%, var(--si-panel));
+    --si-line: var(--border-normal, var(--border-subtle, var(--interactive-muted, #4e5058)));
+    --si-border: color-mix(in srgb, var(--si-text) 12%, var(--si-panel));
+    --si-border-strong: color-mix(in srgb, var(--si-text) 22%, var(--si-panel));
+    --si-surface: var(--si-base);
+    --si-surface-raised: var(--background-base-lower, var(--background-secondary-alt, var(--si-panel)));
+    --si-shadow: 0 10px 28px color-mix(in srgb, var(--black-500, #000) 20%, transparent);
+
+    box-sizing: border-box;
+}
+
+.vc-stereo-installer-warning *,
+.vc-stereo-installer-root *,
+.vc-stereo-installer-warning *::before,
+.vc-stereo-installer-root *::before,
+.vc-stereo-installer-warning *::after,
+.vc-stereo-installer-root *::after {
+    box-sizing: border-box;
+}
+
 .vc-stereo-installer-warning {
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 12px;
+    gap: 8px;
+    padding: 14px 16px 14px 18px;
     margin-bottom: 16px;
-    border: 1px solid var(--status-warning);
-    border-radius: 8px;
-    background: var(--background-secondary);
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--status-warning) 76%, var(--si-line));
+    border-radius: 12px;
+    background:
+        linear-gradient(110deg, color-mix(in srgb, var(--status-warning) 13%, transparent), transparent 65%),
+        var(--si-surface);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--si-text) 10%, transparent);
+}
+
+.vc-stereo-installer-warning::before {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: var(--status-warning);
+    content: "";
+}
+
+.vc-stereo-installer-warning h3 {
+    color: var(--si-heading);
+}
+
+.vc-stereo-installer-warning p {
+    color: var(--si-text);
 }
 
 .vc-stereo-installer-warning-actions {
@@ -24,13 +70,23 @@
 .vc-stereo-installer-root {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
 }
 
 .vc-stereo-installer-controls {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid var(--si-border);
+    border-radius: 14px;
+    background: var(--si-surface);
+    box-shadow:
+        0 4px 14px color-mix(in srgb, var(--black-500, #000) 12%, transparent),
+        inset 0 1px 0 color-mix(in srgb, var(--si-text) 8%, transparent);
 }
 
 .vc-stereo-installer-buttons {
@@ -41,56 +97,82 @@
 
 .vc-stereo-installer-select-grid {
     display: grid;
-    gap: 10px;
+    gap: 0;
+    min-width: 0;
 }
 
 .vc-stereo-installer-select-row {
     display: grid;
-    grid-template-columns: minmax(170px, 0.4fr) minmax(220px, 1fr);
-    gap: 12px;
+    grid-template-columns: minmax(170px, .42fr) minmax(220px, 1fr);
+    gap: 16px;
     align-items: center;
+    min-width: 0;
+    padding: 0 0 12px;
+}
+
+.vc-stereo-installer-select-row + .vc-stereo-installer-select-row {
+    padding: 12px 0;
+    border-top: 1px solid var(--si-border);
 }
 
 .vc-stereo-installer-select-row span {
-    color: var(--header-primary);
+    color: var(--si-heading);
     font-weight: 600;
+}
+
+.vc-stereo-installer-select-row p {
+    color: var(--si-muted);
 }
 
 .vc-stereo-installer-method2-note {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 12px;
-    border: 1px solid var(--status-warning);
-    border-radius: 8px;
-    background: var(--background-secondary);
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--status-warning) 70%, var(--si-line));
+    border-radius: 10px;
+    color: var(--si-text);
+    background: color-mix(in srgb, var(--status-warning) 10%, var(--si-panel));
 }
 
 .vc-stereo-installer-info {
     display: grid;
-    gap: 8px;
-    padding: 12px;
-    border: 1px solid var(--background-modifier-accent);
-    border-radius: 8px;
-    background: var(--background-secondary);
+    gap: 0;
+    padding: 6px 14px;
+    border: 1px solid var(--si-border-strong);
+    border-radius: 12px;
+    background: var(--si-surface);
+    box-shadow:
+        0 4px 14px color-mix(in srgb, var(--black-500, #000) 12%, transparent),
+        inset 0 1px 0 color-mix(in srgb, var(--si-text) 8%, transparent);
 }
 
 .vc-stereo-installer-install-status {
+    position: relative;
     display: flex;
     gap: 12px;
     align-items: center;
-    padding: 12px;
-    border: 1px solid currentColor;
-    border-radius: 8px;
-    background: var(--background-secondary);
+    min-width: 0;
+    padding: 13px 15px;
+    overflow: hidden;
+    border: 1px solid currentcolor;
+    border-radius: 12px;
+    background:
+        linear-gradient(110deg, color-mix(in srgb, currentcolor 11%, transparent), transparent 62%),
+        var(--si-surface);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--si-text) 9%, transparent);
 }
 
 .vc-stereo-installer-install-status svg {
     flex: 0 0 auto;
 }
 
+.vc-stereo-installer-install-status > div {
+    min-width: 0;
+}
+
 .vc-stereo-installer-install-status h3 {
-    color: currentColor;
+    color: currentcolor;
 }
 
 .vc-stereo-installer-install-status-installed {
@@ -102,41 +184,68 @@
 }
 
 .vc-stereo-installer-install-status-not-installed {
-    color: var(--text-muted);
+    color: var(--si-muted);
 }
 
 .vc-stereo-installer-install-status p {
-    color: var(--text-normal);
+    color: var(--si-text);
 }
 
 .vc-stereo-installer-info-line {
     display: grid;
-    grid-template-columns: minmax(90px, 0.22fr) minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: minmax(120px, .28fr) minmax(0, 1fr);
+    gap: 16px;
     align-items: start;
+    padding: 9px 0;
+}
+
+.vc-stereo-installer-info-line + .vc-stereo-installer-info-line {
+    border-top: 1px solid var(--si-border);
 }
 
 .vc-stereo-installer-info-line span {
-    color: var(--header-secondary);
+    color: var(--si-muted);
     font-weight: 600;
 }
 
 .vc-stereo-installer-info-line code {
     min-width: 0;
     overflow-wrap: anywhere;
-    color: var(--text-normal);
+    color: var(--si-text);
+    line-height: 1.45;
 }
 
 .vc-stereo-installer-status {
-    color: var(--header-secondary);
+    position: relative;
+    min-height: 34px;
+    padding: 8px 12px 8px 30px;
+    border: 1px solid var(--si-border);
+    border-radius: 9px;
+    color: var(--si-muted);
+    background: var(--si-surface);
+}
+
+.vc-stereo-installer-status::before {
+    position: absolute;
+    top: 50%;
+    left: 13px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--interactive-normal);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--si-text) 10%, transparent);
+    content: "";
+    transform: translateY(-50%);
 }
 
 .vc-stereo-installer-log-panel {
     overflow: hidden;
-    border: 1px solid var(--background-modifier-accent);
-    border-radius: 8px;
-    background: var(--background-secondary-alt);
-    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 3%);
+    border: 1px solid var(--si-border-strong);
+    border-radius: 12px;
+    background: var(--si-surface);
+    box-shadow:
+        var(--si-shadow),
+        inset 0 1px 0 color-mix(in srgb, var(--si-text) 9%, transparent);
 }
 
 .vc-stereo-installer-log-header {
@@ -144,8 +253,17 @@
     gap: 12px;
     align-items: center;
     justify-content: space-between;
-    padding: 12px;
-    border-bottom: 1px solid var(--background-modifier-accent);
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--si-border-strong);
+    background: var(--si-surface-raised);
+}
+
+.vc-stereo-installer-log-header h3 {
+    color: var(--si-heading);
+}
+
+.vc-stereo-installer-log-header p {
+    color: var(--si-muted);
 }
 
 .vc-stereo-installer-log-header button {
@@ -157,19 +275,20 @@
 .vc-stereo-installer-log {
     max-height: 320px;
     overflow: auto;
-    background: var(--background-tertiary);
+    color: var(--si-text);
+    background: var(--si-base);
     font-family: var(--font-code);
     font-size: 12px;
 }
 
 .vc-stereo-installer-log-line {
     display: grid;
-    grid-template-columns: minmax(125px, auto) 64px minmax(0, 1fr);
-    gap: 10px;
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--background-modifier-accent);
-    color: var(--text-normal);
-    line-height: 1.4;
+    grid-template-columns: minmax(136px, auto) 62px minmax(0, 1fr);
+    gap: 12px;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--si-border);
+    color: var(--si-text);
+    line-height: 1.45;
 }
 
 .vc-stereo-installer-log-line:last-child {
@@ -177,11 +296,11 @@
 }
 
 .vc-stereo-installer-log-line:hover {
-    background: var(--background-modifier-hover);
+    background: color-mix(in srgb, var(--si-text) 7%, var(--si-base));
 }
 
 .vc-stereo-installer-log-time {
-    color: var(--text-muted);
+    color: var(--si-muted);
     white-space: nowrap;
 }
 
@@ -212,11 +331,39 @@
 }
 
 .vc-stereo-installer-log-line-info .vc-stereo-installer-log-level {
-    color: var(--text-muted);
+    color: var(--si-muted);
 }
 
 .vc-stereo-installer-log-empty {
     padding: 28px 12px;
-    color: var(--text-muted);
+    color: var(--si-muted);
     text-align: center;
+}
+
+@media (width <= 760px) {
+    .vc-stereo-installer-select-row,
+    .vc-stereo-installer-info-line {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+
+    .vc-stereo-installer-log-line {
+        grid-template-columns: 1fr auto;
+        gap: 4px 10px;
+    }
+
+    .vc-stereo-installer-log-message {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (width <= 520px) {
+    .vc-stereo-installer-log-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .vc-stereo-installer-log-header button {
+        justify-content: center;
+    }
 }

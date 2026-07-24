@@ -5,17 +5,17 @@
  */
 
 .vc-multi-instance-body {
-    --mi-accent: var(--brand-500, #5865f2);
+    --mi-accent: var(--interactive-normal, #b5bac1);
     --mi-base: var(--background-base-lowest, var(--background-primary, #111214));
     --mi-panel: var(--background-base-low, var(--background-secondary, #1e1f22));
     --mi-line: var(--border-normal, var(--border-subtle, var(--interactive-muted, #4e5058)));
-    --mi-border: color-mix(in srgb, var(--mi-accent) 26%, var(--mi-line));
-    --mi-border-strong: color-mix(in srgb, var(--mi-accent) 56%, var(--mi-line));
-    --mi-surface: color-mix(in srgb, var(--mi-panel) 93%, var(--mi-accent) 7%);
-    --mi-surface-raised: color-mix(in srgb, var(--mi-panel) 86%, var(--mi-accent) 14%);
     --mi-heading: var(--text-strong, var(--header-primary, #f2f3f5));
     --mi-text: var(--text-default, var(--text-normal, #dbdee1));
     --mi-muted: color-mix(in srgb, var(--mi-text) 74%, var(--mi-panel));
+    --mi-border: color-mix(in srgb, var(--mi-text) 12%, var(--mi-panel));
+    --mi-border-strong: color-mix(in srgb, var(--mi-text) 22%, var(--mi-panel));
+    --mi-surface: var(--mi-base);
+    --mi-surface-raised: var(--background-base-lower, var(--background-secondary-alt, var(--mi-panel)));
     --mi-shadow: 0 12px 32px color-mix(in srgb, var(--black-500, #000) 22%, transparent);
 
     position: relative;
@@ -108,7 +108,7 @@
 }
 
 .vc-multi-instance-kicker {
-    color: var(--brand-360);
+    color: var(--mi-accent);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: .07em;
@@ -213,7 +213,7 @@
     place-items: center;
     border: 1px solid var(--mi-border-strong);
     border-radius: 11px;
-    color: var(--brand-360);
+    color: var(--mi-accent);
     background: color-mix(in srgb, var(--mi-accent) 17%, var(--mi-base));
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mi-text) 13%, transparent);
 }

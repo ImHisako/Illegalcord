@@ -472,7 +472,7 @@ function StereoInstallerPanel() {
                     <InfoLine label="Platform" value={`${info.platformLabel} ${info.readableOs}`} />
                     <InfoLine label="Voice module" value={info.voiceDir} />
                     {"logPath" in info && <InfoLine label="Log file" value={info.logPath} />}
-                    <InfoLine label={`${METHOD_LABELS[installerMethod]} last patch`} value={selectedLastPatch} />
+                    <InfoLine label="Last patch" value={`${METHOD_LABELS[installerMethod]} · ${selectedLastPatch}`} />
                 </div>
             )}
 
