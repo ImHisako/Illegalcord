@@ -271,7 +271,7 @@ function StereoInstallerPanel() {
                     {isMethod2 ? (
                         <>
                             <Paragraph>
-                                This will install the local 512 discord_voice.node and the bundled index.js into <code>{"modules\\discord_voice-1\\discord_voice"}</code>.
+                                This will install the local 512 discord_voice.node and the bundled index.js into the detected discord_voice module.
                             </Paragraph>
                             <Paragraph>
                                 Voice Playground Method replaces the local voice module to enable higher audio quality. Use only one method on the same Discord install.
@@ -302,7 +302,7 @@ function StereoInstallerPanel() {
             body: (
                 <div>
                     <Paragraph>
-                        This will copy index.js from StereoMethods/Discord-Voice into <code>{"modules\\discord_voice-1\\discord_voice"}</code>.
+                        This will copy index.js from StereoMethods/Discord-Voice into the detected discord_voice module.
                     </Paragraph>
                     <Paragraph>
                         Discord will close while the file is replaced. Use this only if you are fixing Voice Playground Method files or know you need that index.js.

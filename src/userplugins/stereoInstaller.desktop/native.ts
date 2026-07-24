@@ -1051,8 +1051,12 @@ async function method2Target(target: Target): Promise<Target> {
     const appDir = target.appDir || await findDiscordAppDir(target.discordRoot);
     if (!appDir) throw new Error("Could not find the Discord app folder for Voice Playground Method.");
 
-    const voiceDir = join(appDir, "modules", "discord_voice-1", "discord_voice");
-    assertPathInside(target.discordRoot, voiceDir);
+    const modulesDir = join(appDir, "modules");
+    const voiceDir = isPathInside(modulesDir, target.voiceDir)
+        ? target.voiceDir
+        : await findVoiceDirFromAppDir(appDir);
+    if (!voiceDir) throw new Error("Could not find the active discord_voice module for Voice Playground Method.");
+    assertPathInside(modulesDir, voiceDir);
 
     return {
         ...target,

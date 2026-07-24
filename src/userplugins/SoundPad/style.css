@@ -1,0 +1,80 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+.vc-soundpad-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+}
+
+.vc-soundpad-notice {
+    padding: 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    color: var(--text-muted);
+    background: var(--background-secondary);
+}
+
+.vc-soundpad-notice-warning {
+    border-color: var(--status-warning);
+}
+
+.vc-soundpad-device {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.vc-soundpad-toolbar,
+.vc-soundpad-row,
+.vc-soundpad-row-actions,
+.vc-soundpad-settings {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vc-soundpad-toolbar {
+    justify-content: space-between;
+}
+
+.vc-soundpad-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.vc-soundpad-row {
+    padding: 10px 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--background-secondary);
+}
+
+.vc-soundpad-row-info {
+    min-width: 0;
+    flex: 1;
+}
+
+.vc-soundpad-row-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.vc-soundpad-empty {
+    padding: 28px 12px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.vc-soundpad-settings {
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
