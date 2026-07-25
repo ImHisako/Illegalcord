@@ -1,0 +1,199 @@
+/*
+* Vencord, a Discord client mod
+* Copyright (c) 2025 Vendicated and contributors*
+* SPDX-License-Identifier: GPL-3.0-or-later
+*/
+.vc-spatial-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.vc-spatial-panel {
+    background: var(--modal-background);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: var(--shadow-high);
+}
+
+.vc-spatial-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.vc-spatial-title {
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--text-strong);
+}
+
+.vc-spatial-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    color: var(--interactive-text-default);
+    padding: 4px;
+    border-radius: 4px;
+    line-height: 1;
+}
+
+.vc-spatial-close:hover {
+    color: var(--interactive-text-hover);
+    background: var(--interactive-background-hover);
+}
+
+.vc-spatial-close:focus-visible {
+    outline: 2px solid var(--text-brand);
+    outline-offset: 2px;
+}
+
+.vc-spatial-canvas {
+    position: relative;
+    background: var(--background-base-low);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: opacity 0.2s;
+    flex-shrink: 0;
+}
+
+.vc-spatial-canvas-inactive {
+    opacity: 0.5;
+}
+
+.vc-spatial-node {
+    position: absolute;
+    /* Anchor the circle (not the label below it) on the audio position. */
+    transform: translate(-50%, -50%);
+    width: 36px;
+    height: 36px;
+    user-select: none;
+    touch-action: none;
+    cursor: grab;
+}
+
+.vc-spatial-node-self {
+    /* "You" is fixed at centre and not draggable. */
+    cursor: default;
+    pointer-events: none;
+}
+
+/* Only animate after mount so nodes don't slide in from 0,0 on initial render. */
+.vc-spatial-canvas.vc-spatial-ready .vc-spatial-node {
+    transition: left 0.6s ease-in-out, top 0.6s ease-in-out, opacity 0.2s;
+}
+
+/* Suppress transition during drag so movement feels direct. */
+.vc-spatial-canvas.dragging .vc-spatial-node {
+    transition: none;
+}
+
+.vc-spatial-node:active {
+    cursor: grabbing;
+}
+
+.vc-spatial-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--background-accent);
+}
+
+.vc-spatial-avatar img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Hover feedback now that the avatar fills the circle. */
+.vc-spatial-node:hover .vc-spatial-avatar {
+    box-shadow: 0 0 0 2px var(--interactive-text-hover);
+}
+
+.vc-spatial-label {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 4px;
+    max-width: 64px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
+    text-align: center;
+    color: var(--text-default);
+    pointer-events: none;
+}
+
+.vc-spatial-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.vc-spatial-reset {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--interactive-text-default);
+    font-size: 14px;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.vc-spatial-reset:hover {
+    color: var(--interactive-text-hover);
+    background: var(--interactive-background-hover);
+}
+
+.vc-spatial-reset:focus-visible {
+    outline: 2px solid var(--text-brand);
+    outline-offset: 2px;
+}
+
+.vc-spatial-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-default);
+    font-size: 14px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.vc-spatial-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--interactive-text-default);
+    border-radius: 4px;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.vc-spatial-button:hover {
+    color: var(--interactive-text-hover);
+    background: var(--interactive-background-hover);
+}
+
+.vc-spatial-button:focus-visible {
+    outline: 2px solid var(--text-brand);
+    outline-offset: 2px;
+}
+
+.vc-spatial-button.vc-spatial-active {
+    color: var(--text-brand);
+}
