@@ -6,7 +6,6 @@
 
 import "./styles.css";
 
-import ErrorBoundary from "@components/ErrorBoundary";
 import { TranslateIcon } from "@plugins/translate/TranslateIcon";
 import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
@@ -67,7 +66,7 @@ export default definePlugin({
                 },
                 {
                     match: /\i\.memo\(function\((\i)\)\{(?=let \i,\i)/,
-                    replace: "$&$1.message=$self.transformMessage($1.message);",
+                    replace: "$&$1.message=$self.transformMessage($1?.message);",
                 },
             ],
         },
@@ -109,7 +108,7 @@ export default definePlugin({
         return message;
     },
 
-    wrapContent: ErrorBoundary.wrap(({ content, messageId, channelId }) => {
+    wrapContent(content, messageId, channelId) {
         const sourceLang = translatedMessages.get(messageId);
         const cached = getCached(messageId);
         if (!sourceLang || !cached) return content;
@@ -148,5 +147,5 @@ export default definePlugin({
                     </>
                 );
         }
-    }, { noop: true }),
+    }
 });
