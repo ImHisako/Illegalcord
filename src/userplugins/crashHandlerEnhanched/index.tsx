@@ -99,6 +99,11 @@ interface CrashReport {
     logFilePath?: string;
 }
 
+interface PendingCrash {
+    boundary: CrashBoundary;
+    report: CrashReport;
+}
+
 interface DraftManagerLike {
     clearDraft(channelId: string | undefined, draftType: string | number): void;
 }
@@ -139,6 +144,15 @@ interface PluginBreadcrumb {
 interface PluginCrashAttribution {
     timestamp: number;
     pluginName: string;
+}
+
+type PluginCallback = (this: unknown, ...args: unknown[]) => unknown;
+
+interface InstrumentedMethod {
+    owner: Record<PropertyKey, unknown>;
+    key: string;
+    original: PluginCallback;
+    wrapped: PluginCallback;
 }
 
 const { DraftManager, ModalStack } = proxyLazyWebpack<LazyModules>(() => {
@@ -223,16 +237,15 @@ let hasPromptedForUpdate = false;
 let isRecovering = false;
 let crashModalOpen = false;
 let latestReport: CrashReport | null = null;
-let queuedPopupReport: CrashReport | null = null;
+let queuedCrash: PendingCrash | null = null;
 let recentCrashTimes: number[] = [];
 let recentPluginCrashes: PluginCrashAttribution[] = [];
 let pluginBreadcrumbs: PluginBreadcrumb[] = [];
 const notifiedPluginNames = new Set<string>();
 let crashLogWriteQueue: Promise<void> = Promise.resolve();
-let instrumentationIntervalId: number | undefined;
 let globalListenersInstalled = false;
 const breadcrumbWrappedFunctions = new WeakSet<object>();
-const breadcrumbInstrumentedMethods = new WeakMap<object, Set<PropertyKey>>();
+const instrumentedMethods: InstrumentedMethod[] = [];
 
 function isDraftTypes(value: unknown): value is DraftTypes {
     if (!value || typeof value !== "object") return false;
@@ -377,7 +390,7 @@ function isLazyProxy(value: unknown) {
     return typeof record?.[SYM_LAZY_GET] === "function";
 }
 
-function wrapPluginCallback<T extends (this: unknown, ...args: unknown[]) => unknown>(pluginName: string, surface: string, original: T): T {
+function wrapPluginCallback<T extends PluginCallback>(pluginName: string, surface: string, original: T): T {
     const wrapped = function (this: unknown, ...args: unknown[]) {
         addPluginBreadcrumb(pluginName, surface);
 
@@ -400,14 +413,13 @@ function wrapPluginCallback<T extends (this: unknown, ...args: unknown[]) => unk
 }
 
 function wrapObjectMethod(owner: Record<PropertyKey, unknown>, key: string, pluginName: string, surface: string) {
-    const instrumentedKeys = breadcrumbInstrumentedMethods.get(owner);
-    if (instrumentedKeys?.has(key)) return;
-
     const original = owner[key];
     if (typeof original !== "function" || breadcrumbWrappedFunctions.has(original) || isLazyProxy(original)) return;
 
-    owner[key] = wrapPluginCallback(pluginName, surface, original as (this: unknown, ...args: unknown[]) => unknown);
-    breadcrumbInstrumentedMethods.set(owner, new Set([...(instrumentedKeys ?? []), key]));
+    const callback = original as PluginCallback;
+    const wrapped = wrapPluginCallback(pluginName, surface, callback);
+    owner[key] = wrapped;
+    instrumentedMethods.push({ owner, key, original: callback, wrapped });
 }
 
 function instrumentPlugin(plugin: Plugin) {
@@ -421,22 +433,10 @@ function instrumentPlugin(plugin: Plugin) {
     wrapObjectMethod(pluginRecord, "onBeforeMessageSend", plugin.name, "message send");
     wrapObjectMethod(pluginRecord, "onBeforeMessageEdit", plugin.name, "message edit");
     wrapObjectMethod(pluginRecord, "onMessageClick", plugin.name, "message click");
-    wrapObjectMethod(pluginRecord, "renderMessageAccessory", plugin.name, "message accessory");
-    wrapObjectMethod(pluginRecord, "renderMessageDecoration", plugin.name, "message decoration");
-    wrapObjectMethod(pluginRecord, "renderMemberListDecorator", plugin.name, "member list decorator");
-    wrapObjectMethod(pluginRecord, "renderNicknameIcon", plugin.name, "nickname icon");
-    wrapObjectMethod(pluginRecord, "audioProcessor", plugin.name, "audio processor");
 
     for (const command of plugin.commands ?? []) {
         const commandRecord = asRecord(command);
         if (commandRecord) wrapObjectMethod(commandRecord, "execute", plugin.name, "command");
-    }
-
-    const fluxRecord = asRecord(plugin.flux);
-    if (fluxRecord) {
-        for (const event of Object.keys(fluxRecord)) {
-            wrapObjectMethod(fluxRecord, event, plugin.name, `flux ${event}`);
-        }
     }
 
     const contextMenuRecord = asRecord(plugin.contextMenus);
@@ -444,21 +444,6 @@ function instrumentPlugin(plugin: Plugin) {
         for (const menu of Object.keys(contextMenuRecord)) {
             wrapObjectMethod(contextMenuRecord, menu, plugin.name, `context menu ${menu}`);
         }
-    }
-
-    const renderFields = [
-        ["chatBarButton", "render", "chat bar button"],
-        ["chatBarButtonWrapper", "wrapper", "chat bar wrapper"],
-        ["messagePopoverButton", "render", "message popover"],
-        ["headerBarButton", "render", "header bar button"],
-        ["userAreaButton", "render", "user area button"],
-        ["renderProfileCollection", "render", "profile collection"],
-        ["renderProfileSection", "render", "profile section"]
-    ] as const;
-
-    for (const [field, key, surface] of renderFields) {
-        const owner = asRecord(pluginRecord[field]);
-        if (owner) wrapObjectMethod(owner, key, plugin.name, surface);
     }
 
     if (typeof plugin.toolboxActions === "function") {
@@ -471,16 +456,21 @@ function instrumentPlugin(plugin: Plugin) {
             }
         }
     }
-
-    for (const key of Object.keys(pluginRecord)) {
-        wrapObjectMethod(pluginRecord, key, plugin.name, key);
-    }
 }
 
 function instrumentPlugins() {
     for (const plugin of Object.values(Plugins)) {
         instrumentPlugin(plugin);
     }
+}
+
+function restoreInstrumentedMethods() {
+    for (let i = instrumentedMethods.length - 1; i >= 0; i--) {
+        const { owner, key, original, wrapped } = instrumentedMethods[i];
+        if (owner[key] === wrapped) owner[key] = original;
+    }
+
+    instrumentedMethods.length = 0;
 }
 
 function createReport(errorState: CrashErrorState): CrashReport {
@@ -782,7 +772,13 @@ function writeCrashLog(report: CrashReport) {
         .catch(err => logger.error("Previous crash log write failed.", err))
         .then(async () => {
             try {
-                report.logFilePath = await Native.writeCrashLog(buildCrashLogContents(report), report.id);
+                const result = await Native.writeCrashLog(buildCrashLogContents(report), report.id);
+                if (!result.success) {
+                    logger.error(result.error);
+                    return;
+                }
+
+                report.logFilePath = result.filePath;
                 saveReport(report);
             } catch (err) {
                 logger.error("Failed to write crash log.", err);
@@ -837,7 +833,7 @@ function handleCrash(boundary: CrashBoundary, errorState: CrashErrorState) {
     writeCrashLog(report);
 
     if (isRecovering) {
-        queuedPopupReport = report;
+        queuedCrash = { boundary, report };
         return;
     }
 
@@ -853,20 +849,20 @@ function handleCrash(boundary: CrashBoundary, errorState: CrashErrorState) {
             logger.debug("Failed to open the update prompt.", err);
         }
 
-        report.recovered = settings.store.recoverClient ? recoverCrashBoundary(boundary) : false;
-        saveReport(report);
-        writeCrashLog(report);
+        const latestCrash = queuedCrash ?? { boundary, report };
+        queuedCrash = null;
+        latestCrash.report.recovered = settings.store.recoverClient ? recoverCrashBoundary(latestCrash.boundary) : false;
+        saveReport(latestCrash.report);
+        writeCrashLog(latestCrash.report);
         isRecovering = false;
-        const popupReport = queuedPopupReport ?? report;
-        const shouldNotify = shouldNotifyCrash(popupReport);
-        queuedPopupReport = null;
+        const shouldNotify = shouldNotifyCrash(latestCrash.report);
 
         if (shouldNotify && settings.store.showRecoveryToast) {
             try {
                 showNotification({
-                    color: report.recovered ? "#43b581" : "#f23f43",
-                    title: report.recovered ? "Illegalcord recovered from the crash." : "Illegalcord recorded a crash.",
-                    body: "Open the popup to copy the report, reinstall Illegalcord, or check Telegram.",
+                    color: latestCrash.report.recovered ? "#43b581" : "#f23f43",
+                    title: latestCrash.report.recovered ? "Illegalcord recovered from the crash." : "Illegalcord recorded a crash.",
+                    body: "Use the crash popup to inspect or copy the report.",
                     noPersist: true
                 });
             } catch (err) {
@@ -874,12 +870,12 @@ function handleCrash(boundary: CrashBoundary, errorState: CrashErrorState) {
             }
         }
 
-        if (shouldNotify && (settings.store.showRecoveryToast || settings.store.showSupportPopup)) {
-            rememberCrashNotification(popupReport);
+        if (shouldNotify && settings.store.showRecoveryToast) {
+            rememberCrashNotification(latestCrash.report);
         }
 
-        if (shouldNotify) {
-            openCrashSupportModal(popupReport);
+        if (settings.store.showSupportPopup) {
+            openCrashSupportModal(latestCrash.report);
         }
     }, 50);
 }
@@ -1096,8 +1092,8 @@ function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
 
 const SafeCrashSupportModal = ErrorBoundary.wrap(CrashSupportModal, { noop: true });
 
-function openCrashSupportModal(report: CrashReport, force = false) {
-    if ((!force && !settings.store.showSupportPopup) || crashModalOpen) return;
+function openCrashSupportModal(report: CrashReport) {
+    if (crashModalOpen) return;
 
     crashModalOpen = true;
     const modalKey = openModal(modalProps => {
@@ -1173,7 +1169,7 @@ function CrashHandlerSettings() {
                 <Button size="small" variant="secondary" onClick={triggerTestCrash}>
                     Trigger test crash
                 </Button>
-                <Button size="small" onClick={() => openCrashSupportModal(report, true)}>
+                <Button size="small" onClick={() => openCrashSupportModal(report)}>
                     Open popup
                 </Button>
             </Flex>
@@ -1193,42 +1189,30 @@ export default definePlugin({
     settings,
     settingsAboutComponent: SafeCrashHandlerSettings,
     toolboxActions: {
-        "Open latest crash popup": () => openCrashSupportModal(latestReport ?? createPlaceholderReport(), true),
+        "Open latest crash popup": () => openCrashSupportModal(latestReport ?? createPlaceholderReport()),
         "Copy latest crash report": copyLatestReport,
         "Open crash logs folder": openCrashLogsFolder,
         "Trigger test crash": triggerTestCrash
     },
 
     start() {
+        settings.store.crashCount = "0";
         instrumentPlugins();
         installGlobalListeners();
-        instrumentationIntervalId = window.setInterval(instrumentPlugins, 10000);
     },
 
     stop() {
         removeGlobalListeners();
-
-        if (instrumentationIntervalId !== undefined) {
-            clearInterval(instrumentationIntervalId);
-            instrumentationIntervalId = undefined;
-        }
+        restoreInstrumentedMethods();
     },
 
     patches: [
         {
             find: "#{intl::ERRORS_UNEXPECTED_CRASH}",
-            replacement: [
-                {
-                    match: /this\.setState\((.{0,300}?)\)/,
-                    replace: "$self.handleCrash(this,$1);$&",
-                    noWarn: true
-                },
-                {
-                    match: /Vencord\.Plugins\.plugins\["CrashHandler"\]\.handleCrash\(this,(.{0,300}?)\);/,
-                    replace: "$self.handleCrash(this,$1);$&",
-                    noWarn: true
-                }
-            ]
+            replacement: {
+                match: /(?:this\.setState\(|Vencord\.Plugins\.plugins\["CrashHandler"\]\.handleCrash\(this,)(.{0,300}?)\)/,
+                replace: "$self.handleCrash(this,$1)"
+            }
         }
     ],
 
