@@ -10,7 +10,6 @@ import { Button } from "@components/Button";
 import { Card } from "@components/Card";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
-import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { React, useEffect, useMemo, useRef, UserSettingsActionCreators, useState } from "@webpack/common";
@@ -251,7 +250,7 @@ export default definePlugin({
     name: "FastGifPicker",
     description: "Makes the GIF picker load lighter previews, retry failures, and avoid starting too many GIFs at once.",
     tags: ["Media", "Utility"],
-    authors: [EquicordDevs.irritably],
+    authors: [{ name: "irritably", id: 928787166916640838n }],
     settings,
 
     patches: [
