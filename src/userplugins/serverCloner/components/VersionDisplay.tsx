@@ -1,19 +1,26 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { React } from "@webpack/common";
+
+import { PLUGIN_VERSION,UPDATE_CHECK_URL } from "../constants";
 import { compareVersions } from "../utils/helpers";
 import { showUpdateModal } from "./UpdateModal";
-import { UPDATE_CHECK_URL, PLUGIN_VERSION } from "../constants";
 
 type UpdateStatus = "idle" | "checking" | "up-to-date" | "available" | "failed";
 
 export const VersionDisplay = () => {
-    const [status, setStatus]           = React.useState<UpdateStatus>("idle");
-    const [latestVer, setLatestVer]     = React.useState<string | null>(null);
+    const [status, setStatus] = React.useState<UpdateStatus>("idle");
+    const [latestVer, setLatestVer] = React.useState<string | null>(null);
 
     const checkUpdate = React.useCallback(async () => {
         setStatus("checking");
         try {
             const controller = new AbortController();
-            const timeoutId  = setTimeout(() => controller.abort(), 5000);
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
 
             const response = await fetch(UPDATE_CHECK_URL, {
                 signal: controller.signal,
@@ -28,7 +35,7 @@ export const VersionDisplay = () => {
             }
 
             const data = await response.json();
-            let ver = (data.tag_name || data.name || "").replace(/^v/i, "").trim();
+            const ver = (data.tag_name || data.name || "").replace(/^v/i, "").trim();
 
             if (!ver) {
                 setStatus("failed");
@@ -49,11 +56,11 @@ export const VersionDisplay = () => {
 
     const statusLabel = React.useMemo(() => {
         switch (status) {
-            case "checking":   return { text: "Checking...",              color: "var(--text-muted)" };
-            case "up-to-date": return { text: "You're up to date!",       color: "var(--text-positive)" };
-            case "available":  return { text: `Update available: v${latestVer}`, color: "#ffaa00" };
-            case "failed":     return { text: "Check failed",             color: "var(--status-danger)" };
-            default:           return null;
+            case "checking": return { text: "Checking...", color: "var(--text-muted)" };
+            case "up-to-date": return { text: "You're up to date!", color: "var(--text-positive)" };
+            case "available": return { text: `Update available: v${latestVer}`, color: "#ffaa00" };
+            case "failed": return { text: "Check failed", color: "var(--status-danger)" };
+            default: return null;
         }
     }, [status, latestVer]);
 

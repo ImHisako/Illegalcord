@@ -1,15 +1,22 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { DataStore } from "@api/index";
-import { PLUGIN_VERSION, UPDATES_CHANNEL_ID, SUPPORT_INVITE_CODE } from "../constants";
-import { ChannelStore, NavigationRouter, InviteActions } from "@webpack/common";
 import { openInviteModal } from "@utils/discord";
-import { getPillContainer } from "../utils/notifications";
+import { ChannelStore, InviteActions,NavigationRouter } from "@webpack/common";
+
+import { PLUGIN_VERSION, SUPPORT_INVITE_CODE,UPDATES_CHANNEL_ID } from "../constants";
 import { escapeHtml } from "../utils/helpers";
+import { getPillContainer } from "../utils/notifications";
 
 export function showUpdateModal(version: string, releaseNotes: string) {
     const container = getPillContainer();
 
     const isMandatory = releaseNotes.includes("[MANDATORY]");
-    const saferId     = version.replace(/\./g, "");
+    const saferId = version.replace(/\./g, "");
 
     const formattedNotes = escapeHtml(
         releaseNotes
@@ -75,7 +82,6 @@ export function showUpdateModal(version: string, releaseNotes: string) {
 
                 const { invite } = await InviteActions.resolveInvite(SUPPORT_INVITE_CODE, "Desktop Modal");
                 if (invite?.guild?.id) {
-
 
                     NavigationRouter.transitionTo(`/channels/${invite.guild.id}/${UPDATES_CHANNEL_ID}`);
                 } else {

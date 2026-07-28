@@ -1,9 +1,16 @@
-import { RestAPI, GuildStore } from "@webpack/common";
-import { replaceEmojis, sleep } from "../utils/helpers";
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import { GuildStore,RestAPI } from "@webpack/common";
+
+import { state } from "../store";
 import { checkGuildExistence } from "../utils/api";
-import { updateWithTime } from "../utils/notifications";
-import { throwIfCancelled, state } from "../store";
 import { handleCloneError } from "../utils/errorHandler";
+import { replaceEmojis, sleep } from "../utils/helpers";
+import { updateWithTime } from "../utils/notifications";
 import { CloneContext } from "./types";
 
 export async function cloneChannels(ctx: CloneContext): Promise<number> {
@@ -36,7 +43,7 @@ export async function cloneChannels(ctx: CloneContext): Promise<number> {
     const actionLabel = options.resumeMode ? "Resuming" : "Cloning";
 
     if (options.resumeMode && totalChannels === 0) {
-        updateWithTime(`All channels already exist, skipping...`, channelsProgressEnd);
+        updateWithTime("All channels already exist, skipping...", channelsProgressEnd);
     } else {
         updateWithTime(`${actionLabel} ${totalChannels} channels...`, channelsProgressStart);
     }
@@ -70,7 +77,7 @@ export async function cloneChannels(ctx: CloneContext): Promise<number> {
 
             const response = await taskQueue.execute(async () => {
                 return await RestAPI.post({ url: `/guilds/${newGuildId}/channels`, body: catPayload });
-            }, (msg) => updateWithTime(msg, (channelsProgressStart + ((catStored / Math.max(categoriesToCreate.length, 1)) * ((channelsProgressEnd - channelsProgressStart) * 0.2)))));
+            }, msg => updateWithTime(msg, (channelsProgressStart + ((catStored / Math.max(categoriesToCreate.length, 1)) * ((channelsProgressEnd - channelsProgressStart) * 0.2)))));
 
             if (response?.body?.id) {
                 channelIdMap[cat.id] = response.body.id;
@@ -271,7 +278,7 @@ export async function cloneChannels(ctx: CloneContext): Promise<number> {
 
             const response = await taskQueue.execute(async () => {
                 return await RestAPI.post({ url: `/guilds/${newGuildId}/channels`, body: chPayload });
-            }, (msg) => updateWithTime(msg, channelsProgressStart + ((channelsProgressEnd - channelsProgressStart) * 0.2) + ((chStored / Math.max(remainingChannels.length, 1)) * ((channelsProgressEnd - channelsProgressStart) * 0.8))));
+            }, msg => updateWithTime(msg, channelsProgressStart + ((channelsProgressEnd - channelsProgressStart) * 0.2) + ((chStored / Math.max(remainingChannels.length, 1)) * ((channelsProgressEnd - channelsProgressStart) * 0.8))));
 
             if (response?.body?.id) {
                 channelIdMap[ch.id] = response.body.id;
@@ -284,7 +291,7 @@ export async function cloneChannels(ctx: CloneContext): Promise<number> {
         } catch (e: any) {
             if (e?.rateLimitExhausted) {
                 channelsFailed += (remainingChannels.length - chStored);
-                updateWithTime(`Rate limited, skipping remaining channels...`, channelsProgressEnd);
+                updateWithTime("Rate limited, skipping remaining channels...", channelsProgressEnd);
                 skipRemaining = true;
                 return;
             }

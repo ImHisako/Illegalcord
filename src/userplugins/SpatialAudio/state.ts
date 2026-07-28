@@ -1,8 +1,9 @@
 /*
-* Vencord, a Discord client mod
-* Copyright (c) 2025 Vendicated and contributors*
-* SPDX-License-Identifier: GPL-3.0-or-later
-*/
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import * as DataStore from "@api/DataStore";
 import { isPluginEnabled } from "@api/PluginManager";
 import { classNameFactory } from "@utils/css";
@@ -44,11 +45,11 @@ const SQRT2 = Math.sqrt(2);
 
 // ─── Module-level state ───────────────────────────────────────────────────────
 
-export const positions = new Map<string, Map<string, Position>>();   // channelId → userId → pos
-export const activeChannels = new Set<string>();                      // channelIds with spatial on
-export const manualModeChannels = new Set<string>();                  // channelIds in manual positioning mode
-const storedStreams = new Map<string, StreamData>();                  // userId → StreamData
-const audioChains = new Map<string, AudioChain>();                   // userId → chain
+export const positions = new Map<string, Map<string, Position>>(); // channelId → userId → pos
+export const activeChannels = new Set<string>(); // channelIds with spatial on
+export const manualModeChannels = new Set<string>(); // channelIds in manual positioning mode
+const storedStreams = new Map<string, StreamData>(); // userId → StreamData
+const audioChains = new Map<string, AudioChain>(); // userId → chain
 
 let positionSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -69,7 +70,7 @@ function makeStore() {
     };
 }
 
-export const SpatialActiveStore = makeStore();   // emits when activeChannels changes
+export const SpatialActiveStore = makeStore(); // emits when activeChannels changes
 export const SpatialPositionStore = makeStore(); // emits when positions changes
 
 // ─── DataStore ────────────────────────────────────────────────────────────────

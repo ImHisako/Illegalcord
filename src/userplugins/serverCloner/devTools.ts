@@ -1,21 +1,22 @@
-import {
-    notify,
-    createMainProgressNotification,
-    updateMainProgress,
-    completeMainProgress,
-    getPillContainer,
-} from "./utils/notifications";
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { showUpdateModal } from "./components/UpdateModal";
 import { state } from "./store";
 import { sleep } from "./utils/helpers";
-
-
+import {
+    completeMainProgress,
+    createMainProgressNotification,
+    notify,
+    updateMainProgress,
+} from "./utils/notifications";
 
 function pick<T>(arr: T[]): T {
     return arr[Math.floor(Math.random() * arr.length)];
 }
-
-
 
 async function demoNotify() {
 
@@ -25,8 +26,6 @@ async function demoNotify() {
     await sleep(700);
     notify("Error Example", "Rate limited — retrying in 3s…", "error", 6000);
 }
-
-
 
 async function demoProgressPill() {
 
@@ -73,8 +72,6 @@ async function demoProgressPill() {
     state.mainProgressNotificationId = null;
 }
 
-
-
 function demoUpdateModal(mandatory = false) {
     const notes = mandatory
         ? "[MANDATORY]\n## v2.0.0\n**Critical bug fix** for channel permission cloning."
@@ -82,18 +79,13 @@ function demoUpdateModal(mandatory = false) {
     showUpdateModal("2.0.0", notes);
 }
 
-
-
 const SCDev = {
 
     notify: demoNotify,
 
-
     pill: demoProgressPill,
 
-
     update: (mandatory = false) => demoUpdateModal(mandatory),
-
 
     n: (title: string, body: string, type: "success" | "info" | "error" = "info", ms = 4000) =>
         notify(title, body, type, ms),

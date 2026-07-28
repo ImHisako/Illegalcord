@@ -13,7 +13,7 @@ import { Notice } from "@components/Notice";
 import { copyWithToast } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import { parseUrl } from "@utils/misc";
-import { formatDuration, makeCodeblock } from "@utils/text";
+import { formatDurationVerbose, makeCodeblock } from "@utils/text";
 import definePlugin, { OptionType } from "@utils/types";
 import type { CommandArgument, CommandContext, User } from "@vencord/discord-types";
 import { IconUtils, Menu } from "@webpack/common";
@@ -309,7 +309,7 @@ function calculateDomainAge(registrationDate: string): string {
     if (Number.isNaN(timestamp)) return "Unknown";
 
     const days = Math.max(0, Math.floor((Date.now() - timestamp) / 86_400_000));
-    return formatDuration(days, "days", true);
+    return formatDurationVerbose(days, "days", true);
 }
 
 function formatDate(value?: string): string {

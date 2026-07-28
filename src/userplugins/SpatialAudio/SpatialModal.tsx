@@ -1,9 +1,10 @@
 /*
-* Vencord, a Discord client mod
-* Copyright (c) 2025 Vendicated and contributors*
-* SPDX-License-Identifier: GPL-3.0-or-later
-*/
-import { ChannelStore, GuildMemberStore, React, useStateFromStores, UserStore, VoiceStateStore } from "@webpack/common";
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import { ChannelStore, GuildMemberStore, React, UserStore, useStateFromStores, VoiceStateStore } from "@webpack/common";
 
 import {
     CANVAS_SIZE,

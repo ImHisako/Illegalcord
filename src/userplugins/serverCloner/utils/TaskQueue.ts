@@ -1,5 +1,11 @@
-import { sleep, randomDelay } from "./helpers";
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { state } from "../store";
+import { randomDelay,sleep } from "./helpers";
 
 export class TaskQueue {
     private maxConcurrency: number;
@@ -8,9 +14,6 @@ export class TaskQueue {
     private pausedUntil = 0;
     private consecutive429 = 0;
     private successCount = 0;
-
-
-
 
     private requestTimestamps: number[] = [];
     private static readonly WINDOW_MS = 5000;
@@ -23,12 +26,6 @@ export class TaskQueue {
         this.maxConcurrency = concurrency;
         this.currentConcurrency = concurrency;
     }
-
-
-
-
-
-
 
     private async waitForRateLimitWindow(exitCondition?: () => boolean): Promise<void> {
         while (true) {
@@ -46,7 +43,6 @@ export class TaskQueue {
                 this.requestTimestamps.push(Date.now());
                 return;
             }
-
 
             const waitMs = (this.requestTimestamps[0] + TaskQueue.WINDOW_MS) - Date.now() + 50;
             await sleep(Math.max(waitMs, 50));
@@ -80,23 +76,16 @@ export class TaskQueue {
                     if (!state.isCloning) throw new Error("Cancelled");
                     if (exitCondition && exitCondition()) throw new Error("Skipped");
 
-
                     if (Date.now() < this.pausedUntil) {
                         const sleepMs = Math.max(100, this.pausedUntil - Date.now());
                         await sleep(sleepMs);
                         if (!state.isCloning) throw new Error("Cancelled");
                     }
 
-
-
-
-
                     await this.waitForRateLimitWindow(exitCondition);
-
 
                     const result = await fn();
                     this.consecutive429 = 0;
-
 
                     this.successCount++;
                     if (this.successCount >= TaskQueue.SUCCESSES_TO_UPSCALE) {
@@ -117,7 +106,6 @@ export class TaskQueue {
                         this.consecutive429++;
                         this.successCount = 0;
 
-
                         const oldConcurrency = this.currentConcurrency;
                         this.currentConcurrency = Math.max(1, Math.floor(this.currentConcurrency / 2));
                         if (oldConcurrency !== this.currentConcurrency) {
@@ -129,7 +117,6 @@ export class TaskQueue {
                             err.rateLimitExhausted = true;
                             throw err;
                         }
-
 
                         const retryAfter = ((e.retry_after || e.body?.retry_after || 1) * 1000) + randomDelay(500, 1500);
                         const newPauseUntil = Date.now() + retryAfter;

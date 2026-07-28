@@ -24,7 +24,7 @@ import { ImageIcon } from "@components/Icons";
 import definePlugin, { OptionType } from "@utils/types";
 import type { RenderModalProps } from "@vencord/discord-types";
 import { findComponentByCodeLazy } from "@webpack";
-import { Alerts, Button, Menu, Modal, openModal, React, showToast, Text, Toasts, UserStore, useEffect, useRef, useState } from "@webpack/common";
+import { Alerts, Button, Menu, Modal, openModal, React, showToast, Text, Toasts, useEffect, useRef, UserStore, useState } from "@webpack/common";
 
 // Компонент кнопки в панели
 const PanelButton = findComponentByCodeLazy(".GREEN,positionKeyStemOverride:");
@@ -36,7 +36,7 @@ const DATASTORE_KEY_PROFILES = "CustomStreamTopQ_Profiles";
 const DATASTORE_KEY_ACTIVE_PROFILE = "CustomStreamTopQ_ActiveProfile";
 const MAX_IMAGES = 50;
 const MAX_IMAGES_PER_PROFILE = 50;
-const MAX_PROFILES = 5;  // Maximum number of profiles allowed
+const MAX_PROFILES = 5; // Maximum number of profiles allowed
 const DEFAULT_PROFILE_ID = "default";
 
 // Структура профиля
@@ -49,7 +49,7 @@ interface Profile {
 }
 
 // Кэш для профилей
-let profiles: Map<string, Profile> = new Map();
+const profiles: Map<string, Profile> = new Map();
 let activeProfileId: string = DEFAULT_PROFILE_ID;
 
 // Кэш для изображений в памяти (для обратной совместимости)
@@ -359,7 +359,7 @@ async function moveImage(fromIndex: number, toIndex: number): Promise<void> {
     if (fromIndex < 0 || fromIndex >= profile.images.length) return;
     if (toIndex < 0 || toIndex >= profile.images.length) return;
 
-    // Простой swap 
+    // Простой swap
     [profile.images[fromIndex], profile.images[toIndex]] = [profile.images[toIndex], profile.images[fromIndex]];
     [profile.dataUris[fromIndex], profile.dataUris[toIndex]] = [profile.dataUris[toIndex], profile.dataUris[fromIndex]];
 
@@ -430,7 +430,7 @@ async function processImage(blob: Blob): Promise<Blob> {
 
             // Discord использует JPEG для превью стримов
             // Качество 0.7 для уменьшения размера (Discord ограничивает ~100KB)
-            canvas.toBlob((newBlob) => {
+            canvas.toBlob(newBlob => {
                 if (newBlob) {
                     resolve(newBlob);
                 } else {
@@ -692,7 +692,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
         e.stopPropagation();
         setIsDragging(false);
 
-        const files = e.dataTransfer.files;
+        const { files } = e.dataTransfer;
         if (files.length > 0) {
             await handleDroppedFiles(files);
         }
@@ -704,7 +704,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
         input.accept = "image/png,image/jpeg,image/webp";
         input.multiple = multiple;
         input.onchange = async (e: any) => {
-            const files = e.target.files;
+            const { files } = e.target;
             if (!files?.length) return;
 
             // Проверяем лимит для текущего профиля
@@ -1186,20 +1186,20 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                             gap: "6px",
                                             padding: "8px 12px",
                                             borderRadius: "8px",
-                                            backgroundColor: isActive 
+                                            backgroundColor: isActive
                                                 ? "#5865F2"
                                                 : "var(--background-secondary-alt)",
-                                            background: isActive 
-                                                ? "linear-gradient(135deg, #5865F2 0%, #4752c4 100%)" 
+                                            background: isActive
+                                                ? "linear-gradient(135deg, #5865F2 0%, #4752c4 100%)"
                                                 : "var(--background-secondary-alt)",
                                             color: "#ffffff",
                                             cursor: "pointer",
                                             transition: "all 0.2s ease",
-                                            border: isActive 
-                                                ? "2px solid #5865F2" 
+                                            border: isActive
+                                                ? "2px solid #5865F2"
                                                 : "1px solid var(--background-modifier-accent)",
-                                            boxShadow: isActive 
-                                                ? "0 3px 10px rgba(88, 101, 242, 0.4)" 
+                                            boxShadow: isActive
+                                                ? "0 3px 10px rgba(88, 101, 242, 0.4)"
                                                 : "0 1px 4px rgba(0,0,0,0.1)",
                                             minWidth: "100px"
                                         }}
@@ -1247,7 +1247,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                             <>
                                                 {/* Иконка галочки для активного */}
                                                 {isActive && (
-                                                    <span style={{ 
+                                                    <span style={{
                                                         fontSize: "12px",
                                                         fontWeight: "bold"
                                                     }}>✓</span>
@@ -1256,8 +1256,8 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                                 {!isActive && (
                                                     <span style={{ fontSize: "12px" }}>📁</span>
                                                 )}
-                                                <span style={{ 
-                                                    fontWeight: "600", 
+                                                <span style={{
+                                                    fontWeight: "600",
                                                     fontSize: "12px",
                                                     letterSpacing: "0.2px",
                                                     color: "#ffffff"
@@ -1267,8 +1267,8 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                                 <span style={{
                                                     fontSize: "10px",
                                                     fontWeight: "700",
-                                                    backgroundColor: isActive 
-                                                        ? "rgba(255,255,255,0.25)" 
+                                                    backgroundColor: isActive
+                                                        ? "rgba(255,255,255,0.25)"
                                                         : "var(--brand-experiment)",
                                                     color: "#ffffff",
                                                     padding: "2px 6px",
@@ -1283,15 +1283,15 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
 
                                         {/* Кнопки действий для вкладки */}
                                         {isActive && !isEditing && (
-                                            <div style={{ 
-                                                display: "flex", 
-                                                gap: "6px", 
+                                            <div style={{
+                                                display: "flex",
+                                                gap: "6px",
                                                 marginLeft: "6px",
                                                 paddingLeft: "8px",
                                                 borderLeft: "1px solid rgba(255,255,255,0.3)"
                                             }}>
                                                 <button
-                                                    onClick={(e) => {
+                                                    onClick={e => {
                                                         e.stopPropagation();
                                                         setEditingProfileId(profile.id);
                                                         setEditingProfileName(profile.name);
@@ -1318,7 +1318,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                                 </button>
                                                 {canDelete && (
                                                     <button
-                                                        onClick={(e) => {
+                                                        onClick={e => {
                                                             e.stopPropagation();
                                                             handleDeleteProfile(profile.id);
                                                         }}
@@ -1595,10 +1595,10 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                         key={index}
                                         draggable
                                         onClick={() => handleSelectCurrent(index)}
-                                        onDragStart={(e) => handleImageDragStart(e, index)}
-                                        onDragOver={(e) => handleImageDragOver(e, index)}
+                                        onDragStart={e => handleImageDragStart(e, index)}
+                                        onDragOver={e => handleImageDragOver(e, index)}
                                         onDragLeave={handleImageDragLeave}
-                                        onDrop={(e) => handleImageDrop(e, index)}
+                                        onDrop={e => handleImageDrop(e, index)}
                                         onDragEnd={handleImageDragEnd}
                                         style={{
                                             position: "relative",
@@ -1693,7 +1693,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                         }}>
                                             {/* Полноэкранный просмотр */}
                                             <button
-                                                onClick={(e) => {
+                                                onClick={e => {
                                                     e.stopPropagation();
                                                     setPreviewImage(src);
                                                 }}
@@ -1720,7 +1720,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                             </button>
                                             {/* Скачать */}
                                             <button
-                                                onClick={(e) => {
+                                                onClick={e => {
                                                     e.stopPropagation();
                                                     const a = document.createElement("a");
                                                     a.href = src;
@@ -1750,7 +1750,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                             </button>
                                             {/* Удалить */}
                                             <button
-                                                onClick={(e) => {
+                                                onClick={e => {
                                                     e.stopPropagation();
                                                     handleDelete(index);
                                                 }}
@@ -1936,7 +1936,7 @@ function formatFileSize(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// Кнопка в панели аккаунта 
+// Кнопка в панели аккаунта
 function StreamPreviewPanelButton(props: { nameplate?: any; }) {
     const [imageCount, setImageCount] = useState(0);
     const [isEnabled, setIsEnabled] = useState(settings.store.replaceEnabled);
@@ -1955,7 +1955,7 @@ function StreamPreviewPanelButton(props: { nameplate?: any; }) {
             setIsRandom(settings.store.slideshowRandom);
             setCurrentIndex(currentSlideIndex);
             setStreamActive(isStreamActive);
-            // Обновляем превью РЕАЛЬНОЙ картинки на стриме 
+            // Обновляем превью РЕАЛЬНОЙ картинки на стриме
             setCurrentImageUri(actualStreamImageUri);
         };
 

@@ -1,4 +1,11 @@
-import { RestAPI, GuildRoleStore, GuildChannelStore, GuildStore } from "@webpack/common";
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import { GuildChannelStore, GuildRoleStore, GuildStore,RestAPI } from "@webpack/common";
+
 import { arrayBufferToBase64 } from "./helpers";
 
 export async function fetchGuildRoles(guildId: string): Promise<any[]> {

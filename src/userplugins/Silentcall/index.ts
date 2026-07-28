@@ -1,11 +1,7 @@
 /*
  * Vencord, a Discord client mod
- * SilentGroupCall — start DM/group calls without ringing the other members.
- *
- * See DESIGN.md for the full rationale. In short: Discord's client fires a
- * separate `ring` request when you start a call. If we never fire it, nobody
- * gets the incoming-call notification — but the call is still joinable and you
- * stay connected. This plugin monkeypatches that `ring` at runtime.
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import { definePluginSettings } from "@api/Settings";
