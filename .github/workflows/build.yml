@@ -88,4 +88,4 @@ jobs:
                   git add -A
 
                   git commit -m "Plugins for https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
-                  git push --force https://$USERNAME:$GITHUB_TOKEN@github.com/$REPO.git
+                  git push --force https://$USERNAME:$GITHUB_TOKEN@github.com/$REPO.git || echo "::notice::Skipped plugin JSON upload because the repository denied push access."

@@ -121,4 +121,4 @@ jobs:
 
                   git add -A
                   git commit -m "Builds for https://github.com/$GITHUB_REPOSITORY/commit/$COMMIT_SHA"
-                  git push --force origin "$BRANCH"
+                  git push --force origin "$BRANCH" || echo "::notice::Skipped Equibuilds upload because the repository denied push access."
