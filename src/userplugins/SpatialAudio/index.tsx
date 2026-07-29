@@ -9,8 +9,9 @@ import "./style.css";
 import { isPluginEnabled } from "@api/PluginManager";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { classes } from "@utils/misc";
+import { openModal } from "@utils/modal";
 import definePlugin from "@utils/types";
-import { FluxDispatcher, React, UserStore, useStateFromStores, VoiceStateStore } from "@webpack/common";
+import { FluxDispatcher, React, showToast, Toasts, UserStore, useStateFromStores, VoiceStateStore } from "@webpack/common";
 
 import { SpatialModal } from "./SpatialModal";
 import {
@@ -23,6 +24,18 @@ import {
     StreamData,
     teardownAudio,
 } from "./state";
+
+function openSpatialAudio() {
+    const userId = UserStore.getCurrentUser()?.id;
+    const channelId = userId ? VoiceStateStore.getVoiceStateForUser(userId)?.channelId : null;
+
+    if (!channelId) {
+        showToast("Join a voice channel first.", Toasts.Type.FAILURE);
+        return;
+    }
+
+    openModal(({ onClose }) => <SpatialModal channelId={channelId} onClose={onClose} />);
+}
 
 export default definePlugin({
     name: "SpatialAudio",
@@ -50,11 +63,15 @@ export default definePlugin({
         {
             find: "accountContainerRef",
             replacement: {
-                match: /children:\[(?=.{0,25}?accountContainerRef)/,
+                match: /children:\[(?=.{0,150}?accountContainerRef)/,
                 replace: "children:[$self.renderSpatialButton(arguments[0]),"
             }
         }
     ],
+
+    toolboxActions: {
+        "Open Spatial Audio": openSpatialAudio
+    },
 
     async start() {
         await loadState();
