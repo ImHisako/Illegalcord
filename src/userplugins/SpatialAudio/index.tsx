@@ -10,7 +10,7 @@ import { isPluginEnabled } from "@api/PluginManager";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { classes } from "@utils/misc";
 import definePlugin from "@utils/types";
-import { FluxDispatcher, openModal, showToast, Toasts, UserStore, useStateFromStores, VoiceStateStore } from "@webpack/common";
+import { FluxDispatcher, React, UserStore, useStateFromStores, VoiceStateStore } from "@webpack/common";
 
 import { SpatialModal } from "./SpatialModal";
 import {
@@ -23,20 +23,6 @@ import {
     StreamData,
     teardownAudio,
 } from "./state";
-
-const SafeSpatialModal = ErrorBoundary.wrap(SpatialModal, { noop: true });
-
-function openSpatialAudio() {
-    const userId = UserStore.getCurrentUser()?.id;
-    const channelId = userId ? VoiceStateStore.getVoiceStateForUser(userId)?.channelId : undefined;
-
-    if (!channelId) {
-        showToast("Join a voice channel before opening Spatial Audio.", Toasts.Type.FAILURE);
-        return;
-    }
-
-    openModal(props => <SafeSpatialModal channelId={channelId} onClose={props.onClose} />);
-}
 
 export default definePlugin({
     name: "SpatialAudio",
@@ -62,7 +48,7 @@ export default definePlugin({
             }
         },
         {
-            find: ".DISPLAY_NAME_STYLES_COACHMARK)",
+            find: "accountContainerRef",
             replacement: {
                 match: /children:\[(?=.{0,25}?accountContainerRef)/,
                 replace: "children:[$self.renderSpatialButton(arguments[0]),"
@@ -85,6 +71,8 @@ export default definePlugin({
     },
 
     renderSpatialButton: ErrorBoundary.wrap((_props: { nameplate?: unknown; }) => {
+        const [open, setOpen] = React.useState(false);
+
         const channelId = useStateFromStores([VoiceStateStore], () => {
             const userId = UserStore.getCurrentUser()?.id;
             return userId ? VoiceStateStore.getVoiceStateForUser(userId)?.channelId ?? "" : "";
@@ -95,22 +83,21 @@ export default definePlugin({
         if (!channelId) return null;
 
         return (
-            <button
-                className={classes(cl("button"), isActive && cl("active"))}
-                onClick={openSpatialAudio}
-                title="Spatial audio"
-                aria-label="Spatial audio"
-            >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M12 3C6.48 3 2 7.48 2 13c0 3.12 1.42 5.92 3.66 7.82l1.42-1.42A8.96 8.96 0 0 1 4 13c0-4.41 3.59-8 8-8s8 3.59 8 8a8.96 8.96 0 0 1-3.08 6.4l1.42 1.42C20.58 18.92 22 16.12 22 13c0-5.52-4.48-10-10-10z" />
-                    <path d="M12 7c-3.31 0-6 2.69-6 6 0 1.77.77 3.37 2 4.47l1.42-1.42A3.99 3.99 0 0 1 8 13c0-2.21 1.79-4 4-4s4 1.79 4 4c0 1.19-.52 2.26-1.35 3l1.42 1.42A5.98 5.98 0 0 0 18 13c0-3.31-2.69-6-6-6z" />
-                    <circle cx="12" cy="13" r="2" />
-                </svg>
-            </button>
+            <>
+                <button
+                    className={classes(cl("button"), isActive && cl("active"))}
+                    onClick={() => setOpen(o => !o)}
+                    title="Spatial audio"
+                    aria-label="Spatial audio"
+                >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M12 3C6.48 3 2 7.48 2 13c0 3.12 1.42 5.92 3.66 7.82l1.42-1.42A8.96 8.96 0 0 1 4 13c0-4.41 3.59-8 8-8s8 3.59 8 8a8.96 8.96 0 0 1-3.08 6.4l1.42 1.42C20.58 18.92 22 16.12 22 13c0-5.52-4.48-10-10-10z" />
+                        <path d="M12 7c-3.31 0-6 2.69-6 6 0 1.77.77 3.37 2 4.47l1.42-1.42A3.99 3.99 0 0 1 8 13c0-2.21 1.79-4 4-4s4 1.79 4 4c0 1.19-.52 2.26-1.35 3l1.42 1.42A5.98 5.98 0 0 0 18 13c0-3.31-2.69-6-6-6z" />
+                        <circle cx="12" cy="13" r="2" />
+                    </svg>
+                </button>
+                {open && <SpatialModal channelId={channelId} onClose={() => setOpen(false)} />}
+            </>
         );
     }, { noop: true }),
-
-    toolboxActions: {
-        "Open Spatial Audio": openSpatialAudio
-    },
 });

@@ -17,9 +17,9 @@
 */
 
 import { definePluginSettings } from "@api/Settings";
+import { UserAreaButton, type UserAreaRenderProps } from "@api/UserArea";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { findComponentByCodeLazy } from "@webpack";
 
 import { PluginInfo } from "../betterMicrophone.desktop/constants";
 import { openMicrophoneSettingsModal } from "../betterMicrophone.desktop/modals";
@@ -27,15 +27,17 @@ import { MicrophonePatcher } from "../betterMicrophone.desktop/patchers";
 import { initMicrophoneStore } from "../betterMicrophone.desktop/stores";
 import { Emitter, MicrophoneSettingsIcon } from "../philsPluginLibrary";
 
-const Button = findComponentByCodeLazy(".NONE,disabled:", ".PANEL_BUTTON");
+const SETTINGS_KEYS: Array<"hideSettingsIcon"> = ["hideSettingsIcon"];
 
-function micSettingsButton() {
-    const { hideSettingsIcon } = settings.use(["hideSettingsIcon"]);
+function micSettingsButton({ hideTooltips, iconForeground, nameplate }: UserAreaRenderProps) {
+    const { hideSettingsIcon } = settings.use(SETTINGS_KEYS);
     if (hideSettingsIcon) return null;
+
     return (
-        <Button
-            tooltipText="Change microphone settings"
-            icon={MicrophoneSettingsIcon}
+        <UserAreaButton
+            tooltipText={hideTooltips ? void 0 : "Change microphone settings"}
+            icon={<MicrophoneSettingsIcon className={iconForeground} />}
+            plated={nameplate != null}
             role="button"
             onClick={openMicrophoneSettingsModal}
         />
@@ -55,17 +57,12 @@ export default definePlugin({
     description: "This plugin allows you to further customize your microphone.",
     tags: ["Voice", "Customisation"],
     authors: [Devs.phil],
-    dependencies: ["PhilsPluginLibrary"],
-    patches: [
-        {
-            find: "#{intl::ACCOUNT_SPEAKING_WHILE_MUTED}",
-            replacement: {
-                match: /className:\i\.buttons,.{0,50}children:\[/,
-                replace: "$&$self.micSettingsButton(),"
-            }
-        }
-    ],
+    dependencies: ["PhilsPluginLibrary", "UserAreaAPI"],
     settings: settings,
+    userAreaButton: {
+        icon: MicrophoneSettingsIcon,
+        render: micSettingsButton
+    },
     start(): void {
         initMicrophoneStore();
 
@@ -78,6 +75,5 @@ export default definePlugin({
     },
     toolboxActions: {
         "Open Microphone Settings": openMicrophoneSettingsModal
-    },
-    micSettingsButton
+    }
 });

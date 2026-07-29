@@ -300,11 +300,11 @@ export default definePlugin({
             }
         },
         {
-            find: '("guildsnav")',
+            find: ".setGuildsTree(",
             predicate: () => settings.store.showGuildIcons,
             replacement: {
-                match: /children:\s*(?:Vencord\.Api\.ServerList\.renderAll\(Vencord\.Api\.ServerList\.ServerListRenderPosition\.In\)\.concat\()?(\i)\.map\(\s*\((\i),\s*(\i)\)\s*=>\s*(\i)\(\2,\3,\1\.length\)\)(?:\))?/,
-                replace: "children:Vencord.Api.ServerList.renderAll(Vencord.Api.ServerList.ServerListRenderPosition.In).concat($1.map(($2,$3)=>$self.wrapTreeNode($4($2,$3,$1.length),$2)))"
+                match: /renderTreeNode:(\i)(?=,lurkingGuildIds:)/,
+                replace: "renderTreeNode:(...args)=>$self.wrapTreeNode($1(...args),args[0])"
             }
         },
     ],
