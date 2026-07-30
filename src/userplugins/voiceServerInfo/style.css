@@ -95,6 +95,19 @@
     font-size: 13px;
 }
 
+.vc-voice-server-info-addresses {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 10px 0;
+}
+
+.vc-voice-server-info-addresses span {
+    color: var(--text-normal);
+    font-size: 13px;
+    white-space: nowrap;
+}
+
 .vc-voice-server-info-error,
 .vc-voice-server-info-loading {
     padding: 12px;

@@ -125,7 +125,12 @@ export function VoiceServerModal({ rootProps, loadInfo }: VoiceServerModalProps)
 
                 {server && (
                     <div className="vc-voice-server-info-grid">
-                        <InfoRow label="IPv4" value={server.addresses.join(", ")} />
+                        <div className="vc-voice-server-info-row">
+                            <span>IPv4</span>
+                            <strong className="vc-voice-server-info-addresses">
+                                {server.addresses.map(address => <span key={address}>{address}</span>)}
+                            </strong>
+                        </div>
                         <InfoRow label="Location" value={getLocation(server.info)} />
                         <InfoRow label="Organization" value={server.info.organization ?? "Unknown"} />
                         <InfoRow label="Timezone" value={server.info.timezone ?? "Unknown"} />
