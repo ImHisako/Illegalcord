@@ -22,7 +22,7 @@
 import { readFileSync } from "fs";
 import { appendFile, mkdir, readdir, readFile, rm, writeFile } from "fs/promises";
 import path, { join } from "path";
-import Zip from "zip-local";
+import JSZip from "jszip";
 
 import { BUILD_TIMESTAMP, commonOpts, globPlugins, IS_DEV, IS_ANTI_CRASH_TEST, IS_REPORTER, IS_COMPANION_TEST, IS_STANDALONE, VERSION, commonRendererPlugins, buildOrWatchAll, stringifyValues } from "./common.mjs";
 
@@ -184,6 +184,26 @@ async function buildExtension(target, files) {
     console.info("Unpacked Extension written to dist/browser/" + target);
 }
 
+/**
+ * @type {(source: string, target: string) => Promise<void>}
+ */
+async function packExtension(source, target) {
+    const zip = new JSZip();
+
+    for (const file of await globDir(source)) {
+        const archivePath = path.relative(source, file).split(path.sep).join("/");
+        zip.file(archivePath, await readFile(file));
+    }
+
+    const content = await zip.generateAsync({
+        type: "nodebuffer",
+        compression: "DEFLATE",
+        compressionOptions: { level: 9 }
+    });
+    await writeFile(target, content);
+    console.info("Packed Extension written to " + target);
+}
+
 const appendCssRuntime = readFile("dist/Equicord.user.css", "utf-8").then(content => {
     const cssRuntime = `unsafeWindow._vcUserScriptRendererCss=\`${content.replaceAll("`", "\\`")}\``;
 
@@ -197,14 +217,10 @@ if (!process.argv.includes("--skip-extension")) {
         buildExtension("firefox-unpacked", ["background.js", "content.js", "manifestv2.json", "icon.png"]),
     ]);
 
-    Zip.zip("dist/browser/chromium-unpacked", (_err, zip) => {
-        zip.compress().save("dist/extension-chrome.zip");
-        console.info("Packed Chromium Extension written to dist/extension-chrome.zip");
-    });
-    Zip.zip("dist/browser/firefox-unpacked", (_err, zip) => {
-        zip.compress().save("dist/extension-firefox.zip");
-        console.info("Packed Firefox Extension written to dist/extension-firefox.zip");
-    });
+    await Promise.all([
+        packExtension("dist/browser/chromium-unpacked", "dist/extension-chrome.zip"),
+        packExtension("dist/browser/firefox-unpacked", "dist/extension-firefox.zip")
+    ]);
 } else {
     await appendCssRuntime;
 }

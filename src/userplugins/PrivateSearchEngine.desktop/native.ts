@@ -5,13 +5,14 @@
  */
 
 import { DATA_DIR } from "@main/utils/constants";
+import { ensureSafePath } from "@main/utils/ensureSafePath";
 import { checkedFetch, fetchBuffer } from "@main/utils/http";
 import { app, BrowserWindow, session } from "electron";
 import { unzip } from "fflate";
 import { constants as fsConstants, mkdirSync, writeFileSync } from "fs";
 import { access, mkdir, readFile, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
-import { isAbsolute, join, resolve } from "path";
+import { dirname, isAbsolute, join, resolve } from "path";
 
 export interface NativeResult {
     success: boolean;
@@ -301,20 +302,16 @@ async function extractExtension(data: Buffer, outDir: string) {
 
             Promise.all(Object.keys(files).map(async fileName => {
                 if (fileName.startsWith("_metadata/")) return;
+                const outputPath = ensureSafePath(outDir, fileName);
+                if (!outputPath) throw new Error("Extension archive contains an unsafe path.");
+
                 if (fileName.endsWith("/")) {
-                    await mkdir(join(outDir, fileName), { recursive: true });
+                    await mkdir(outputPath, { recursive: true });
                     return;
                 }
 
-                const pathElements = fileName.split("/");
-                const name = pathElements.pop();
-                if (!name) return;
-
-                const directory = pathElements.join("/");
-                const dir = join(outDir, directory);
-                if (directory) await mkdir(dir, { recursive: true });
-
-                await writeFile(join(dir, name), files[fileName]);
+                await mkdir(dirname(outputPath), { recursive: true });
+                await writeFile(outputPath, files[fileName]);
             }))
                 .then(() => resolvePromise())
                 .catch(error => {

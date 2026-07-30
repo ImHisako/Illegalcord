@@ -5,11 +5,14 @@
  */
 
 import { DATA_DIR } from "@main/utils/constants";
+import { ensureSafePath } from "@main/utils/ensureSafePath";
 import { shell } from "electron";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 
 const STALKER_DATA_DIR = path.join(DATA_DIR, "Stalking");
+const DISCORD_USER_ID_RE = /^\d{1,32}$/;
+const MAX_USERNAME_LENGTH = 100;
 
 const sanitizeUsername = (username: string): string =>
     username.replace(/[/\\?*|<>:"']/g, "_");
@@ -18,8 +21,16 @@ const getTodayFileName = (): string =>
     `stalker-log-${new Date().toISOString().slice(0, 10)}.json`;
 
 async function getUserStalkerDirPath(userId: string, username: string): Promise<string> {
+    if (typeof userId !== "string" || !DISCORD_USER_ID_RE.test(userId))
+        throw new Error("Invalid Discord user identifier.");
+    if (typeof username !== "string" || username.length === 0 || username.length > MAX_USERNAME_LENGTH)
+        throw new Error("Invalid Discord username.");
+
     const safeUsername = sanitizeUsername(username);
-    return path.join(STALKER_DATA_DIR, `@${safeUsername}_${userId}`);
+    const userDir = ensureSafePath(STALKER_DATA_DIR, `@${safeUsername}_${userId}`);
+    if (!userDir) throw new Error("Invalid Stalker data path.");
+
+    return userDir;
 }
 
 export async function getUserStalkerDir(_event: Electron.IpcMainInvokeEvent, userId: string, username: string): Promise<string> {

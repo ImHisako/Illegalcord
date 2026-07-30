@@ -10,6 +10,8 @@ import { FileHandle, open } from "node:fs/promises";
 import { dialog, IpcMainInvokeEvent } from "electron";
 
 const activeFiles = new Map<string, FileHandle>();
+const DEFAULT_CHUNK_SIZE = 64 * 1024;
+const MAX_CHUNK_SIZE = 1024 * 1024;
 
 export async function startNativeLogImport(_event: IpcMainInvokeEvent, defaultPath?: string) {
     const res = await dialog.showOpenDialog({
@@ -29,9 +31,11 @@ export async function startNativeLogImport(_event: IpcMainInvokeEvent, defaultPa
     return fileId;
 }
 
-export async function readNativeLogChunk(_event: IpcMainInvokeEvent, fileId: string, size: number = 64 * 1024): Promise<string | null> {
+export async function readNativeLogChunk(_event: IpcMainInvokeEvent, fileId: string, size: number = DEFAULT_CHUNK_SIZE): Promise<string | null> {
     const fileHandle = activeFiles.get(fileId);
     if (!fileHandle) return null;
+    if (!Number.isInteger(size) || size < 1 || size > MAX_CHUNK_SIZE)
+        throw new Error("Invalid log import chunk size.");
 
     const buffer = Buffer.alloc(size);
     const { bytesRead } = await fileHandle.read(buffer, 0, size);

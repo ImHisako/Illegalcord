@@ -23,6 +23,8 @@ interface IMessageCreate {
 const SECURITY_CONSTANTS = {
     DEFAULT_MIN_PASSWORD_LENGTH: 12,
     MAX_PASSWORD_LENGTH: 128,
+    MIN_PBKDF2_ITERATIONS: 100000,
+    MAX_PBKDF2_ITERATIONS: 600000,
     LEGACY_PBKDF2_ITERATIONS: 200000,
     SALT_LENGTH: 32,
     IV_LENGTH: 12,
@@ -141,9 +143,12 @@ function getErrorMessage(error: unknown): string {
 
 function getPbkdf2Iterations(): number {
     const iterations = Number(settings.store.pbkdf2Iterations);
-    return Number.isFinite(iterations) && iterations > 0
-        ? iterations
-        : SECURITY_CONSTANTS.LEGACY_PBKDF2_ITERATIONS;
+    if (!Number.isFinite(iterations)) return SECURITY_CONSTANTS.LEGACY_PBKDF2_ITERATIONS;
+
+    return Math.min(
+        SECURITY_CONSTANTS.MAX_PBKDF2_ITERATIONS,
+        Math.max(SECURITY_CONSTANTS.MIN_PBKDF2_ITERATIONS, Math.trunc(iterations))
+    );
 }
 
 function isEncryptedMessage(content: string): boolean {
@@ -325,7 +330,10 @@ async function decryptAES(encrypted: string, password: string): Promise<string> 
         throw new Error("Unsupported encryption version.");
     }
 
-    if (!iterations || iterations < 1) {
+    if (
+        iterations < SECURITY_CONSTANTS.MIN_PBKDF2_ITERATIONS ||
+        iterations > SECURITY_CONSTANTS.MAX_PBKDF2_ITERATIONS
+    ) {
         throw new Error("Invalid encryption parameters.");
     }
 
