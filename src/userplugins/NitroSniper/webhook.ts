@@ -31,7 +31,7 @@ function parseWebhookUrl(webhookUrl: string) {
 }
 
 function getNative() {
-    const native = (globalThis as any).VencordNative?.pluginHelpers?.NitroSniper as PluginNative<typeof import("./native")> | undefined;
+    const native = VencordNative?.pluginHelpers?.NitroSniper as PluginNative<typeof import("./native")> | undefined;
     if (!native) {
         throw new Error("Webhook sending requires desktop native support.");
     }

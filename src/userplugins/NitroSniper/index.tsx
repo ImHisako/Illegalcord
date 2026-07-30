@@ -4,21 +4,23 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
-import definePlugin from "@utils/types";
+import definePlugin, { type PluginNative } from "@utils/types";
 import { Message } from "@vencord/discord-types";
 import { findByPropsLazy } from "@webpack";
-import { ChannelStore, UserStore } from "@webpack/common";
+import { ChannelStore, IconUtils, UserStore } from "@webpack/common";
 
 import { resolveGiftType } from "./giftCode";
 import { settings } from "./settings";
-import type { ClaimRequest, WebhookResult } from "./types";
+import type { CaptchaProps, CaptchaResult, ClaimRequest, WebhookResult } from "./types";
 import { sendClaimWebhook } from "./webhook";
 
 const GIFT_LINK_REGEX = /(?:discord\.gift\/|discord\.com\/gifts?\/)([a-zA-Z0-9]{16,24})/;
 
 const logger = new Logger("NitroSniper");
 const GiftActions = findByPropsLazy("redeemGiftCode");
+const Native = VencordNative?.pluginHelpers?.NitroSniper as PluginNative<typeof import("./native")> | undefined;
 
 let startTime = 0;
 let claiming = false;
@@ -55,16 +57,13 @@ function createClaimRequest(message: Message): ClaimRequest | null {
     if (!code) return null;
 
     const authorId = message.author?.id;
-    const authorAvatar = message.author?.avatar;
 
     return {
         code,
         authorId,
         authorName: message.author?.globalName ?? message.author?.username,
         authorUsername: message.author?.username,
-        authorAvatarUrl: authorId && authorAvatar
-            ? `https://cdn.discordapp.com/avatars/${authorId}/${authorAvatar}.png?size=128`
-            : undefined,
+        authorAvatarUrl: message.author ? IconUtils.getUserAvatarURL(message.author, false, 128) : undefined,
         channelId: message.channel_id,
         guildId: ChannelStore.getChannel(message.channel_id)?.guild_id,
         messageId: message.id
@@ -88,7 +87,7 @@ function continueQueue() {
 }
 
 function handleClaimSuccess(request: ClaimRequest, giftType: Promise<string | null>) {
-    logger.log(`Successfully redeemed code: ${request.code}`);
+    logger.info(`Successfully redeemed code: ${request.code}`);
     void giftType.then(type => notifyClaim("claimed", request, type));
     continueQueue();
 }
@@ -110,26 +109,59 @@ function processQueue() {
         ? resolveGiftType(request.code)
         : Promise.resolve(null);
 
-    GiftActions.redeemGiftCode({
-        code: request.code,
-        onRedeemed: () => handleClaimSuccess(request, giftType),
-        onError: (error: unknown) => handleClaimFailure(request, toError(error), giftType)
-    });
+    void GiftActions.redeemGiftCode({ code: request.code }).then(
+        () => handleClaimSuccess(request, giftType),
+        (error: unknown) => handleClaimFailure(request, toError(error), giftType)
+    );
 }
 
 export default definePlugin({
     name: "NitroSniper",
-    description: "Automatically redeems Nitro gift links sent in chat",
-    authors: [{
-        name: "neoarz",
-        id: 218675193592283137n
-    }],
+    description: "Automatically redeems Nitro gift links sent in chat.",
+    authors: [EquicordDevs.neoarz],
     tags: ["Chat", "Utility"],
     searchTerms: ["nitro", "gift", "redeem", "snipe"],
     settings,
+    patches: [{
+        find: '"X-Captcha-Key"',
+        replacement: {
+            match: /return (\i)\.showCaptchaAsync\((\i)\((\i)\.body\)\)/,
+            replace: "return $self.solveCaptcha($2($3.body),$1.showCaptchaAsync.bind($1))"
+        }
+    }],
+
+    async solveCaptcha(props: CaptchaProps, showCaptcha: (props: CaptchaProps) => Promise<CaptchaResult>) {
+        const apiKey = settings.store.noneCapApiKey.trim();
+        if (!claiming || !apiKey || props.captchaService !== "hcaptcha" || !Native) {
+            return showCaptcha(props);
+        }
+
+        const result = await Native.solveCaptcha(
+            apiKey,
+            props.sitekey,
+            props.options.rqdata,
+            `${location.origin}/channels/@me`,
+            navigator.userAgent
+        );
+        if (!result.success || !result.token) {
+            logger.error(result.error ?? "NoneCap solve failed.");
+            return showCaptcha(props);
+        }
+
+        return {
+            captcha_key: result.token,
+            captcha_rqtoken: props.options.rqtoken,
+            captcha_session_id: props.captchaSessionId
+        };
+    },
 
     start() {
         resetState();
+    },
+
+    stop() {
+        resetState();
+        void Native?.cancelCaptchaSolves();
     },
 
     flux: {

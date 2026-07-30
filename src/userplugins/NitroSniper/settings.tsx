@@ -45,6 +45,16 @@ export const settings = definePluginSettings({
         default: false,
         restartNeeded: false
     },
+    noneCapApiKey: {
+        type: OptionType.STRING,
+        description: "NoneCap API key for automatically solving Nitro redemption CAPTCHAs. Leave empty to use Discord's CAPTCHA modal.",
+        default: "",
+        placeholder: "nc_live_...",
+        componentProps: {
+            type: "password",
+            autoComplete: "new-password"
+        }
+    },
     webhookUrl: {
         type: OptionType.STRING,
         description: "Discord webhook URL to notify after each redeem attempt. Leave empty to disable.",
