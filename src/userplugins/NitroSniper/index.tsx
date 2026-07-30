@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { type PluginNative } from "@utils/types";
 import { Message } from "@vencord/discord-types";
@@ -118,7 +117,10 @@ function processQueue() {
 export default definePlugin({
     name: "NitroSniper",
     description: "Automatically redeems Nitro gift links sent in chat.",
-    authors: [EquicordDevs.neoarz],
+    authors: [
+        { name: "neoarz", id: 1015372540937502851n },
+        { name: "irritably", id: 928787166916640838n }
+    ],
     tags: ["Chat", "Utility"],
     searchTerms: ["nitro", "gift", "redeem", "snipe"],
     settings,
