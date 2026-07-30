@@ -41,6 +41,8 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **WebRTCLeakPrevent**
 - **MultiInstance**
 - **IllegalcordAnnouncements**
+- **ConsoleCleaner**
+- **VoiceServerInfo**
 - **Client Diagnostics**
 - **AutoModBypass**
 - **Securecord** | (AES 256 on messages)
