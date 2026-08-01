@@ -4,270 +4,156 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { GuildStore,RestAPI } from "@webpack/common";
+import { Constants, GuildStore, RestAPI } from "@webpack/common";
 
 import { state, throwIfCancelled } from "../store";
 import { handleCloneError } from "../utils/errorHandler";
 import { arrayBufferToBase64 } from "../utils/helpers";
-import { notify,updateWithTime } from "../utils/notifications";
-import { CloneContext } from "./types";
+import { notify, updateWithTime } from "../utils/notifications";
+import { CloneContext, CloneSound, CloneSticker } from "./types";
 
-const STICKER_SLOTS: Record<number, number> = { 0: 5, 1: 15, 2: 30, 3: 60 };
-const SOUNDBOARD_SLOTS: Record<number, number> = { 0: 8, 1: 24, 2: 36, 3: 48 };
+const STICKER_SLOTS = { 0: 5, 1: 15, 2: 30, 3: 60 } as const;
+const SOUNDBOARD_SLOTS = { 0: 8, 1: 24, 2: 36, 3: 48 } as const;
+const MAX_ASSET_BYTES = 2 * 1024 * 1024;
 
-function getTargetTier(guildId: string): number {
-    const guild = GuildStore.getGuild(guildId);
-    return (guild as any)?.premiumTier || 0;
+function getTargetTier(guildId: string): 0 | 1 | 2 | 3 {
+    const tier = GuildStore.getGuild(guildId)?.premiumTier ?? 0;
+    return tier === 1 || tier === 2 || tier === 3 ? tier : 0;
 }
 
-export async function cloneStickers(ctx: CloneContext): Promise<number> {
-    const { sourceGuild, newGuildId, options, taskQueue, stickersProgressStart, stickersProgressEnd } = ctx;
-    let clonedCount = 0;
+async function fetchCapped(url: string): Promise<Blob> {
+    const response = await fetch(url, { signal: state.abortController?.signal });
+    if (!response.ok) throw new Error(`Discord CDN returned ${response.status}`);
+    const declaredSize = Number(response.headers.get("content-length") ?? 0);
+    if (declaredSize > MAX_ASSET_BYTES) throw new Error("The asset is too large to clone");
+    const blob = await response.blob();
+    if (blob.size > MAX_ASSET_BYTES) throw new Error("The asset is too large to clone");
+    return blob;
+}
+
+export async function cloneStickers(context: CloneContext): Promise<number> {
+    const { sourceGuild, newGuildId, options, taskQueue, assetQueue, stickersProgressStart, stickersProgressEnd } = context;
 
     try {
-        updateWithTime("Fetching source stickers...", stickersProgressStart);
+        const sourceResponse: { body?: CloneSticker[]; } = await RestAPI.get({ url: `/guilds/${sourceGuild.id}/stickers` });
+        const targetResponse: { body?: CloneSticker[]; } = await RestAPI.get({ url: `/guilds/${newGuildId}/stickers` });
+        if (!Array.isArray(sourceResponse.body)) throw new Error("Discord returned invalid source sticker data");
+        if (!Array.isArray(targetResponse.body)) throw new Error("Discord returned invalid target sticker data");
+        const sourceStickers = sourceResponse.body;
+        let targetStickers = targetResponse.body;
 
-        const sourceResp = await RestAPI.get({ url: `/guilds/${sourceGuild.id}/stickers` });
-        const sourceStickers: any[] = (sourceResp as any).body || [];
-
-        if (sourceStickers.length === 0) {
-            updateWithTime("No stickers to clone.", stickersProgressEnd);
-            return 0;
-        }
-
-        let targetStickers: any[] = [];
-        try {
-            const targetResp = await RestAPI.get({ url: `/guilds/${newGuildId}/stickers` });
-            targetStickers = (targetResp as any).body || [];
-        } catch (e) {
-            console.warn("[ServerCloner] Failed to fetch target stickers:", e);
-        }
-
-        if (!options.resumeMode && targetStickers.length > 0) {
-            updateWithTime(`Deleting ${targetStickers.length} existing stickers...`, stickersProgressStart);
-            for (const ts of targetStickers) {
-                if (!state.isCloning) break;
-                try {
-                    await taskQueue.execute(async () => {
-                        await RestAPI.del({ url: `/guilds/${newGuildId}/stickers/${ts.id}` });
-                    });
-                } catch (e) {
-                    console.warn(`[ServerCloner] Failed to delete target sticker ${ts.name}:`, e);
-                }
+        if (!options.resumeMode) {
+            for (const sticker of targetStickers) {
+                throwIfCancelled();
+                await taskQueue.execute(() => RestAPI.del({ url: `/guilds/${newGuildId}/stickers/${sticker.id}` }));
             }
             targetStickers = [];
         }
 
-        const tier = getTargetTier(newGuildId);
-        const maxSlots = STICKER_SLOTS[tier] ?? 5;
-        const usedSlots = targetStickers.length;
-        const availableSlots = Math.max(0, maxSlots - usedSlots);
-
-        let stickersToClone = sourceStickers;
-        if (options.resumeMode) {
-            const existingNames = new Set(targetStickers.map((s: any) => s.name));
-            stickersToClone = sourceStickers.filter((s: any) => !existingNames.has(s.name));
-        }
-
+        const existingNames = new Set(targetStickers.map(sticker => sticker.name));
+        let stickersToClone = options.resumeMode
+            ? sourceStickers.filter(sticker => !existingNames.has(sticker.name))
+            : sourceStickers;
+        const availableSlots = Math.max(0, STICKER_SLOTS[getTargetTier(newGuildId)] - targetStickers.length);
         const skipped = Math.max(0, stickersToClone.length - availableSlots);
         stickersToClone = stickersToClone.slice(0, availableSlots);
 
-        if (skipped > 0) {
-            notify(
-                "Sticker Limit",
-                `Target server (Tier ${tier}) has ${availableSlots} free sticker slots. ${skipped} sticker(s) will be skipped.`,
-                "info",
-                8000
-            );
-        }
+        if (skipped > 0) notify("Sticker limit", `${skipped} stickers cannot fit in the target server.`);
 
-        if (stickersToClone.length === 0) {
-            updateWithTime("No stickers to clone (slots full or all exist).", stickersProgressEnd);
-            return 0;
-        }
-
-        throwIfCancelled();
-
-        let step = 0;
-        for (const sticker of stickersToClone) {
-            if (!state.isCloning) break;
+        let completed = 0;
+        await Promise.all(stickersToClone.map(async sticker => {
+            if (!state.isCloning) return;
             throwIfCancelled();
 
             try {
-
-                const formatExt: Record<number, string> = { 1: "png", 2: "png", 3: "json", 4: "gif" };
-                const ext = formatExt[sticker.format_type] || "png";
-                const stickerUrl = `https://media.discordapp.net/stickers/${sticker.id}.${ext}`;
-
-                const response = await fetch(stickerUrl);
-                if (!response.ok) {
-                    handleCloneError("Sticker", new Error(`CDN returned ${response.status}`), sticker.name);
-                    continue;
-                }
-
-                const blob = await response.blob();
+                const extensions: Record<number, string> = { 1: "png", 2: "png", 3: "json", 4: "gif" };
                 const mimeTypes: Record<number, string> = { 1: "image/png", 2: "image/apng", 3: "application/json", 4: "image/gif" };
-                const mime = mimeTypes[sticker.format_type] || "image/png";
-                const file = new File([blob], `${sticker.name}.${ext}`, { type: mime });
+                const extension = extensions[sticker.format_type] ?? "png";
+                const url = `${window.GLOBAL_ENV.MEDIA_PROXY_ENDPOINT}/stickers/${sticker.id}.${extension}`;
+                const blob = await fetchCapped(url);
+                const data = new FormData();
+                data.append("name", sticker.name);
+                data.append("description", sticker.description ?? "");
+                data.append("tags", sticker.tags ?? "");
+                data.append("file", new File([blob], `${sticker.name}.${extension}`, { type: mimeTypes[sticker.format_type] ?? "image/png" }));
 
-                const formData = new FormData();
-                formData.append("name", sticker.name);
-                formData.append("description", sticker.description || "");
-                formData.append("tags", sticker.tags || "");
-                formData.append("file", file);
-
-                await taskQueue.execute(async () => {
-
-                    const token = (window as any).__SENTRY__?.hub?.getClient?.()?.getOptions?.()?.headers?.Authorization
-                        || document.body.getAttribute("data-token")
-                        || "";
-
-                    const { findByPropsLazy } = await import("@webpack");
-                    const AuthStore = findByPropsLazy("getToken");
-                    const authToken = AuthStore?.getToken?.();
-                    if (!authToken) throw new Error("Could not get auth token for sticker upload");
-
-                    const resp = await fetch(`/api/v9/guilds/${newGuildId}/stickers`, {
-                        method: "POST",
-                        headers: { Authorization: authToken },
-                        body: formData
-                    });
-
-                    if (!resp.ok) {
-                        const errBody = await resp.json().catch(() => ({}));
-                        throw new Error(errBody.message || `Sticker upload failed: ${resp.status}`);
-                    }
-                }, msg => updateWithTime(msg, stickersProgressStart + ((step / stickersToClone.length) * (stickersProgressEnd - stickersProgressStart))));
-
-                clonedCount++;
-                step++;
-                updateWithTime(`Cloned sticker ${step}/${stickersToClone.length}: ${sticker.name}`, stickersProgressStart + ((step / stickersToClone.length) * (stickersProgressEnd - stickersProgressStart)));
-            } catch (e) {
-                handleCloneError("Sticker", e, sticker.name);
-                step++;
+                await assetQueue.execute(() => RestAPI.post({
+                    url: Constants.Endpoints.GUILD_STICKER_PACKS(newGuildId),
+                    body: data
+                }));
+                completed++;
+                const progress = stickersProgressStart + completed / Math.max(stickersToClone.length, 1) * (stickersProgressEnd - stickersProgressStart);
+                updateWithTime(`Cloned sticker ${completed}/${stickersToClone.length}: ${sticker.name}`, progress);
+            } catch (error: unknown) {
+                handleCloneError("Sticker", error, sticker.name);
             }
-        }
-    } catch (e) {
-        handleCloneError("Stickers", e, "fetch");
-    }
+        }));
 
-    return clonedCount;
+        return completed;
+    } catch (error: unknown) {
+        handleCloneError("Stickers", error);
+        return 0;
+    }
 }
 
-export async function cloneSoundboard(ctx: CloneContext): Promise<number> {
-    const { sourceGuild, newGuildId, options, taskQueue, soundboardProgressStart, soundboardProgressEnd } = ctx;
-    let clonedCount = 0;
+export async function cloneSoundboard(context: CloneContext): Promise<number> {
+    const { sourceGuild, newGuildId, options, assetQueue, deleteQueue, soundboardProgressStart, soundboardProgressEnd } = context;
 
     try {
-        updateWithTime("Fetching source soundboard sounds...", soundboardProgressStart);
+        const sourceResponse: { body?: CloneSound[] | { items?: CloneSound[]; }; } = await RestAPI.get({ url: `/guilds/${sourceGuild.id}/soundboard-sounds` });
+        const targetResponse: { body?: CloneSound[] | { items?: CloneSound[]; }; } = await RestAPI.get({ url: `/guilds/${newGuildId}/soundboard-sounds` });
+        const sourceSounds = Array.isArray(sourceResponse.body) ? sourceResponse.body : sourceResponse.body?.items;
+        let targetSounds = Array.isArray(targetResponse.body) ? targetResponse.body : targetResponse.body?.items;
+        if (!Array.isArray(sourceSounds)) throw new Error("Discord returned invalid source soundboard data");
+        if (!Array.isArray(targetSounds)) throw new Error("Discord returned invalid target soundboard data");
 
-        const sourceResp = await RestAPI.get({ url: `/guilds/${sourceGuild.id}/soundboard-sounds` });
-        const sourceSounds: any[] = (sourceResp as any).body?.items || (sourceResp as any).body || [];
-
-        if (sourceSounds.length === 0) {
-            updateWithTime("No soundboard sounds to clone.", soundboardProgressEnd);
-            return 0;
-        }
-
-        let targetSounds: any[] = [];
-        try {
-            const targetResp = await RestAPI.get({ url: `/guilds/${newGuildId}/soundboard-sounds` });
-            targetSounds = (targetResp as any).body?.items || (targetResp as any).body || [];
-        } catch (e) {
-            console.warn("[ServerCloner] Failed to fetch target soundboard sounds:", e);
-        }
-
-        if (!options.resumeMode && targetSounds.length > 0) {
-            updateWithTime(`Deleting ${targetSounds.length} existing soundboard sounds...`, soundboardProgressStart);
-            for (const ts of targetSounds) {
-                if (!state.isCloning) break;
-                try {
-                    await taskQueue.execute(async () => {
-                        await RestAPI.del({ url: `/guilds/${newGuildId}/soundboard-sounds/${ts.sound_id}` });
-                    });
-                } catch (e) {
-                    console.warn(`[ServerCloner] Failed to delete target soundboard sound ${ts.name}:`, e);
-                }
-            }
+        if (!options.resumeMode) {
+            await Promise.all(targetSounds.map(sound => deleteQueue.execute(() =>
+                RestAPI.del({ url: `/guilds/${newGuildId}/soundboard-sounds/${sound.sound_id}` })
+            )));
             targetSounds = [];
         }
 
-        const tier = getTargetTier(newGuildId);
-        const maxSlots = SOUNDBOARD_SLOTS[tier] ?? 8;
-        const usedSlots = targetSounds.length;
-        const availableSlots = Math.max(0, maxSlots - usedSlots);
-
-        let soundsToClone = sourceSounds;
-        if (options.resumeMode) {
-            const existingNames = new Set(targetSounds.map((s: any) => s.name));
-            soundsToClone = sourceSounds.filter((s: any) => !existingNames.has(s.name));
-        }
-
+        const existingNames = new Set(targetSounds.map(sound => sound.name));
+        let soundsToClone = options.resumeMode
+            ? sourceSounds.filter(sound => !existingNames.has(sound.name))
+            : sourceSounds;
+        const availableSlots = Math.max(0, SOUNDBOARD_SLOTS[getTargetTier(newGuildId)] - targetSounds.length);
         const skipped = Math.max(0, soundsToClone.length - availableSlots);
         soundsToClone = soundsToClone.slice(0, availableSlots);
 
-        if (skipped > 0) {
-            notify(
-                "Soundboard Limit",
-                `Target server (Tier ${tier}) has ${availableSlots} free soundboard slots. ${skipped} sound(s) will be skipped.`,
-                "info",
-                8000
-            );
-        }
+        if (skipped > 0) notify("Soundboard limit", `${skipped} sounds cannot fit in the target server.`);
 
-        if (soundsToClone.length === 0) {
-            updateWithTime("No soundboard sounds to clone (slots full or all exist).", soundboardProgressEnd);
-            return 0;
-        }
-
-        throwIfCancelled();
-
-        let step = 0;
-        for (const sound of soundsToClone) {
-            if (!state.isCloning) break;
+        let completed = 0;
+        await Promise.all(soundsToClone.map(async sound => {
+            if (!state.isCloning) return;
             throwIfCancelled();
 
             try {
-                const soundUrl = `https://cdn.discordapp.com/soundboard-sounds/${sound.sound_id}`;
-                const response = await fetch(soundUrl);
-                if (!response.ok) {
-                    handleCloneError("Soundboard", new Error(`CDN returned ${response.status}`), sound.name);
-                    step++;
-                    continue;
-                }
-
-                const buffer = await response.arrayBuffer();
-                const base64 = arrayBufferToBase64(buffer);
-                const dataUri = `data:audio/ogg;base64,${base64}`;
-
-                const body: any = {
+                const blob = await fetchCapped(`https://${window.GLOBAL_ENV.CDN_HOST}/soundboard-sounds/${sound.sound_id}`);
+                const buffer = await blob.arrayBuffer();
+                const body: Record<string, unknown> = {
                     name: sound.name,
-                    sound: dataUri,
-                    volume: sound.volume ?? 1,
+                    sound: `data:audio/ogg;base64,${arrayBufferToBase64(buffer)}`,
+                    volume: sound.volume ?? 1
                 };
+                if (sound.emoji_name && !sound.emoji_id) body.emoji_name = sound.emoji_name;
 
-                if (sound.emoji_name && !sound.emoji_id) {
-                    body.emoji_name = sound.emoji_name;
-                }
-
-                await taskQueue.execute(async () => {
-                    await RestAPI.post({
-                        url: `/guilds/${newGuildId}/soundboard-sounds`,
-                        body
-                    });
-                }, msg => updateWithTime(msg, soundboardProgressStart + ((step / soundsToClone.length) * (soundboardProgressEnd - soundboardProgressStart))));
-
-                clonedCount++;
-                step++;
-                updateWithTime(`Cloned sound ${step}/${soundsToClone.length}: ${sound.name}`, soundboardProgressStart + ((step / soundsToClone.length) * (soundboardProgressEnd - soundboardProgressStart)));
-            } catch (e) {
-                handleCloneError("Soundboard", e, sound.name);
-                step++;
+                await assetQueue.execute(() => RestAPI.post({
+                    url: `/guilds/${newGuildId}/soundboard-sounds`,
+                    body
+                }));
+                completed++;
+                const progress = soundboardProgressStart + completed / Math.max(soundsToClone.length, 1) * (soundboardProgressEnd - soundboardProgressStart);
+                updateWithTime(`Cloned sound ${completed}/${soundsToClone.length}: ${sound.name}`, progress);
+            } catch (error: unknown) {
+                handleCloneError("Soundboard", error, sound.name);
             }
-        }
-    } catch (e) {
-        handleCloneError("Soundboard", e, "fetch");
-    }
+        }));
 
-    return clonedCount;
+        return completed;
+    } catch (error: unknown) {
+        handleCloneError("Soundboard", error);
+        return 0;
+    }
 }

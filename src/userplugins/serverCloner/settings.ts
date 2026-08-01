@@ -12,7 +12,7 @@ import { VersionDisplay } from "./components/VersionDisplay";
 export const settings = definePluginSettings({
     versionInfo: {
         type: OptionType.COMPONENT,
-        description: "",
+        description: "View the installed version and check for updates.",
         component: VersionDisplay
     }
 });

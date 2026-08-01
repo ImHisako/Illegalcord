@@ -2,7 +2,8 @@
 
 A powerful Vencord plugin that allows you to clone Discord servers with all their channels, roles, permissions, and community features.
 
-![Version](https://img.shields.io/badge/version-3.0.0-5865F2?style=for-the-badge)
+[![Version](https://img.shields.io/github/v/release/BlockTol/Discord-Server-Cloner?style=for-the-badge&color=5865F2&label=version)](https://github.com/BlockTol/Discord-Server-Cloner/releases)
+[![Downloads](https://img.shields.io/github/downloads/BlockTol/Discord-Server-Cloner/total?style=for-the-badge&color=5865F2)](https://github.com/BlockTol/Discord-Server-Cloner/releases)
 [![Discord](https://img.shields.io/badge/Discord-Join_Server-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/9ra6MwHTHy)
 
 ---

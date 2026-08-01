@@ -5,182 +5,180 @@
  */
 
 import { Guild } from "@vencord/discord-types";
-import { findByPropsLazy } from "@webpack";
-import { GuildStore,NavigationRouter, RestAPI } from "@webpack/common";
+import { Constants, GuildStore, IconUtils, NavigationRouter, RestAPI } from "@webpack/common";
 
 import { state, throwIfCancelled } from "../store";
 import { CloneOptions } from "../types";
-import { extractChannels, fetchAssetBase64,fetchGuildData, fetchGuildRoles, normalizeChannel } from "../utils/api";
+import { fetchAssetBase64, fetchGuildChannels, fetchGuildData, fetchGuildRoles } from "../utils/api";
 import { translateError } from "../utils/errorHandler";
 import { replaceEmojis, sleep } from "../utils/helpers";
 import { completeMainProgress, createMainProgressNotification, formatElapsed, notify, updateProgress, updateWithTime } from "../utils/notifications";
 import { TaskQueue } from "../utils/TaskQueue";
-import { CloneContext } from "./types";
-
-const AuthStore = findByPropsLazy("getToken");
-async function fetchChannelsRaw(guildId: string): Promise<any[]> {
-    const token = AuthStore?.getToken?.();
-    if (!token) throw new Error("Could not get Discord token");
-    const resp = await fetch(`/api/v9/guilds/${guildId}/channels`, {
-        headers: { Authorization: token, "Content-Type": "application/json" }
-    });
-    if (!resp.ok) throw new Error(`Channels fetch failed: ${resp.status}`);
-    return resp.json();
-}
-
-async function waitForGuildInStore(guildId: string, maxWaitMs = 10000): Promise<boolean> {
-    const deadline = Date.now() + maxWaitMs;
-    while (Date.now() < deadline) {
-        if (GuildStore.getGuild(guildId)) return true;
-        await sleep(200);
-    }
-    return false;
-}
-
-import { cloneSoundboard,cloneStickers } from "./cloneAssets";
+import { cloneSoundboard, cloneStickers } from "./cloneAssets";
 import { cloneChannels } from "./cloneChannels";
 import { cloneOnboarding } from "./cloneOnboarding";
-import { cloneRoles,extractAndCloneEmojis } from "./cloneRoles";
+import { cloneRoles, extractAndCloneEmojis } from "./cloneRoles";
 import { cloneSettings } from "./cloneSettings";
+import { CloneChannel, CloneContext, CloneRole } from "./types";
 
-export async function cloneServer(sourceGuild: Guild, options: CloneOptions) {
+async function waitForGuildInStore(guildId: string, maxWaitMs = 10000): Promise<void> {
+    const deadline = Date.now() + maxWaitMs;
+    while (!GuildStore.getGuild(guildId)) {
+        throwIfCancelled();
+        if (Date.now() >= deadline) throw new Error("The new server did not become available in time");
+        await sleep(200);
+    }
+}
+
+function validateSourceSnapshot(options: CloneOptions, channels: CloneChannel[], roles: CloneRole[]): void {
+    if (options.cloneChannels && channels.length === 0) throw new Error("No source channels were returned. Nothing was changed.");
+    if (options.cloneRoles && !roles.some(role => role.name === "@everyone")) throw new Error("The source role list is incomplete. Nothing was changed.");
+}
+
+async function deleteTargetContent(
+    guildId: string,
+    options: CloneOptions,
+    channels: CloneChannel[],
+    roles: CloneRole[],
+    queue: TaskQueue
+): Promise<void> {
+    if (options.cloneChannels) {
+        await RestAPI.patch({
+            url: Constants.Endpoints.GUILD(guildId),
+            body: {
+                features: [],
+                public_updates_channel_id: null,
+                rules_channel_id: null,
+                safety_alerts_channel_id: null,
+                system_channel_id: null
+            }
+        });
+
+        await Promise.all(channels.map(channel => queue.execute(
+            () => RestAPI.del({ url: Constants.Endpoints.CHANNEL(channel.id) }),
+            message => updateWithTime(`Deleting ${channel.name}. ${message}`, 10)
+        )));
+    }
+
+    if (options.cloneRoles) {
+        const deletableRoles = roles.filter(role => role.name !== "@everyone" && !role.managed);
+        await Promise.all(deletableRoles.map(role => queue.execute(
+            () => RestAPI.del({ url: `/guilds/${guildId}/roles/${role.id}` }),
+            message => updateWithTime(`Deleting ${role.name}. ${message}`, 10)
+        )));
+    }
+}
+
+function getGuildPayload(guild: Guild, options: CloneOptions, description?: string | null): Record<string, unknown> {
+    return {
+        afk_timeout: guild.afkTimeout,
+        default_message_notifications: guild.defaultMessageNotifications,
+        description,
+        explicit_content_filter: guild.explicitContentFilter,
+        name: `${guild.name} (Clone)`,
+        preferred_locale: guild.preferredLocale,
+        system_channel_flags: options.cloneSystemFlags ? guild.systemChannelFlags : 0,
+        verification_level: guild.verificationLevel
+    };
+}
+
+export async function cloneServer(sourceGuild: Guild, options: CloneOptions): Promise<void> {
     if (state.isCloning) {
-        notify("Already Cloning", "Please wait for the current clone to finish", "error");
+        notify("Clone already running", "Wait for the current clone to finish.", "error");
         return;
     }
 
     state.isCloning = true;
     state.abortController = new AbortController();
-    state.emojiIdMap = {};
     state.cloneErrors = [];
-    state.sourceGuildName = sourceGuild.name;
-    state.sourceGuildId = sourceGuild.id;
-    state.isExistingServer = !!options.targetGuildId;
-    state.optionsUsed = { ...options };
+    state.emojiIdMap = {};
 
-    let rolesFailed = 0;
-    let channelsFailed = 0;
-    let stickersCloned = 0;
-    let soundboardCloned = 0;
-
-    const taskQueue = new TaskQueue(5);
+    const taskQueue = new TaskQueue(2);
+    const roleQueue = new TaskQueue(2);
+    const channelQueue = new TaskQueue(2);
+    const deleteQueue = new TaskQueue(3);
+    const assetQueue = new TaskQueue(2);
 
     try {
         const guild = GuildStore.getGuild(sourceGuild.id);
+        if (!guild) throw new Error("The source server no longer exists");
 
-        if (!guild) throw new Error("Server not found");
+        const [fullGuildData, estimateChannels, estimateRoles] = await Promise.all([
+            fetchGuildData(guild.id),
+            options.cloneChannels ? fetchGuildChannels(guild.id) : Promise.resolve([]),
+            options.cloneRoles ? fetchGuildRoles(guild.id) : Promise.resolve([])
+        ]);
+        validateSourceSnapshot(options, estimateChannels, estimateRoles);
 
-        const fullGuildData = await fetchGuildData(sourceGuild.id);
-        let estimateChannels: any[] = [];
-        if (options.cloneChannels) {
-            const isRealChannel = (ch: any) => ch?.name && ch.name !== "___hidden___";
-            try {
-
-                const restChannels = await fetchChannelsRaw(sourceGuild.id);
-                estimateChannels = restChannels.filter(isRealChannel);
-
-                const localChannels = extractChannels(sourceGuild.id, true);
-                const restChannelIds = new Set(restChannels.map((c: any) => c.id));
-                for (const localCh of localChannels) {
-                    if (localCh?.id && !restChannelIds.has(localCh.id) && isRealChannel(localCh)) {
-                        estimateChannels.push(normalizeChannel(localCh));
-                    }
-                }
-            } catch (e) {
-                console.warn("[ServerCloner] Failed to fetch channels via raw fetch, falling back to local store", e);
-                estimateChannels = extractChannels(sourceGuild.id, true).filter((ch: any) => ch?.name && ch.name !== "___hidden___").map(normalizeChannel);
-            }
-
+        let targetChannels: CloneChannel[] = [];
+        let targetRoles: CloneRole[] = [];
+        if (options.targetGuildId && !options.resumeMode) {
+            if (!GuildStore.getGuild(options.targetGuildId)) throw new Error("The target server no longer exists");
+            [targetChannels, targetRoles] = await Promise.all([
+                options.cloneChannels ? fetchGuildChannels(options.targetGuildId) : Promise.resolve([]),
+                options.cloneRoles ? fetchGuildRoles(options.targetGuildId) : Promise.resolve([])
+            ]);
         }
-        const estimateRoles = options.cloneRoles ? await fetchGuildRoles(sourceGuild.id) : [];
-        let channelCount = estimateChannels.length;
-        let roleCount = estimateRoles.length - 1;
-
-        if (options.targetGuildId && options.resumeMode) {
-            try {
-                const [targetRoles, targetChResp] = await Promise.all([
-                    fetchGuildRoles(options.targetGuildId),
-                    RestAPI.get({ url: `/guilds/${options.targetGuildId}/channels` })
-                ]);
-                const targetChannels = (targetChResp as any).body || [];
-
-                const matchingRoles = estimateRoles.filter(sr =>
-                    targetRoles.some((tr: any) => tr.name === sr.name && tr.color === sr.color)
-                ).length;
-
-                const matchingChannels = estimateChannels.filter(sc =>
-                    targetChannels.some((tc: any) => tc.name === sc.name && tc.type === sc.type)
-                ).length;
-
-                roleCount = Math.max(0, roleCount - matchingRoles);
-                channelCount = Math.max(0, channelCount - matchingChannels);
-            } catch (e) {
-                console.warn("[ServerCloner] Failed to pre-fetch target guild for estimates", e);
-            }
-        }
-
-        let apiCalls = 4;
-        let sleepSeconds = 0;
-
-        if (options.targetGuildId) {
-            if (!options.resumeMode) {
-                const targetCh = extractChannels(options.targetGuildId, false);
-                const targetRoles = await fetchGuildRoles(options.targetGuildId);
-                if (options.cloneChannels) apiCalls += targetCh.length + 1;
-                if (options.cloneRoles) apiCalls += targetRoles.filter((r: any) => r.name !== "@everyone").length;
-                sleepSeconds += 6;
-            }
-            apiCalls += 1;
-        } else {
-            apiCalls += 4;
-            sleepSeconds += 5;
-        }
-
-        if (options.cloneRoles) apiCalls += roleCount + 2;
-        if (options.cloneChannels) {
-            apiCalls += channelCount + 1 + Math.ceil(channelCount / 50);
-            const isCommunity = fullGuildData?.features?.includes("COMMUNITY") || estimateChannels.some((c: any) => [5, 13, 15, 16].includes(c.type));
-            if (isCommunity && !options.resumeMode) {
-                apiCalls += 4;
-                sleepSeconds += 2;
-            }
-        }
-        if (options.cloneOnboarding) apiCalls += 2;
-        apiCalls += 1;
-
-        const apiDuration = apiCalls * 0.5;
-        const estimatedSeconds = Math.max(10, Math.ceil(apiDuration + sleepSeconds));
-
-        const formatTime = (s: number) => {
-            const time = Math.max(0, Math.floor(s));
-            const m = Math.floor(time / 60);
-            const rs = time % 60;
-            return `${m}:${rs.toString().padStart(2, "0")}`;
-        };
-
-        const timeStr = formatTime(estimatedSeconds);
-        const initialMsg = options.targetGuildId
-            ? `Starting... (Est. ${timeStr})`
-            : `Starting... (Est. ${timeStr})\\nYou'll be navigated to the new server when cloning is complete.`;
 
         state.mainProgressNotificationId = createMainProgressNotification(
-            `Cloning "${guild.name}"`,
-            initialMsg,
-            () => {},
-            options.targetGuildId !== null,
-            options.cloneRoles && options.cloneChannels
+            `Cloning ${guild.name}`,
+            "The source snapshot is valid and cloning has started.",
+            options.targetGuildId !== null
         );
+
+        const iconUrl = guild.icon ? IconUtils.getGuildIconURL({ id: guild.id, icon: guild.icon, size: 512 }) : null;
+        const bannerUrl = guild.banner ? IconUtils.getGuildBannerURL(guild, false) : null;
+        const splashUrl: string | null = guild.splash ? IconUtils.getGuildSplashURL(guild, false) : null;
+        const [iconBase64, bannerBase64, splashBase64] = await Promise.all([
+            iconUrl ? fetchAssetBase64(iconUrl) : null,
+            bannerUrl ? fetchAssetBase64(bannerUrl) : null,
+            splashUrl ? fetchAssetBase64(splashUrl) : null
+        ]);
+
+        throwIfCancelled();
+
+        let newGuildId: string;
+        if (options.targetGuildId) {
+            newGuildId = options.targetGuildId;
+            state.currentCloneGuildId = newGuildId;
+
+            if (!options.resumeMode) {
+                await deleteTargetContent(newGuildId, options, targetChannels, targetRoles, deleteQueue);
+                throwIfCancelled();
+            }
+
+            const updatePayload = getGuildPayload(guild, options, replaceEmojis(fullGuildData.description));
+            if (!guild.icon) updatePayload.icon = null;
+            else if (iconBase64) updatePayload.icon = iconBase64;
+            if (!guild.banner) updatePayload.banner = null;
+            else if (bannerBase64) updatePayload.banner = bannerBase64;
+            if (!guild.splash) updatePayload.splash = null;
+            else if (splashBase64) updatePayload.splash = splashBase64;
+            await RestAPI.patch({ url: Constants.Endpoints.GUILD(newGuildId), body: updatePayload });
+        } else {
+            const createPayload = getGuildPayload(guild, options);
+            if (iconBase64) createPayload.icon = iconBase64;
+
+            const response: { body?: { id?: unknown; }; } = await RestAPI.post({ url: "/guilds", body: createPayload });
+            if (typeof response.body?.id !== "string") throw new Error("Discord did not return the new server ID");
+
+            newGuildId = response.body.id;
+            state.currentCloneGuildId = newGuildId;
+            await waitForGuildInStore(newGuildId);
+            NavigationRouter.transitionToGuild(newGuildId);
+
+            const defaultChannels = await fetchGuildChannels(newGuildId);
+            await Promise.all(defaultChannels.map(channel => RestAPI.del({ url: Constants.Endpoints.CHANNEL(channel.id) })));
+        }
 
         const hasRoles = options.cloneRoles;
         const hasChannels = options.cloneChannels;
         const hasOnboarding = options.cloneOnboarding;
         const hasStickers = options.cloneStickers;
         const hasSoundboard = options.cloneSoundboard;
-
         const totalWeight = (hasRoles ? 30 : 0) + (hasChannels ? 50 : 0) + 5 + (hasOnboarding ? 5 : 0) + (hasStickers ? 5 : 0) + (hasSoundboard ? 5 : 0);
-        const scale = totalWeight > 0 ? (90 / totalWeight) : 1;
+        const scale = totalWeight > 0 ? 90 / totalWeight : 1;
         let currentProgress = 5;
-
         const advanceProgress = (weight: number) => {
             const start = currentProgress;
             currentProgress += weight * scale;
@@ -194,130 +192,7 @@ export async function cloneServer(sourceGuild: Guild, options: CloneOptions) {
         const settingsProgress = advanceProgress(5);
         const onboardingProgress = advanceProgress(hasOnboarding ? 5 : 0);
 
-        updateWithTime("Preparing server data...", 5);
-
-        let iconBase64: string | null = null;
-        let bannerBase64: string | null = null;
-        let splashBase64: string | null = null;
-
-        [iconBase64, bannerBase64, splashBase64] = await Promise.all([
-            guild.icon
-                ? fetchAssetBase64(`https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=512`)
-                : Promise.resolve(null),
-            (guild as any).banner
-                ? fetchAssetBase64(`https://cdn.discordapp.com/banners/${guild.id}/${(guild as any).banner}.png?size=512`)
-                : Promise.resolve(null),
-            (guild as any).splash
-                ? fetchAssetBase64(`https://cdn.discordapp.com/splashes/${guild.id}/${(guild as any).splash}.png?size=512`)
-                : Promise.resolve(null),
-        ]);
-
-        throwIfCancelled();
-        let newGuildId: string;
-
-        if (options.targetGuildId) {
-            newGuildId = options.targetGuildId;
-            state.currentCloneGuildId = newGuildId;
-            updateWithTime("Preparing target server...", 10);
-
-            if (!options.resumeMode) {
-                const overwriteQueue = new TaskQueue(3);
-                if (options.cloneChannels) {
-                    try {
-                        await RestAPI.patch({
-                            url: `/guilds/${newGuildId}`,
-                            body: { features: [], system_channel_id: null, rules_channel_id: null, public_updates_channel_id: null, safety_alerts_channel_id: null }
-                        });
-                        await sleep(1000);
-                    } catch (e) { }
-
-                    const existingChannels = extractChannels(newGuildId, false).filter(c => c && c.id && c.id !== "null");
-                    let deletedCount = 0;
-                    const deletePromises = existingChannels.map(async channel => {
-                        if (!state.isCloning) return;
-                        try {
-                            await overwriteQueue.execute(() => RestAPI.del({ url: `/channels/${channel.id}` }), msg => updateWithTime(`Deleting channel: ${channel.name} (${msg})`, 10), () => !state.isCloning);
-                            deletedCount++;
-                            updateWithTime(`Deleting channels: ${deletedCount}/${existingChannels.length}`, 10);
-                        } catch (e: any) {
-                            if (e?.message === "Cancelled") return;
-                        }
-                    });
-                    await Promise.all(deletePromises);
-                }
-
-                if (options.cloneRoles) {
-                    const existingRoles = await fetchGuildRoles(newGuildId);
-                    const deletableRoles = existingRoles.filter((r: any) => r.name !== "@everyone");
-                    let deletedRoles = 0;
-                    const roleDeletePromises = deletableRoles.map(async role => {
-                        if (!state.isCloning) return;
-                        try {
-                            await overwriteQueue.execute(() => RestAPI.del({ url: `/guilds/${newGuildId}/roles/${role.id}` }), msg => updateWithTime(`Deleting role: ${role.name} (${msg})`, 10), () => !state.isCloning);
-                            deletedRoles++;
-                            updateWithTime(`Deleting roles: ${deletedRoles}/${deletableRoles.length}`, 10);
-                        } catch (e: any) {
-                            if (e?.message === "Cancelled") return;
-                        }
-                    });
-                    await Promise.all(roleDeletePromises);
-                }
-
-                updateWithTime("Waiting for Discord to process deletions...", 10);
-                await sleep(2000);
-            }
-
-            const updatePayload: any = {
-                name: guild.name + " (Clone)",
-                description: replaceEmojis((guild as any).description),
-                verification_level: (guild as any).verificationLevel ?? 0,
-                default_message_notifications: (guild as any).defaultMessageNotifications ?? 0,
-                explicit_content_filter: (guild as any).explicitContentFilter ?? 0,
-                afk_timeout: (guild as any).afkTimeout ?? 300,
-                preferred_locale: (guild as any).preferredLocale ?? "en-US",
-                system_channel_flags: options.cloneSystemFlags ? ((guild as any).systemChannelFlags ?? 0) : 0,
-            };
-            if (iconBase64) updatePayload.icon = iconBase64;
-            if (bannerBase64) updatePayload.banner = bannerBase64;
-            if (splashBase64) updatePayload.splash = splashBase64;
-
-            await RestAPI.patch({ url: `/guilds/${newGuildId}`, body: updatePayload });
-        } else {
-            const createPayload: any = {
-                name: guild.name + " (Clone)",
-                verification_level: (guild as any).verificationLevel ?? 0,
-                default_message_notifications: (guild as any).defaultMessageNotifications ?? 0,
-                explicit_content_filter: (guild as any).explicitContentFilter ?? 0,
-                afk_timeout: (guild as any).afkTimeout ?? 300,
-                preferred_locale: (guild as any).preferredLocale ?? "en-US",
-                system_channel_flags: options.cloneSystemFlags ? ((guild as any).systemChannelFlags ?? 0) : 0,
-            };
-            if (iconBase64) createPayload.icon = iconBase64;
-
-            const createResponse = await RestAPI.post({ url: "/guilds", body: createPayload });
-            if (!createResponse?.body?.id) throw new Error("Failed to create guild");
-
-            newGuildId = createResponse.body.id;
-            state.currentCloneGuildId = newGuildId;
-
-            const guildReady = await waitForGuildInStore(newGuildId, 10000);
-            if (!guildReady) await sleep(1000);
-
-            try { NavigationRouter.transitionToGuild(newGuildId); } catch (e) {}
-
-            const defaultChannels = extractChannels(newGuildId, false).filter(c => c && c.id && c.id !== "null" && (c.type === 0 || c.type === 2 || c.type === 4));
-            await Promise.all(defaultChannels.map(async channel => {
-                try {
-                    await RestAPI.del({ url: `/channels/${channel.id}` });
-                } catch (e) {
-                    console.warn("[ServerCloner] Failed to delete default channel:", e);
-                }
-            }));
-        }
-
-        updateWithTime("Extracting used emojis...", 15);
-
-        const cloneContext: CloneContext = {
+        const context: CloneContext = {
             sourceGuild,
             fullGuildData,
             newGuildId,
@@ -325,6 +200,10 @@ export async function cloneServer(sourceGuild: Guild, options: CloneOptions) {
             roleIdMap: {},
             channelIdMap: {},
             taskQueue,
+            roleQueue,
+            channelQueue,
+            deleteQueue,
+            assetQueue,
             estimateChannels,
             estimateRoles,
             rolesProgressStart: rolesProgress.start,
@@ -339,117 +218,82 @@ export async function cloneServer(sourceGuild: Guild, options: CloneOptions) {
             soundboardProgressEnd: soundboardProgress.end
         };
 
-        if (options.cloneEmojis || options.cloneOnboarding) {
-            await extractAndCloneEmojis(cloneContext);
-        }
-
+        if (hasRoles || hasChannels || hasOnboarding) await extractAndCloneEmojis(context);
         throwIfCancelled();
 
-        const phaseTimers: { label: string; ms: number }[] = [];
-        let _phaseStart = performance.now();
+        const phaseTimers: { label: string; ms: number; }[] = [];
+        let phaseStart = performance.now();
 
-        if (options.cloneStickers) {
-            _phaseStart = performance.now();
-            stickersCloned = await cloneStickers(cloneContext);
-            phaseTimers.push({ label: "Stickers", ms: performance.now() - _phaseStart });
+        if (hasStickers) {
+            await cloneStickers(context);
+            phaseTimers.push({ label: "Stickers", ms: performance.now() - phaseStart });
+            phaseStart = performance.now();
         }
-
         throwIfCancelled();
 
-        if (options.cloneSoundboard) {
-            _phaseStart = performance.now();
-            soundboardCloned = await cloneSoundboard(cloneContext);
-            phaseTimers.push({ label: "Soundboard", ms: performance.now() - _phaseStart });
+        if (hasSoundboard) {
+            await cloneSoundboard(context);
+            phaseTimers.push({ label: "Soundboard", ms: performance.now() - phaseStart });
+            phaseStart = performance.now();
         }
-
-        throwIfCancelled();
-        updateWithTime("Cloning content...", rolesProgress.start);
-
-        if (options.cloneRoles) {
-            _phaseStart = performance.now();
-            rolesFailed = await cloneRoles(cloneContext);
-            phaseTimers.push({ label: "Roles", ms: performance.now() - _phaseStart });
-        }
-
         throwIfCancelled();
 
-        if (state.mainProgressNotificationId) {
-            const skipBtn = document.getElementById(state.mainProgressNotificationId)?.querySelector(".cloner-skip-roles-btn") as HTMLElement;
-            if (skipBtn) skipBtn.style.display = "none";
-            updateWithTime("Starting channels...", channelsProgress.start);
+        if (hasRoles) {
+            await cloneRoles(context);
+            phaseTimers.push({ label: "Roles", ms: performance.now() - phaseStart });
+            phaseStart = performance.now();
         }
-
-        if (options.cloneChannels) {
-            _phaseStart = performance.now();
-            channelsFailed = await cloneChannels(cloneContext);
-            phaseTimers.push({ label: "Channels", ms: performance.now() - _phaseStart });
-
-            _phaseStart = performance.now();
-            await cloneSettings(cloneContext);
-            phaseTimers.push({ label: "Settings", ms: performance.now() - _phaseStart });
-        }
-
         throwIfCancelled();
 
-        if (options.cloneOnboarding) {
-            _phaseStart = performance.now();
-            await cloneOnboarding(cloneContext);
-            phaseTimers.push({ label: "Onboarding", ms: performance.now() - _phaseStart });
+        if (hasChannels) {
+            await cloneChannels(context);
+            phaseTimers.push({ label: "Channels", ms: performance.now() - phaseStart });
+            phaseStart = performance.now();
+            await cloneSettings(context);
+            phaseTimers.push({ label: "Settings", ms: performance.now() - phaseStart });
+            phaseStart = performance.now();
         }
-
         throwIfCancelled();
 
-        if (!options.targetGuildId && (bannerBase64 || splashBase64 || fullGuildData?.description)) {
-            try {
-                const updatePayload: any = {};
-                if (bannerBase64) updatePayload.banner = bannerBase64;
-                if (splashBase64) updatePayload.splash = splashBase64;
-                if (fullGuildData?.description) updatePayload.description = fullGuildData.description;
+        if (hasOnboarding) {
+            await cloneOnboarding(context);
+            phaseTimers.push({ label: "Onboarding", ms: performance.now() - phaseStart });
+        }
+        throwIfCancelled();
 
-                await taskQueue.execute(async () => {
-                    await RestAPI.patch({ url: `/guilds/${newGuildId}`, body: updatePayload });
-                });
-            } catch (e) { }
+        if (!options.targetGuildId && (bannerBase64 || splashBase64 || fullGuildData.description)) {
+            const updatePayload: Record<string, unknown> = {};
+            if (bannerBase64) updatePayload.banner = bannerBase64;
+            if (splashBase64) updatePayload.splash = splashBase64;
+            if (fullGuildData.description) updatePayload.description = replaceEmojis(fullGuildData.description);
+            await taskQueue.execute(() => RestAPI.patch({ url: Constants.Endpoints.GUILD(newGuildId), body: updatePayload }));
         }
 
         updateProgress(100);
+        if (options.targetGuildId) NavigationRouter.transitionToGuild(newGuildId);
 
-        const totalFailed = rolesFailed + channelsFailed;
-
-        if (options.targetGuildId) {
-            try { NavigationRouter.transitionToGuild(newGuildId); } catch (e) {}
-        }
-
+        const totalFailed = state.cloneErrors.length;
         if (state.mainProgressNotificationId) {
-            if (totalFailed > 0) {
-                completeMainProgress(state.mainProgressNotificationId, `Cloned with ${totalFailed} errors`, true);
-            } else {
-                completeMainProgress(state.mainProgressNotificationId, `Successfully cloned "${guild.name}"!`, true);
-            }
+            completeMainProgress(
+                state.mainProgressNotificationId,
+                totalFailed > 0 ? `Cloned with ${totalFailed} errors` : `Successfully cloned ${guild.name}`,
+                totalFailed === 0
+            );
         }
 
         if (phaseTimers.length > 0) {
-            const breakdown = phaseTimers
-                .map(p => `${p.label}: ${formatElapsed(p.ms)}`)
-                .join("  •  ");
-            notify("Timing Breakdown", breakdown, "info", 10000);
-
+            notify("Clone timing", phaseTimers.map(phase => `${phase.label}: ${formatElapsed(phase.ms)}`).join(" • "));
         }
+    } catch (error: unknown) {
+        const friendlyMessage = translateError(error);
+        if (!state.isCloning || !friendlyMessage) return;
 
-    } catch (e: any) {
-        if (!state.isCloning || e.message?.includes("Cancelled")) return;
-        const friendlyMsg = translateError(e);
-        state.cloneErrors.push(`[Fatal]: ${friendlyMsg || e.message}`);
-
-        if (state.mainProgressNotificationId) {
-            completeMainProgress(state.mainProgressNotificationId, friendlyMsg, false);
-        } else {
-            notify("Clone Failed", friendlyMsg, "error");
-        }
+        state.cloneErrors.push(`[Fatal]: ${friendlyMessage}`);
+        if (state.mainProgressNotificationId) completeMainProgress(state.mainProgressNotificationId, friendlyMessage, false);
+        else notify("Clone failed", friendlyMessage, "error");
     } finally {
         state.isCloning = false;
         state.abortController = null;
         state.mainProgressNotificationId = null;
     }
-
 }

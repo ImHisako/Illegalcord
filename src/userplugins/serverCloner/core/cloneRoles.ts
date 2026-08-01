@@ -4,290 +4,232 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { GuildStore,RestAPI } from "@webpack/common";
+import { findByPropsLazy } from "@webpack";
+import { GuildStore, IconUtils, RestAPI } from "@webpack/common";
 
 import { state } from "../store";
-import { checkGuildExistence } from "../utils/api";
+import { checkGuildExistence, fetchGuildRoles } from "../utils/api";
 import { handleCloneError } from "../utils/errorHandler";
-import { arrayBufferToBase64,replaceEmojis } from "../utils/helpers";
+import { arrayBufferToBase64, isRecord, replaceEmojis } from "../utils/helpers";
 import { updateWithTime } from "../utils/notifications";
-import { CloneContext } from "./types";
+import { CloneContext, CloneEmoji, CloneRole, OnboardingData } from "./types";
 
-export async function extractAndCloneEmojis(ctx: CloneContext) {
-    const { sourceGuild, fullGuildData, options, estimateRoles, estimateChannels, newGuildId, taskQueue } = ctx;
+const RoleIconUtils: { getRoleIconURL(data: { id: string; icon: string; size: number; }): string; } = findByPropsLazy("getRoleIconURL");
+const MAX_EMOJI_BYTES = 1024 * 1024;
+
+interface CreatedResponse {
+    body?: { id?: unknown; };
+}
+
+function responseBody<T>(response: { body?: T; }): T | undefined {
+    return response.body;
+}
+
+function errorCode(error: unknown): number | undefined {
+    if (!isRecord(error)) return undefined;
+    if (typeof error.code === "number") return error.code;
+    if (isRecord(error.body) && typeof error.body.code === "number") return error.body.code;
+    return undefined;
+}
+
+function isRateLimitExhausted(error: unknown): boolean {
+    return isRecord(error) && error.rateLimitExhausted === true;
+}
+
+async function fetchImageDataUrl(url: string, mimeType: string): Promise<string> {
+    const response = await fetch(url, { signal: state.abortController?.signal });
+    if (!response.ok) throw new Error(`Discord CDN returned ${response.status}`);
+    const declaredSize = Number(response.headers.get("content-length") ?? 0);
+    if (declaredSize > MAX_EMOJI_BYTES) throw new Error("The image is too large to clone");
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > MAX_EMOJI_BYTES) throw new Error("The image is too large to clone");
+    return `data:${mimeType};base64,${arrayBufferToBase64(buffer)}`;
+}
+
+export async function extractAndCloneEmojis(context: CloneContext): Promise<void> {
+    const { sourceGuild, fullGuildData, options, estimateRoles, estimateChannels, newGuildId, assetQueue } = context;
     const customEmojiIds = new Set<string>();
-
-    const addEmojisFromText = (text: string | null | undefined) => {
+    const addEmojisFromText = (text: string | null | undefined): void => {
         if (!text) return;
-        const matches = text.matchAll(/<a?:[a-zA-Z0-9_]+:(\d+)>/g);
-        for (const match of matches) {
-            customEmojiIds.add(match[1]);
-        }
+        for (const match of text.matchAll(/<a?:[a-zA-Z0-9_]+:(\d+)>/g)) customEmojiIds.add(match[1]);
     };
 
     addEmojisFromText(fullGuildData.description);
-
-    if (options.cloneRoles) {
-        for (const role of estimateRoles) {
-            addEmojisFromText(role.name);
-        }
-    }
-
+    if (options.cloneRoles) estimateRoles.forEach(role => addEmojisFromText(role.name));
     if (options.cloneChannels) {
-        for (const ch of estimateChannels) {
-            addEmojisFromText(ch.name);
-            addEmojisFromText(ch.topic);
-            if (ch.available_tags) {
-                for (const tag of ch.available_tags) {
-                    addEmojisFromText(tag.name);
-                    if (tag.emoji_id) customEmojiIds.add(tag.emoji_id);
-                }
-            }
-            if (ch.default_reaction_emoji?.emoji_id) {
-                customEmojiIds.add(ch.default_reaction_emoji.emoji_id);
-            }
+        for (const channel of estimateChannels) {
+            addEmojisFromText(channel.name);
+            addEmojisFromText(channel.topic);
+            channel.available_tags?.forEach(tag => {
+                addEmojisFromText(tag.name);
+                if (tag.emoji_id) customEmojiIds.add(tag.emoji_id);
+            });
+            if (channel.default_reaction_emoji?.emoji_id) customEmojiIds.add(channel.default_reaction_emoji.emoji_id);
         }
     }
 
     if (options.cloneOnboarding) {
         try {
-            const onboardingResp = await RestAPI.get({ url: `/guilds/${sourceGuild.id}/onboarding` });
-            const onboardingData = (onboardingResp as any).body;
-            if (onboardingData) {
-                for (const prompt of (onboardingData.prompts || [])) {
-                    addEmojisFromText(prompt.title);
-                    for (const opt of (prompt.options || [])) {
-                        addEmojisFromText(opt.title);
-                        addEmojisFromText(opt.description);
-                        const eid = opt.emoji_id || opt.emoji?.id || null;
-                        if (eid) customEmojiIds.add(eid);
-                    }
-                }
-            }
-        } catch (e) { }
-    }
-
-    if (customEmojiIds.size > 0) {
-        updateWithTime(`Cloning ${customEmojiIds.size} used emojis...`, 20);
-
-        try {
-            const sourceEmojisResp = await RestAPI.get({ url: `/guilds/${sourceGuild.id}/emojis` });
-            const sourceEmojis = (sourceEmojisResp as any).body || [];
-            const emojisToClone = sourceEmojis.filter((e: any) => customEmojiIds.has(e.id));
-
-            let targetEmojis: any[] = [];
-            if (options.resumeMode && newGuildId) {
-                try {
-                    const targetEmojisResp = await RestAPI.get({ url: `/guilds/${newGuildId}/emojis` });
-                    targetEmojis = (targetEmojisResp as any).body || [];
-                } catch (e) {
-                    console.warn("[ServerCloner] Failed to fetch target emojis for resume mode:", e);
-                }
-            }
-
-            let emojiStep = 0;
-            const emojiPromises = emojisToClone.map(async (emoji: any) => {
-                if (!state.isCloning) return;
-
-                if (options.resumeMode) {
-                    const existing = targetEmojis.find(e => e.name === emoji.name);
-                    if (existing) {
-                        state.emojiIdMap[emoji.id] = existing.id;
-                        emojiStep++;
-                        updateWithTime(`Skipping existing emoji (${emojiStep}/${emojisToClone.length})...`, 20 + (emojiStep / emojisToClone.length) * 5);
-                        return;
-                    }
-                }
-
-                try {
-                    const ext = emoji.animated ? "gif" : "png";
-                    const emojiUrl = `https://cdn.discordapp.com/emojis/${emoji.id}.${ext}?size=256`;
-                    const response = await fetch(emojiUrl);
-                    if (response.ok) {
-                        const buffer = await response.arrayBuffer();
-                        const base64 = arrayBufferToBase64(buffer);
-                        const imageStr = `data:image/${ext};base64,${base64}`;
-
-                        await taskQueue.execute(async () => {
-                            const createResp = await RestAPI.post({
-                                url: `/guilds/${newGuildId}/emojis`,
-                                body: {
-                                    name: emoji.name,
-                                    image: imageStr,
-                                    roles: []
-                                }
-                            });
-                            if (createResp?.body?.id) {
-                                state.emojiIdMap[emoji.id] = createResp.body.id;
-                            }
-                        }, msg => updateWithTime(msg, 20 + (emojiStep / emojisToClone.length) * 5));
-
-                        emojiStep++;
-                        updateWithTime(`Cloned emoji ${emoji.name} (${emojiStep}/${emojisToClone.length})...`, 20 + (emojiStep / emojisToClone.length) * 5);
-                    }
-                } catch (e) {
-                    handleCloneError("Emoji", e, emoji.name);
-                }
+            const response: { body?: OnboardingData; } = await RestAPI.get({ url: `/guilds/${sourceGuild.id}/onboarding` });
+            response.body?.prompts?.forEach(prompt => {
+                addEmojisFromText(prompt.title);
+                prompt.options?.forEach(option => {
+                    addEmojisFromText(option.title);
+                    addEmojisFromText(option.description);
+                    const id = option.emoji_id ?? option.emoji?.id;
+                    if (id) customEmojiIds.add(id);
+                });
             });
-
-            await Promise.all(emojiPromises);
-        } catch (e) {
-            console.warn("[ServerCloner] Failed to fetch source emojis for extraction:", e);
+        } catch (error: unknown) {
+            handleCloneError("Onboarding emoji scan", error);
         }
     }
-}
 
-export async function cloneRoles(ctx: CloneContext): Promise<number> {
-    let rolesFailed = 0;
-    const { sourceGuild, newGuildId, options, estimateRoles, rolesProgressStart, rolesProgressEnd, taskQueue, roleIdMap } = ctx;
+    if (customEmojiIds.size === 0) return;
 
-    let skipRoles = false;
-    if (state.mainProgressNotificationId) {
-        const skipBtn = document.getElementById(state.mainProgressNotificationId)?.querySelector(".cloner-skip-roles-btn") as HTMLElement;
-        if (skipBtn) skipBtn.style.display = "";
-
-        const ogSkip = state.skipRolesCallback;
-        state.skipRolesCallback = () => {
-            skipRoles = true;
-            if (ogSkip) ogSkip();
-        };
+    const sourceResponse: { body?: CloneEmoji[]; } = await RestAPI.get({ url: `/guilds/${sourceGuild.id}/emojis` });
+    const sourceEmojis = responseBody(sourceResponse) ?? [];
+    const emojisToClone = sourceEmojis.filter(emoji => customEmojiIds.has(emoji.id));
+    let targetEmojis: CloneEmoji[] = [];
+    if (options.resumeMode) {
+        const targetResponse: { body?: CloneEmoji[]; } = await RestAPI.get({ url: `/guilds/${newGuildId}/emojis` });
+        targetEmojis = responseBody(targetResponse) ?? [];
     }
 
-    const sortedRoles = estimateRoles.filter(r => r.name !== "@everyone").sort((a, b) => b.position - a.position);
-    const everyoneRole = estimateRoles.find(r => r.name === "@everyone");
+    let completed = 0;
+    await Promise.all(emojisToClone.map(async emoji => {
+        if (!state.isCloning) return;
 
-    const newRoles = await RestAPI.get({ url: `/guilds/${newGuildId}/roles` });
-    const existingTargetRoles = newRoles.body || [];
-    const newEveryoneRole = existingTargetRoles.find((r: any) => r.name === "@everyone");
+        const existing = options.resumeMode ? targetEmojis.find(target => target.name === emoji.name) : undefined;
+        if (existing) {
+            state.emojiIdMap[emoji.id] = existing.id;
+            completed++;
+            return;
+        }
 
-    if (everyoneRole && newEveryoneRole) {
-        roleIdMap[everyoneRole.id] = newEveryoneRole.id;
+        try {
+            const image = await fetchImageDataUrl(
+                IconUtils.getEmojiURL({ id: emoji.id, animated: emoji.animated === true, size: 256 }),
+                emoji.animated ? "image/gif" : "image/png"
+            );
+            const createResponse: CreatedResponse = await assetQueue.execute(() => RestAPI.post({
+                url: `/guilds/${newGuildId}/emojis`,
+                body: { name: emoji.name, image, roles: [] }
+            }));
+            if (typeof createResponse.body?.id !== "string") throw new Error("Discord did not return the new emoji ID");
+            state.emojiIdMap[emoji.id] = createResponse.body.id;
+            completed++;
+            updateWithTime(`Cloned emoji ${completed}/${emojisToClone.length}: ${emoji.name}`, 20);
+        } catch (error: unknown) {
+            handleCloneError("Emoji", error, emoji.name);
+        }
+    }));
+}
+
+function sameRole(source: CloneRole, target: CloneRole): boolean {
+    return source.name === target.name
+        && source.color === target.color
+        && source.permissions.toString() === target.permissions.toString()
+        && source.hoist === target.hoist
+        && source.mentionable === target.mentionable;
+}
+
+export async function cloneRoles(context: CloneContext): Promise<number> {
+    const { sourceGuild, newGuildId, options, estimateRoles, rolesProgressStart, rolesProgressEnd, roleQueue, roleIdMap } = context;
+    const sortedRoles = estimateRoles.filter(role => role.name !== "@everyone" && !role.managed).sort((a, b) => b.position - a.position);
+    const everyoneRole = estimateRoles.find(role => role.name === "@everyone");
+    const existingTargetRoles = await fetchGuildRoles(newGuildId);
+    const targetEveryoneRole = existingTargetRoles.find(role => role.name === "@everyone");
+    const usedTargetRoleIds = new Set<string>();
+
+    if (everyoneRole && targetEveryoneRole) {
+        roleIdMap[everyoneRole.id] = targetEveryoneRole.id;
         try {
             await RestAPI.patch({
-                url: `/guilds/${newGuildId}/roles/${newEveryoneRole.id}`,
+                url: `/guilds/${newGuildId}/roles/${targetEveryoneRole.id}`,
                 body: { permissions: everyoneRole.permissions.toString() }
             });
-        } catch (e) {
-            console.warn("[ServerCloner] Failed to update @everyone role:", e);
+        } catch (error: unknown) {
+            handleCloneError("Role", error, "@everyone");
         }
     }
 
     if (options.resumeMode) {
         for (const role of sortedRoles) {
-            const match = existingTargetRoles.find((r: any) => r.name === role.name && r.name !== "@everyone");
-            if (match) {
-                roleIdMap[role.id] = match.id;
-                const expectedName = replaceEmojis(role.name) || role.name;
-                if (match.name !== expectedName) {
-                    try {
-                        await RestAPI.patch({
-                            url: `/guilds/${newGuildId}/roles/${match.id}`,
-                            body: { name: expectedName }
-                        });
-                    } catch (e) {
-                        console.warn(`[ServerCloner] Failed to patch existing role emoji: ${role.name}`, e);
-                    }
-                }
-            }
+            const match = existingTargetRoles.find(target =>
+                target.name !== "@everyone" && !usedTargetRoleIds.has(target.id) && sameRole(role, target)
+            );
+            if (!match) continue;
+            roleIdMap[role.id] = match.id;
+            usedTargetRoleIds.add(match.id);
         }
     }
 
-    const rolesToCreate = options.resumeMode ? sortedRoles.filter(r => !roleIdMap[r.id]) : sortedRoles;
-    const actionLabel = options.resumeMode ? "Resuming" : "Cloning";
+    const rolesToCreate = sortedRoles.filter(role => !roleIdMap[role.id]);
+    const canUseRoleIcons = (GuildStore.getGuild(newGuildId)?.premiumTier ?? 0) >= 2;
+    let rolesFailed = 0;
+    let rolesCreated = 0;
+    let skipRemaining = false;
 
-    const targetGuildForTier = GuildStore.getGuild(newGuildId);
-    const targetTier = (targetGuildForTier as any)?.premiumTier || 0;
-    const canUseRoleIcons = targetTier >= 2;
-
-    let roleStep = 0;
-    const rolePromises = rolesToCreate.map(async (role: any) => {
-        if (!state.isCloning) return;
-        if (skipRoles) return;
+    await Promise.all(rolesToCreate.map(async role => {
+        if (!state.isCloning || skipRemaining) return;
 
         try {
             checkGuildExistence(sourceGuild.id, newGuildId);
-
-            const rolePayload: any = {
-                name: replaceEmojis(role.name),
-                permissions: role.permissions.toString(),
+            const body: Record<string, unknown> = {
                 color: role.color,
                 hoist: role.hoist,
                 mentionable: role.mentionable,
+                name: replaceEmojis(role.name),
+                permissions: role.permissions.toString()
             };
 
             if (canUseRoleIcons) {
-                rolePayload.unicode_emoji = (role as any).unicodeEmoji || (role as any).unicode_emoji || null;
-                const roleIcon = (role as any).icon;
-                if (roleIcon) {
-                    try {
-                        const iconUrl = `https://cdn.discordapp.com/role-icons/${role.id}/${roleIcon}.png?size=128`;
-                        const iconResp = await fetch(iconUrl);
-                        if (iconResp.ok) {
-                            const iconBuf = await iconResp.arrayBuffer();
-                            rolePayload.icon = `data:image/png;base64,${arrayBufferToBase64(iconBuf)}`;
-                        }
-                    } catch (_) { }
+                body.unicode_emoji = role.unicodeEmoji ?? role.unicode_emoji ?? null;
+                if (role.icon) {
+                    body.icon = await fetchImageDataUrl(
+                        RoleIconUtils.getRoleIconURL({ id: role.id, icon: role.icon, size: 128 }),
+                        "image/png"
+                    );
                 }
             }
 
-            const response = await taskQueue.execute(async () => {
+            const response: CreatedResponse = await roleQueue.execute(async () => {
                 try {
-                    return await RestAPI.post({ url: `/guilds/${newGuildId}/roles`, body: rolePayload });
-                } catch (e: any) {
-                    let code = e?.body?.code || e?.code;
-                    if (!code && e?.text) {
-                        try { code = JSON.parse(e.text)?.code; } catch (_) { }
-                    }
-                    if (code === 50101) {
-                        delete rolePayload.icon;
-                        delete rolePayload.unicode_emoji;
-                        return await RestAPI.post({ url: `/guilds/${newGuildId}/roles`, body: rolePayload });
-                    }
-                    throw e;
+                    return await RestAPI.post({ url: `/guilds/${newGuildId}/roles`, body });
+                } catch (error: unknown) {
+                    if (errorCode(error) !== 50101) throw error;
+                    delete body.icon;
+                    delete body.unicode_emoji;
+                    return RestAPI.post({ url: `/guilds/${newGuildId}/roles`, body });
                 }
-            }, msg => updateWithTime(msg, rolesProgressStart + ((roleStep / Math.max(rolesToCreate.length, 1)) * (rolesProgressEnd - rolesProgressStart))), () => skipRoles, 5);
+            }, message => updateWithTime(message, rolesProgressStart), undefined, 5);
 
-            if (response?.body?.id) {
-                roleIdMap[role.id] = response.body.id;
-            }
-
-            roleStep++;
-            updateWithTime(`${actionLabel} role ${roleStep}/${rolesToCreate.length}: ${role.name}`, rolesProgressStart + ((roleStep / Math.max(rolesToCreate.length, 1)) * (rolesProgressEnd - rolesProgressStart)));
-
-        } catch (e: any) {
-            if (e?.rateLimitExhausted) {
-                rolesFailed += (rolesToCreate.length - roleStep);
-                updateWithTime("Rate limited, skipping remaining roles...", rolesProgressEnd);
-                skipRoles = true;
+            if (typeof response.body?.id !== "string") throw new Error("Discord did not return the new role ID");
+            roleIdMap[role.id] = response.body.id;
+            rolesCreated++;
+            const progress = rolesProgressStart + rolesCreated / Math.max(rolesToCreate.length, 1) * (rolesProgressEnd - rolesProgressStart);
+            updateWithTime(`Cloned role ${rolesCreated}/${rolesToCreate.length}: ${role.name}`, progress);
+        } catch (error: unknown) {
+            if (isRateLimitExhausted(error)) {
+                rolesFailed += rolesToCreate.length - rolesCreated;
+                skipRemaining = true;
                 return;
             }
             rolesFailed++;
-            handleCloneError("Role", e, role.name);
+            handleCloneError("Role", error, role.name);
         }
-    });
-
-    await Promise.all(rolePromises);
+    }));
 
     const positionUpdates = estimateRoles
-        .filter(r => r.name !== "@everyone" && roleIdMap[r.id])
-        .map(r => ({ id: roleIdMap[r.id], position: r.position }));
+        .filter(role => role.name !== "@everyone" && roleIdMap[role.id])
+        .map(role => ({ id: roleIdMap[role.id], position: role.position }));
     if (positionUpdates.length > 0) {
         try {
-            await taskQueue.execute(async () => {
-                await RestAPI.patch({ url: `/guilds/${newGuildId}/roles`, body: positionUpdates });
-            });
-        } catch (e) {
-            console.warn("[ServerCloner] Failed to sync role positions:", e);
+            await roleQueue.execute(() => RestAPI.patch({ url: `/guilds/${newGuildId}/roles`, body: positionUpdates }));
+        } catch (error: unknown) {
+            handleCloneError("Role positions", error);
         }
-    }
-
-    if (options.resumeMode && rolesToCreate.length === 0) {
-        updateWithTime("All roles already exist, skipping...", rolesProgressEnd);
-    }
-
-    if (state.mainProgressNotificationId) {
-        const skipBtn = document.getElementById(state.mainProgressNotificationId)?.querySelector(".cloner-skip-roles-btn") as HTMLElement;
-        if (skipBtn) skipBtn.style.display = "none";
     }
 
     return rolesFailed;

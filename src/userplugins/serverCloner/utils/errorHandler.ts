@@ -5,114 +5,112 @@
  */
 
 import { state } from "../store";
-import { notify } from "./notifications";
+import { isRecord } from "./helpers";
+import { cleanupContainer, notify } from "./notifications";
 
 const DISCORD_ERROR_MAP: Record<number, string> = {
-    10003: "Channel not found — it may have been deleted",
-    10004: "Server not found — it may have been deleted",
-    10011: "Role not found — it may have been deleted",
-    20001: "Bots cannot use this endpoint",
-    30002: "Max server limit reached — you own too many servers",
-    30005: "Max channels reached (500) — server is full",
-    30010: "Max roles reached (250) — server is full",
-    30016: "Max emoji slots reached",
-    30018: "Max sticker slots reached",
-    30031: "Max server members reached",
-    40001: "Unauthorized — your token may have expired",
-    40006: "Server is being updated, try again later",
-    50001: "Missing Access — you lack permission for this",
-    50013: "Missing Permissions — your role can't do this",
-    50028: "Invalid role — role is managed or too high",
-    50033: "Invalid recipients",
-    50035: "Invalid data sent to Discord",
-    50041: "Server needs to be verified first",
-    50055: "Server already has this feature",
-    50070: "Server needs 2FA enabled",
-    50074: "Server locked due to a raid",
-    50101: "Server needs boosts for this feature (icons/banner)",
-    60003: "Two-factor authentication required",
-    170001: "Community server prerequisites not met",
+    10003: "The channel no longer exists.",
+    10004: "The server no longer exists.",
+    10011: "The role no longer exists.",
+    20001: "Bots cannot use this endpoint.",
+    30002: "You own too many servers.",
+    30005: "The server has reached its channel limit.",
+    30010: "The server has reached its role limit.",
+    30016: "The server has reached its emoji limit.",
+    30018: "The server has reached its sticker limit.",
+    40001: "Your Discord session has expired.",
+    40006: "Discord is already updating this server.",
+    50001: "You do not have access to this resource.",
+    50013: "You do not have permission to perform this action.",
+    50035: "Discord rejected the submitted data.",
+    50101: "The server needs a higher boost level for this feature.",
+    60003: "Two-factor authentication is required."
 };
-
-const FATAL_CODES = new Set([10004, 10003, 20001, 40001, 50001, 50074, 60003]);
-const FATAL_HTTP = new Set([401, 403]);
 
 const HTTP_STATUS_MAP: Record<number, string> = {
-    400: "Bad Request — invalid data sent",
-    401: "Unauthorized — re-login to Discord",
-    403: "Forbidden — you don't have permission",
-    404: "Not Found — the resource was deleted",
-    429: "Rate Limited — too many requests, slowing down",
-    500: "Discord Server Error — try again later",
-    502: "Discord is down — try again later",
-    503: "Discord is unavailable — try again later",
+    400: "Discord rejected the submitted data.",
+    401: "Your Discord session has expired.",
+    403: "You do not have permission to perform this action.",
+    404: "The requested resource no longer exists.",
+    429: "Discord is rate limiting these requests.",
+    500: "Discord encountered an internal error.",
+    502: "Discord is temporarily unavailable.",
+    503: "Discord is temporarily unavailable."
 };
 
-function getErrorCode(error: any): number | null {
-    let code = error?.body?.code || error?.code;
-    if (!code && error?.text) {
-        try { code = JSON.parse(error.text)?.code; } catch (_) { }
+const FATAL_CODES = new Set([10004, 20001, 40001, 50001, 60003]);
+const FATAL_HTTP = new Set([401, 403]);
+
+function parseJsonRecord(text: string): Record<string, unknown> | undefined {
+    try {
+        const value: unknown = JSON.parse(text);
+        return isRecord(value) ? value : undefined;
+    } catch {
+        return undefined;
     }
-    return typeof code === "number" ? code : null;
 }
 
-function isFatalError(error: any): boolean {
-    const code = getErrorCode(error);
-    if (code && FATAL_CODES.has(code)) return true;
-    if (error?.status && FATAL_HTTP.has(error.status)) return true;
-    return false;
+function getErrorCode(error: unknown): number | undefined {
+    if (!isRecord(error)) return undefined;
+    if (typeof error.code === "number") return error.code;
+    if (isRecord(error.body) && typeof error.body.code === "number") return error.body.code;
+    if (typeof error.text !== "string") return undefined;
+    const parsed = parseJsonRecord(error.text);
+    return typeof parsed?.code === "number" ? parsed.code : undefined;
 }
 
-export function translateError(error: any): string {
-    if (!error) return "Unknown error";
+function getStatus(error: unknown): number | undefined {
+    return isRecord(error) && typeof error.status === "number" ? error.status : undefined;
+}
 
+function getMessage(error: unknown): string | undefined {
     if (typeof error === "string") return error;
-    if (error.message === "Cancelled" || error.message?.includes("Cancelled")) return "";
-    if (error.message === "Skipped") return "";
-
-    const code = getErrorCode(error);
-
-    if (code && DISCORD_ERROR_MAP[code]) {
-        return DISCORD_ERROR_MAP[code];
+    if (!isRecord(error)) return undefined;
+    if (isRecord(error.body) && typeof error.body.message === "string") return error.body.message;
+    if (typeof error.message === "string") return error.message;
+    if (typeof error.text === "string") {
+        const parsed = parseJsonRecord(error.text);
+        if (typeof parsed?.message === "string") return parsed.message;
     }
-
-    if (error?.status && HTTP_STATUS_MAP[error.status]) {
-        return HTTP_STATUS_MAP[error.status];
-    }
-
-    let message = error?.body?.message || error?.message || "";
-
-    if (!message && error?.text) {
-        try { message = JSON.parse(error.text)?.message || ""; } catch (_) { }
-    }
-
-    if (message) {
-        if (message.length > 120) return message.substring(0, 117) + "...";
-        return message;
-    }
-
-    return "Unknown error occurred";
+    return undefined;
 }
 
-export function handleCloneError(context: string, error: any, itemName?: string): void {
+function isFatalError(error: unknown): boolean {
+    const code = getErrorCode(error);
+    const status = getStatus(error);
+    return (code !== undefined && FATAL_CODES.has(code)) || (status !== undefined && FATAL_HTTP.has(status));
+}
+
+export function translateError(error: unknown): string {
+    const message = getMessage(error);
+    if (message?.includes("Cancelled") || message === "Skipped") return "";
+
+    const code = getErrorCode(error);
+    if (code !== undefined && DISCORD_ERROR_MAP[code]) return DISCORD_ERROR_MAP[code];
+
+    const status = getStatus(error);
+    if (status !== undefined && HTTP_STATUS_MAP[status]) return HTTP_STATUS_MAP[status];
+
+    if (!message) return "An unknown error occurred.";
+    return message.length > 120 ? `${message.slice(0, 117)}...` : message;
+}
+
+export function handleCloneError(context: string, error: unknown, itemName?: string): void {
     if (!state.isCloning || state.abortController?.signal.aborted) return;
 
     const translated = translateError(error);
     if (!translated) return;
 
-    const errorMsg = itemName ? `[${context}] ${itemName}: ${translated}` : `[${context}]: ${translated}`;
-    state.cloneErrors.push(errorMsg);
+    state.cloneErrors.push(itemName ? `[${context}] ${itemName}: ${translated}` : `[${context}]: ${translated}`);
 
     if (isFatalError(error)) {
         state.isCloning = false;
-        if (state.abortController) {
-            state.abortController.abort();
-            state.abortController = null;
-        }
-        notify("Clone stopped", translated, "error", 8000);
+        state.abortController?.abort();
+        state.abortController = null;
+        cleanupContainer();
+        notify("Clone stopped", translated, "error");
         return;
     }
 
-    const title = itemName ? `${context}: ${itemName}` : context;
-    notify(title, translated, "error", 6000);
+    notify(itemName ? `${context}: ${itemName}` : context, translated, "error");
 }

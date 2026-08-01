@@ -4,303 +4,219 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { GuildStore,RestAPI } from "@webpack/common";
+import { Constants, GuildStore, RestAPI } from "@webpack/common";
 
 import { state } from "../store";
-import { checkGuildExistence } from "../utils/api";
+import { checkGuildExistence, fetchGuildChannels } from "../utils/api";
 import { handleCloneError } from "../utils/errorHandler";
-import { replaceEmojis, sleep } from "../utils/helpers";
+import { isRecord, replaceEmojis, sleep } from "../utils/helpers";
 import { updateWithTime } from "../utils/notifications";
-import { CloneContext } from "./types";
+import { CloneChannel, CloneContext } from "./types";
 
-export async function cloneChannels(ctx: CloneContext): Promise<number> {
-    let channelsFailed = 0;
-    const { sourceGuild, fullGuildData, newGuildId, options, estimateChannels, channelIdMap, roleIdMap, taskQueue, channelsProgressStart, channelsProgressEnd } = ctx;
+interface ChannelResponse {
+    body?: { id?: unknown; };
+}
 
-    const allChannels = estimateChannels;
+function isRateLimitExhausted(error: unknown): boolean {
+    return isRecord(error) && error.rateLimitExhausted === true;
+}
 
-    const categories = allChannels.filter((c: any) => c.type === 4).sort((a: any, b: any) => a.position - b.position);
-    const otherChannels = allChannels.filter((c: any) => c.type !== 4).sort((a: any, b: any) => a.position - b.position);
+function mappedOverwrites(channel: CloneChannel, sourceGuildId: string, targetGuildId: string, roleIdMap: Record<string, string>) {
+    return channel.permission_overwrites
+        .filter(overwrite => overwrite.type === 0 && (roleIdMap[overwrite.id] || overwrite.id === sourceGuildId))
+        .map(overwrite => ({
+            id: overwrite.id === sourceGuildId ? targetGuildId : roleIdMap[overwrite.id],
+            type: 0,
+            allow: overwrite.allow,
+            deny: overwrite.deny
+        }));
+}
 
-    let existingTargetChannels: any[] = [];
+export async function cloneChannels(context: CloneContext): Promise<number> {
+    const {
+        sourceGuild, fullGuildData, newGuildId, options, estimateChannels, channelIdMap, roleIdMap,
+        channelQueue, channelsProgressStart, channelsProgressEnd
+    } = context;
+    const categories = estimateChannels.filter(channel => channel.type === 4).sort((a, b) => a.position - b.position);
+    const otherChannels = estimateChannels.filter(channel => channel.type !== 4).sort((a, b) => a.position - b.position);
+    const existingTargetChannels = options.resumeMode ? await fetchGuildChannels(newGuildId) : [];
+    const usedTargetIds = new Set<string>();
+
     if (options.resumeMode) {
-        const targetChResponse = await RestAPI.get({ url: `/guilds/${newGuildId}/channels` });
-        existingTargetChannels = targetChResponse.body || [];
-
-        for (const cat of categories) {
-            const match = existingTargetChannels.find((tc: any) => tc.name === cat.name && tc.type === 4);
-            if (match) channelIdMap[cat.id] = match.id;
+        for (const category of categories) {
+            const match = existingTargetChannels.find(target =>
+                !usedTargetIds.has(target.id) && target.type === 4 && target.name === category.name
+            );
+            if (!match) continue;
+            channelIdMap[category.id] = match.id;
+            usedTargetIds.add(match.id);
         }
-        for (const ch of otherChannels) {
-            const match = existingTargetChannels.find((tc: any) => tc.name === ch.name && tc.type === ch.type);
-            if (match) channelIdMap[ch.id] = match.id;
+
+        for (const channel of otherChannels) {
+            const mappedParentId = channel.parent_id ? channelIdMap[channel.parent_id] : null;
+            const match = existingTargetChannels.find(target =>
+                !usedTargetIds.has(target.id)
+                && target.type === channel.type
+                && target.name === channel.name
+                && target.parent_id === mappedParentId
+            );
+            if (!match) continue;
+            channelIdMap[channel.id] = match.id;
+            usedTargetIds.add(match.id);
         }
     }
 
-    const categoriesToCreate = options.resumeMode ? categories.filter((c: any) => !channelIdMap[c.id]) : categories;
-    const channelsToCreate = options.resumeMode ? otherChannels.filter((c: any) => !channelIdMap[c.id]) : otherChannels;
-    const totalChannels = categoriesToCreate.length + channelsToCreate.length;
+    const categoriesToCreate = categories.filter(category => !channelIdMap[category.id]);
+    const channelsToCreate = otherChannels.filter(channel => !channelIdMap[channel.id]);
     const actionLabel = options.resumeMode ? "Resuming" : "Cloning";
+    let channelsFailed = 0;
+    let categoriesCreated = 0;
 
-    if (options.resumeMode && totalChannels === 0) {
-        updateWithTime("All channels already exist, skipping...", channelsProgressEnd);
-    } else {
-        updateWithTime(`${actionLabel} ${totalChannels} channels...`, channelsProgressStart);
-    }
-
-    let catStored = 0;
-    const catPromises = categoriesToCreate.map(async (cat: any) => {
+    await Promise.all(categoriesToCreate.map(async category => {
         if (!state.isCloning) return;
-
         try {
             checkGuildExistence(sourceGuild.id, newGuildId);
+            const response: ChannelResponse = await channelQueue.execute(() => RestAPI.post({
+                url: `/guilds/${newGuildId}/channels`,
+                body: {
+                    name: category.name,
+                    type: 4,
+                    position: category.position,
+                    permission_overwrites: mappedOverwrites(category, sourceGuild.id, newGuildId, roleIdMap)
+                }
+            }));
+            if (typeof response.body?.id !== "string") throw new Error("Discord did not return the new category ID");
+            channelIdMap[category.id] = response.body.id;
+            categoriesCreated++;
+            updateWithTime(`${actionLabel} category ${categoriesCreated}/${categoriesToCreate.length}: ${category.name}`, channelsProgressStart);
+        } catch (error: unknown) {
+            channelsFailed++;
+            handleCloneError("Category", error, category.name);
+        }
+    }));
 
-            const catPayload: any = {
-                name: cat.name,
-                type: 4,
-                position: cat.position,
-                permission_overwrites: []
+    const isCommunity = fullGuildData.features.includes("COMMUNITY") || otherChannels.some(channel => [5, 13, 15, 16].includes(channel.type));
+    if (isCommunity && !options.resumeMode) {
+        try {
+            const createCommunityChannel = async (source: CloneChannel | undefined, fallbackName: string): Promise<string> => {
+                const response: ChannelResponse = await channelQueue.execute(() => RestAPI.post({
+                    url: `/guilds/${newGuildId}/channels`,
+                    body: {
+                        name: source?.name ?? fallbackName,
+                        parent_id: source?.parent_id ? channelIdMap[source.parent_id] : undefined,
+                        position: source?.position,
+                        topic: source?.topic ?? undefined,
+                        type: source?.type ?? 0
+                    }
+                }));
+                if (typeof response.body?.id !== "string") throw new Error("Discord did not return the community channel ID");
+                if (source) channelIdMap[source.id] = response.body.id;
+                return response.body.id;
             };
 
-            if (cat.permission_overwrites) {
+            const rulesSource = otherChannels.find(channel => channel.id === fullGuildData.rules_channel_id);
+            const updatesSource = otherChannels.find(channel => channel.id === fullGuildData.public_updates_channel_id);
+            const rulesChannelId = await createCommunityChannel(rulesSource, "rules");
+            const updatesChannelId = await createCommunityChannel(updatesSource, "updates");
 
-                const mappedOverwrites = cat.permission_overwrites
-                    .filter((ow: any) => ow.type === 0 && (roleIdMap[ow.id] || ow.id === sourceGuild.id))
-                    .map((ow: any) => ({
-                        id: ow.id === sourceGuild.id ? newGuildId : roleIdMap[ow.id],
-                        type: 0,
-                        allow: ow.allow,
-                        deny: ow.deny
-                    }));
-                if (mappedOverwrites.length > 0) catPayload.permission_overwrites = mappedOverwrites;
-            }
-
-            const response = await taskQueue.execute(async () => {
-                return await RestAPI.post({ url: `/guilds/${newGuildId}/channels`, body: catPayload });
-            }, msg => updateWithTime(msg, (channelsProgressStart + ((catStored / Math.max(categoriesToCreate.length, 1)) * ((channelsProgressEnd - channelsProgressStart) * 0.2)))));
-
-            if (response?.body?.id) {
-                channelIdMap[cat.id] = response.body.id;
-            }
-
-            catStored++;
-            const progress = channelsProgressStart + ((catStored / Math.max(categoriesToCreate.length, 1)) * ((channelsProgressEnd - channelsProgressStart) * 0.2));
-            updateWithTime(`${actionLabel} category ${catStored}/${categoriesToCreate.length}: ${cat.name}`, progress);
-        } catch (e) {
-            channelsFailed++;
-            handleCloneError("Category", e, cat.name);
-        }
-    });
-
-    await Promise.all(catPromises);
-
-    const isCommunity = fullGuildData.features?.includes("COMMUNITY") ||
-        otherChannels.some((c: any) => [5, 13, 15, 16].includes(c.type));
-
-    if (isCommunity && !options.resumeMode) {
-        updateWithTime("Enabling Community features...", channelsProgressStart + ((channelsProgressEnd - channelsProgressStart) * 0.25));
-
-        try {
-            let rulesChannelNewId: string | null = null;
-            let updatesChannelNewId: string | null = null;
-
-            const sourceRulesChannel = fullGuildData.rules_channel_id
-                ? otherChannels.find((c: any) => c.id === fullGuildData.rules_channel_id)
-                : null;
-            const sourceUpdatesChannel = fullGuildData.public_updates_channel_id
-                ? otherChannels.find((c: any) => c.id === fullGuildData.public_updates_channel_id)
-                : null;
-
-            if (sourceRulesChannel) {
-                const rulesPayload: any = {
-                    name: sourceRulesChannel.name,
-                    type: sourceRulesChannel.type || 0,
-                    topic: sourceRulesChannel.topic || undefined,
-                    position: sourceRulesChannel.position,
-                };
-                if (sourceRulesChannel.parent_id && channelIdMap[sourceRulesChannel.parent_id]) {
-                    rulesPayload.parent_id = channelIdMap[sourceRulesChannel.parent_id];
+            await RestAPI.patch({
+                url: Constants.Endpoints.GUILD(newGuildId),
+                body: {
+                    explicit_content_filter: 2,
+                    features: ["COMMUNITY"],
+                    public_updates_channel_id: updatesChannelId,
+                    rules_channel_id: rulesChannelId,
+                    verification_level: 1
                 }
-                const r1 = await taskQueue.execute(() => RestAPI.post({ url: `/guilds/${newGuildId}/channels`, body: rulesPayload })) as any;
-                if (r1?.body?.id) {
-                    rulesChannelNewId = r1.body.id;
-                    channelIdMap[sourceRulesChannel.id] = r1.body.id;
-                }
-            }
-
-            if (sourceUpdatesChannel) {
-                const updatesPayload: any = {
-                    name: sourceUpdatesChannel.name,
-                    type: sourceUpdatesChannel.type || 0,
-                    topic: sourceUpdatesChannel.topic || undefined,
-                    position: sourceUpdatesChannel.position,
-                };
-                if (sourceUpdatesChannel.parent_id && channelIdMap[sourceUpdatesChannel.parent_id]) {
-                    updatesPayload.parent_id = channelIdMap[sourceUpdatesChannel.parent_id];
-                }
-                const r2 = await taskQueue.execute(() => RestAPI.post({ url: `/guilds/${newGuildId}/channels`, body: updatesPayload })) as any;
-                if (r2?.body?.id) {
-                    updatesChannelNewId = r2.body.id;
-                    channelIdMap[sourceUpdatesChannel.id] = r2.body.id;
-                }
-            }
-
-            if (!rulesChannelNewId) {
-                const fallback = await taskQueue.execute(() => RestAPI.post({ url: `/guilds/${newGuildId}/channels`, body: { name: "rules", type: 0 } })) as any;
-                rulesChannelNewId = fallback?.body?.id || null;
-            }
-            if (!updatesChannelNewId) {
-                const fallback = await taskQueue.execute(() => RestAPI.post({ url: `/guilds/${newGuildId}/channels`, body: { name: "updates", type: 0 } })) as any;
-                updatesChannelNewId = fallback?.body?.id || null;
-            }
-
-            if (rulesChannelNewId && updatesChannelNewId) {
-                await RestAPI.patch({
-                    url: `/guilds/${newGuildId}`,
-                    body: {
-                        features: ["COMMUNITY"],
-                        rules_channel_id: rulesChannelNewId,
-                        public_updates_channel_id: updatesChannelNewId,
-                        verification_level: 1,
-                        explicit_content_filter: 2
-                    }
-                });
-                await sleep(1500);
-            }
-        } catch (e) {
-            console.warn("[ServerCloner] Failed to enable community:", e);
+            });
+            await sleep(500);
+        } catch (error: unknown) {
+            handleCloneError("Community settings", error);
         }
     }
-
-    const alreadyCloned = new Set(Object.keys(channelIdMap));
 
     if (options.resumeMode) {
-        const skippedChannels = otherChannels.filter((c: any) => alreadyCloned.has(c.id));
-        for (const ch of skippedChannels) {
-            const matchId = channelIdMap[ch.id];
-            if (!matchId) continue;
+        for (const source of otherChannels.filter(channel => channelIdMap[channel.id])) {
+            const targetId = channelIdMap[source.id];
+            const target = existingTargetChannels.find(channel => channel.id === targetId);
+            if (!target) continue;
 
-            const match = existingTargetChannels.find((tc: any) => tc.id === matchId);
-            if (match) {
-                const expectedName = replaceEmojis(ch.name) || ch.name;
-                const expectedTopic = replaceEmojis(ch.topic) || ch.topic;
+            const expectedName = replaceEmojis(source.name) ?? source.name;
+            const expectedTopic = replaceEmojis(source.topic) ?? source.topic;
+            if (target.name === expectedName && target.topic === expectedTopic) continue;
 
-                if (match.name !== expectedName || match.topic !== expectedTopic) {
-                    try {
-                        const patchBody: any = {};
-                        if (match.name !== expectedName) patchBody.name = expectedName;
-                        if (match.topic !== expectedTopic) patchBody.topic = expectedTopic;
-
-                        await RestAPI.patch({
-                            url: `/guilds/${newGuildId}/channels/${match.id}`,
-                            body: patchBody
-                        });
-                    } catch (e) {
-                        console.warn(`[ServerCloner] Failed to patch existing channel emoji: ${ch.name}`, e);
-                    }
-                }
+            const body: Record<string, unknown> = {};
+            if (target.name !== expectedName) body.name = expectedName;
+            if (target.topic !== expectedTopic) body.topic = expectedTopic;
+            try {
+                await RestAPI.patch({ url: Constants.Endpoints.CHANNEL(target.id), body });
+            } catch (error: unknown) {
+                handleCloneError("Channel update", error, source.name);
             }
         }
     }
 
-    const remainingChannels = channelsToCreate.filter((c: any) => !alreadyCloned.has(c.id));
-
-    let chStored = 0;
+    let channelsCreated = 0;
     let skipRemaining = false;
-
-    const channelPromises = remainingChannels.map(async (ch: any) => {
-        if (!state.isCloning) return;
-        if (skipRemaining) return;
+    await Promise.all(channelsToCreate.filter(channel => !channelIdMap[channel.id]).map(async channel => {
+        if (!state.isCloning || skipRemaining) return;
 
         try {
             checkGuildExistence(sourceGuild.id, newGuildId);
-
-            const chPayload: any = {
-                name: replaceEmojis(ch.name),
-                type: ch.type,
-                position: ch.position,
-                topic: replaceEmojis(ch.topic),
-                nsfw: ch.nsfw,
-                rate_limit_per_user: ch.rate_limit_per_user,
-                permission_overwrites: []
+            const body: Record<string, unknown> = {
+                name: replaceEmojis(channel.name),
+                nsfw: channel.nsfw,
+                parent_id: channel.parent_id ? channelIdMap[channel.parent_id] : undefined,
+                permission_overwrites: mappedOverwrites(channel, sourceGuild.id, newGuildId, roleIdMap),
+                position: channel.position,
+                rate_limit_per_user: channel.rate_limit_per_user,
+                topic: replaceEmojis(channel.topic),
+                type: channel.type
             };
 
-            if (ch.parent_id && channelIdMap[ch.parent_id]) {
-                chPayload.parent_id = channelIdMap[ch.parent_id];
+            if (channel.type === 2 || channel.type === 13) {
+                const tier = GuildStore.getGuild(newGuildId)?.premiumTier ?? 0;
+                const maxBitrate = tier >= 3 ? 384000 : tier >= 2 ? 256000 : tier >= 1 ? 128000 : 96000;
+                body.bitrate = Math.min(channel.bitrate ?? 64000, maxBitrate);
+                body.user_limit = channel.user_limit ?? 0;
             }
 
-            if (ch.type === 2 || ch.type === 13) {
-                const targetGuildForBitrate = GuildStore.getGuild(newGuildId);
-                const targetTier = (targetGuildForBitrate as any)?.premiumTier || 0;
-                const maxBitrate = targetTier >= 3 ? 384000 : targetTier >= 2 ? 256000 : targetTier >= 1 ? 128000 : 96000;
-                chPayload.bitrate = Math.min(ch.bitrate || 64000, maxBitrate);
-                chPayload.user_limit = ch.user_limit || 0;
-            }
-
-            if (ch.type === 15 || ch.type === 16) {
-                if (ch.available_tags && Array.isArray(ch.available_tags)) {
-                    chPayload.available_tags = ch.available_tags.map((tag: any) => ({
-                        name: replaceEmojis(tag.name),
-                        emoji_id: tag.emoji_id && state.emojiIdMap[tag.emoji_id] ? state.emojiIdMap[tag.emoji_id] : null,
-                        emoji_name: tag.emoji_name || null,
-                        moderated: tag.moderated || false
-                    }));
+            if (channel.type === 15 || channel.type === 16) {
+                body.available_tags = channel.available_tags?.map(tag => ({
+                    name: replaceEmojis(tag.name),
+                    emoji_id: tag.emoji_id ? state.emojiIdMap[tag.emoji_id] ?? null : null,
+                    emoji_name: tag.emoji_name,
+                    moderated: tag.moderated
+                }));
+                const reaction = channel.default_reaction_emoji;
+                if (reaction?.emoji_id && state.emojiIdMap[reaction.emoji_id]) {
+                    body.default_reaction_emoji = { emoji_id: state.emojiIdMap[reaction.emoji_id], emoji_name: reaction.emoji_name };
+                } else if (reaction?.emoji_name && !reaction.emoji_id) {
+                    body.default_reaction_emoji = { emoji_id: null, emoji_name: reaction.emoji_name };
                 }
-                if (ch.default_reaction_emoji) {
-                    if (ch.default_reaction_emoji.emoji_id && state.emojiIdMap[ch.default_reaction_emoji.emoji_id]) {
-                        chPayload.default_reaction_emoji = {
-                            emoji_id: state.emojiIdMap[ch.default_reaction_emoji.emoji_id],
-                            emoji_name: ch.default_reaction_emoji.emoji_name || null
-                        };
-                    } else if (ch.default_reaction_emoji.emoji_name && !ch.default_reaction_emoji.emoji_id) {
-                        chPayload.default_reaction_emoji = {
-                            emoji_id: null,
-                            emoji_name: ch.default_reaction_emoji.emoji_name
-                        };
-                    }
-                }
-                if (ch.default_sort_order !== undefined) chPayload.default_sort_order = ch.default_sort_order;
-                if (ch.default_forum_layout !== undefined) chPayload.default_forum_layout = ch.default_forum_layout;
+                body.default_sort_order = channel.default_sort_order;
+                body.default_forum_layout = channel.default_forum_layout;
             }
 
-            if (ch.permission_overwrites) {
-
-                const mappedOverwrites = ch.permission_overwrites
-                    .filter((ow: any) => ow.type === 0 && (roleIdMap[ow.id] || ow.id === sourceGuild.id))
-                    .map((ow: any) => ({
-                        id: ow.id === sourceGuild.id ? newGuildId : roleIdMap[ow.id],
-                        type: 0,
-                        allow: ow.allow,
-                        deny: ow.deny
-                    }));
-                if (mappedOverwrites.length > 0) chPayload.permission_overwrites = mappedOverwrites;
-            }
-
-            const response = await taskQueue.execute(async () => {
-                return await RestAPI.post({ url: `/guilds/${newGuildId}/channels`, body: chPayload });
-            }, msg => updateWithTime(msg, channelsProgressStart + ((channelsProgressEnd - channelsProgressStart) * 0.2) + ((chStored / Math.max(remainingChannels.length, 1)) * ((channelsProgressEnd - channelsProgressStart) * 0.8))));
-
-            if (response?.body?.id) {
-                channelIdMap[ch.id] = response.body.id;
-            }
-
-            chStored++;
-            const progress = channelsProgressStart + ((channelsProgressEnd - channelsProgressStart) * 0.2) + ((chStored / Math.max(remainingChannels.length, 1)) * ((channelsProgressEnd - channelsProgressStart) * 0.8));
-            updateWithTime(`${actionLabel} channel ${chStored}/${remainingChannels.length}: ${ch.name}`, progress);
-
-        } catch (e: any) {
-            if (e?.rateLimitExhausted) {
-                channelsFailed += (remainingChannels.length - chStored);
-                updateWithTime("Rate limited, skipping remaining channels...", channelsProgressEnd);
+            const response: ChannelResponse = await channelQueue.execute(
+                () => RestAPI.post({ url: `/guilds/${newGuildId}/channels`, body }),
+                message => updateWithTime(message, channelsProgressStart)
+            );
+            if (typeof response.body?.id !== "string") throw new Error("Discord did not return the new channel ID");
+            channelIdMap[channel.id] = response.body.id;
+            channelsCreated++;
+            const progress = channelsProgressStart + channelsCreated / Math.max(channelsToCreate.length, 1) * (channelsProgressEnd - channelsProgressStart);
+            updateWithTime(`${actionLabel} channel ${channelsCreated}/${channelsToCreate.length}: ${channel.name}`, progress);
+        } catch (error: unknown) {
+            if (isRateLimitExhausted(error)) {
+                channelsFailed += channelsToCreate.length - channelsCreated;
                 skipRemaining = true;
                 return;
             }
             channelsFailed++;
-            handleCloneError("Channel", e, ch.name);
+            handleCloneError("Channel", error, channel.name);
         }
-    });
-
-    await Promise.all(channelPromises);
+    }));
 
     return channelsFailed;
 }

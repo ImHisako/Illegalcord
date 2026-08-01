@@ -4,12 +4,22 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import ErrorBoundary from "@components/ErrorBoundary";
 import { getTheme, Theme } from "@utils/discord";
 import { Guild, RenderModalProps } from "@vencord/discord-types";
-import { Checkbox, GuildRoleStore, GuildStore, Modal, openModal, React, SearchableSelect, UserStore } from "@webpack/common";
+import { Button, Checkbox, GuildRoleStore, GuildStore, Modal, openModal, React, RestAPI, SearchableSelect, UserStore } from "@webpack/common";
+import type { PointerEvent } from "react";
 
 import { CloneOptions } from "../types";
 import { extractChannels } from "../utils/api";
+
+interface ConfirmOverwriteModalProps {
+    deletingText: string;
+    onConfirm: () => void;
+    props: RenderModalProps;
+    sourceName: string;
+    targetName: string;
+}
 
 function ConfirmOverwriteModal({
     props,
@@ -17,32 +27,16 @@ function ConfirmOverwriteModal({
     sourceName,
     deletingText,
     onConfirm,
-}: {
-    props: RenderModalProps;
-    targetName: string;
-    sourceName: string;
-    deletingText: string;
-    onConfirm: () => void;
-}) {
+}: ConfirmOverwriteModalProps) {
     const themeClass = getTheme() === Theme.Light ? "theme-light" : "theme-dark";
     return (
         <Modal
             {...props}
-            title={
-                <span className={themeClass}>
-                    <span className="sc-modal-title" style={{ color: "var(--status-danger)" }}>
-                        Confirm Overwrite
-                    </span>
-                </span>
-            }
+            title={<span className={themeClass}><span className="vc-server-cloner-title vc-server-cloner-danger">Confirm Overwrite</span></span>}
             actions={[
+                { text: "Cancel", variant: "secondary", onClick: props.onClose },
                 {
-                    text: "Cancel",
-                    variant: "secondary",
-                    onClick: props.onClose
-                },
-                {
-                    text: "Delete & Overwrite",
+                    text: "Delete and overwrite",
                     variant: "critical-primary",
                     onClick: () => {
                         onConfirm();
@@ -52,39 +46,41 @@ function ConfirmOverwriteModal({
             ]}
         >
             <div className={themeClass}>
-                <div className="sc-modal-text" style={{ padding: "16px 0" }}>
+                <div className="vc-server-cloner-confirmation">
                     <p>
-                        This will <strong style={{ color: "var(--status-danger)" }}>permanently delete</strong> all{" "}
+                        This will <strong className="vc-server-cloner-danger">permanently delete</strong> all{" "}
                         {deletingText} in <strong>{targetName}</strong> and replace them with data from{" "}
                         <strong>{sourceName}</strong>.
                     </p>
-                    <p className="sc-modal-subtext" style={{ marginTop: "12px" }}>This action cannot be undone.</p>
+                    <p className="vc-server-cloner-subtext vc-server-cloner-confirmation-warning">This action cannot be undone.</p>
                 </div>
             </div>
         </Modal>
     );
 }
 
+const SafeConfirmOverwriteModal = ErrorBoundary.wrap(ConfirmOverwriteModal, { noop: true });
+
+interface BoostWarningProps {
+    guild: Guild;
+    sourceSoundsCount: number;
+    sourceStickersCount: number;
+    targetGuildId: string | null;
+}
+
 function BoostWarning({
     guild,
     targetGuildId,
-    ownedGuilds,
     sourceStickersCount,
     sourceSoundsCount,
-}: {
-    guild: Guild;
-    targetGuildId: string | null;
-    ownedGuilds: Guild[];
-    sourceStickersCount: number;
-    sourceSoundsCount: number;
-}) {
+}: BoostWarningProps) {
     const boostFeatures = React.useMemo(() => {
         const features: string[] = [];
-        if ((guild as any).banner) features.push("Server Banner (Level 2)");
-        if ((guild as any).splash) features.push("Invite Splash (Level 2)");
+        if (guild.banner) features.push("Server Banner (Level 2)");
+        if (guild.splash) features.push("Invite Splash (Level 2)");
         const roles = GuildRoleStore.getSortedRoles(guild.id) || [];
-        if (roles.some((r: any) => r.icon)) features.push("Role Icons (Level 2)");
-        if (((guild as any).premiumTier || 0) >= 1) features.push("High Bitrate Voice (Level 1+)");
+        if (roles.some(role => role.icon)) features.push("Role Icons (Level 2)");
+        if (guild.premiumTier >= 1) features.push("High Bitrate Voice (Level 1+)");
         if (sourceStickersCount > 0) features.push(`Custom Stickers (${sourceStickersCount} items)`);
         if (sourceSoundsCount > 0) features.push(`Soundboard Sounds (${sourceSoundsCount} items)`);
         return features;
@@ -92,27 +88,22 @@ function BoostWarning({
 
     if (boostFeatures.length === 0) return null;
 
-    const sourceTier = (guild as any).premiumTier || 0;
+    const sourceTier = guild.premiumTier;
     const targetGuild = targetGuildId ? GuildStore.getGuild(targetGuildId) : null;
-    const targetTier = targetGuild ? (targetGuild as any).premiumTier || 0 : 0;
+    const targetTier = targetGuild?.premiumTier ?? 0;
     const isNewServer = !targetGuildId;
 
     if (!isNewServer && targetTier >= sourceTier && targetTier >= 3) return null;
 
     return (
-        <div style={{
-            background: "rgba(250,166,26,0.06)",
-            border: "1px solid rgba(250,166,26,0.22)",
-            padding: "12px",
-            borderRadius: "8px",
-        }}>
-            <strong className="sc-modal-title-bold" style={{ display: "block", marginBottom: "6px", color: "#faa61a" }}>
+        <div className="vc-server-cloner-boost-warning">
+            <strong className="vc-server-cloner-boost-title">
                 Boost-Dependent Features:
             </strong>
-            <div className="sc-modal-text" style={{ lineHeight: 1.6 }}>
-                {boostFeatures.map((f, i) => <div key={i}>• {f}</div>)}
+            <div className="vc-server-cloner-boost-list">
+                {boostFeatures.map(feature => <div key={feature}>• {feature}</div>)}
             </div>
-            <div className="sc-modal-subtext" style={{ marginTop: "8px", fontStyle: "italic", color: "#faa61a" }}>
+            <div className="vc-server-cloner-boost-detail">
                 {isNewServer
                     ? "New servers start at Level 0 (max 5 stickers, 8 soundboard slots). Remaining items will be skipped."
                     : `Target server is Level ${targetTier} (max ${targetTier === 0 ? 5 : targetTier === 1 ? 15 : targetTier === 2 ? 30 : 60} stickers, ${targetTier === 0 ? 8 : targetTier === 1 ? 24 : targetTier === 2 ? 36 : 48} sounds).`}
@@ -122,50 +113,19 @@ function BoostWarning({
     );
 }
 
-function ModeButton({
-    label,
-    active,
-    color,
-    onClick,
-}: {
-    label: string;
-    active: boolean;
-    color: string;
-    onClick: () => void;
-}) {
-    return (
-        <button
-            onClick={onClick}
-            style={{
-                flex: 1,
-                padding: "10px",
-                borderRadius: "8px",
-                border: `2px solid ${active ? color : "var(--background-modifier-accent)"}`,
-                background: active ? `${color}22` : "var(--background-secondary)",
-                color: active ? color : "var(--text-muted)",
-                cursor: "pointer",
-                fontWeight: 600,
-                fontSize: "13px",
-                fontFamily: "var(--font-primary), 'gg sans', sans-serif",
-                transition: "border-color 0.15s ease, background 0.15s ease, color 0.15s ease",
-            }}
-        >
-            {label}
-        </button>
-    );
+interface CloneModalProps {
+    guild: Guild;
+    initialOptions?: Partial<CloneOptions>;
+    onClone: (options: CloneOptions) => void;
+    props: RenderModalProps;
 }
 
-export const CloneModal = ({
+function CloneModalComponent({
     props,
     guild,
     onClone,
     initialOptions,
-}: {
-    props: RenderModalProps;
-    guild: Guild;
-    onClone: (options: CloneOptions) => void;
-    initialOptions?: Partial<CloneOptions>;
-}) => {
+}: CloneModalProps) {
     const [cloneChannels, setCloneChannels] = React.useState(initialOptions?.cloneChannels ?? true);
     const [cloneRoles, setCloneRoles] = React.useState(initialOptions?.cloneRoles ?? true);
     const [cloneOnboarding, setCloneOnboarding] = React.useState(initialOptions?.cloneOnboarding ?? true);
@@ -178,16 +138,24 @@ export const CloneModal = ({
     const [sourceSoundsCount, setSourceSoundsCount] = React.useState(0);
 
     React.useEffect(() => {
-        const { RestAPI } = require("@webpack/common");
-        RestAPI.get({ url: `/guilds/${guild.id}/stickers` }).then((resp: any) => {
-            const list = resp.body || [];
-            setSourceStickersCount(list.length);
-        }).catch(() => {});
+        let cancelled = false;
 
-        RestAPI.get({ url: `/guilds/${guild.id}/soundboard-sounds` }).then((resp: any) => {
-            const list = resp.body?.items || resp.body || [];
-            setSourceSoundsCount(list.length);
-        }).catch(() => {});
+        void Promise.all([
+            RestAPI.get({ url: `/guilds/${guild.id}/stickers` }),
+            RestAPI.get({ url: `/guilds/${guild.id}/soundboard-sounds` })
+        ]).then(([stickerResponse, soundResponse]: [{ body?: unknown[]; }, { body?: unknown[] | { items?: unknown[]; }; }]) => {
+            if (cancelled) return;
+            setSourceStickersCount(stickerResponse.body?.length ?? 0);
+            const sounds = Array.isArray(soundResponse.body) ? soundResponse.body : soundResponse.body?.items;
+            setSourceSoundsCount(sounds?.length ?? 0);
+        }).catch(() => {
+            if (!cancelled) {
+                setSourceStickersCount(0);
+                setSourceSoundsCount(0);
+            }
+        });
+
+        return () => { cancelled = true; };
     }, [guild.id]);
 
     const canOnboarding = cloneChannels && cloneRoles;
@@ -198,7 +166,7 @@ export const CloneModal = ({
 
     const ownedGuilds = React.useMemo(
         () =>
-            (Object.values(GuildStore.getGuilds()) as Guild[]).filter(
+            Object.values(GuildStore.getGuilds()).filter(
                 g => g.id !== guild.id && g.ownerId === UserStore.getCurrentUser()?.id
             ),
         [guild.id]
@@ -206,28 +174,20 @@ export const CloneModal = ({
 
     const nothingSelected = !cloneChannels && !cloneRoles && !cloneOnboarding && !cloneSystemFlags && !cloneStickers && !cloneSoundboard;
 
-    const estimatedTime = React.useMemo(() => {
-        const roleCount = cloneRoles ? (GuildRoleStore.getSortedRoles(guild.id) || []).filter((r: any) => r.name !== "@everyone").length : 0;
-        const channelCount = cloneChannels ? extractChannels(guild.id, true).length : 0;
-        const onboardingEst = cloneOnboarding ? 2 : 0;
+    const itemSummaryStr = React.useMemo(() => {
+        const roleCount = cloneRoles ? (GuildRoleStore.getSortedRoles(guild.id) || []).filter(role => role.name !== "@everyone").length : 0;
+        const channelCount = cloneChannels ? extractChannels(guild.id).length : 0;
         const stickerEst = cloneStickers ? sourceStickersCount : 0;
         const soundboardEst = cloneSoundboard ? sourceSoundsCount : 0;
 
-        const perItemDelay = 1.5;
-        const setupTime = 5;
-        const deleteTime = (targetGuildId && !resumeMode)
-            ? (channelCount * 1.2 + roleCount * 1.2 + stickerEst * 1.0 + soundboardEst * 1.0)
-            : 0;
+        const parts: string[] = [];
+        if (roleCount > 0) parts.push(`${roleCount} roles`);
+        if (channelCount > 0) parts.push(`${channelCount} channels`);
+        if (stickerEst > 0) parts.push(`${stickerEst} stickers`);
+        if (soundboardEst > 0) parts.push(`${soundboardEst} sounds`);
 
-        const totalSeconds = setupTime + deleteTime
-            + (roleCount + channelCount + onboardingEst + stickerEst + soundboardEst) * perItemDelay;
-
-        if (totalSeconds < 60) return `~${Math.ceil(totalSeconds)}s`;
-        const mins = Math.floor(totalSeconds / 60);
-        const secs = Math.ceil(totalSeconds % 60);
-        return secs > 0 ? `~${mins}m ${secs}s` : `~${mins}m`;
-
-    }, [guild.id, cloneRoles, cloneChannels, cloneOnboarding, cloneStickers, cloneSoundboard, sourceStickersCount, sourceSoundsCount, targetGuildId, resumeMode]);
+        return parts.length > 0 ? parts.join(", ") : "None";
+    }, [guild.id, cloneRoles, cloneChannels, cloneStickers, cloneSoundboard, sourceStickersCount, sourceSoundsCount]);
 
     const handleTargetChange = React.useCallback((v: string) => {
         setTargetGuildId(v === "new" ? null : v);
@@ -247,7 +207,7 @@ export const CloneModal = ({
 
             props.onClose();
             openModal((confirmProps: RenderModalProps) => (
-                <ConfirmOverwriteModal
+                <SafeConfirmOverwriteModal
                     props={confirmProps}
                     targetName={targetName}
                     sourceName={guild.name}
@@ -278,28 +238,16 @@ export const CloneModal = ({
     return (
         <Modal
             {...props}
-            title={
-                <span className={themeClass}>
-                    <span className="sc-modal-title">Clone Server: {guild.name}</span>
-                </span>
-            }
+            title={<span className={themeClass}><span className="vc-server-cloner-title">Clone Server: {guild.name}</span></span>}
             actionBarInput={!nothingSelected && (
                 <div className={themeClass}>
-                    <div className="sc-modal-estimate-box">
-                        <span>Estimated time: <strong>{estimatedTime}</strong></span>
-                    </div>
+                    <div className="vc-server-cloner-estimate">Selected items: <strong>{itemSummaryStr}</strong></div>
                 </div>
             )}
             actions={[
+                { text: "Cancel", variant: "secondary", onClick: props.onClose },
                 {
-                    text: "Cancel",
-                    variant: "secondary",
-                    onClick: props.onClose
-                },
-                {
-                    text: targetGuildId
-                        ? resumeMode ? "Resume Clone" : "Overwrite & Clone"
-                        : "Create & Clone",
+                    text: targetGuildId ? resumeMode ? "Resume clone" : "Overwrite and clone" : "Create and clone",
                     variant: "primary",
                     onClick: handleClone,
                     disabled: nothingSelected
@@ -307,11 +255,9 @@ export const CloneModal = ({
             ]}
         >
             <div className={themeClass}>
-                <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "8px 0", minHeight: "450px" }}>
-
-                    {}
+                <div className="vc-server-cloner-content">
                     <div>
-                        <span className="sc-modal-label">
+                        <span className="vc-server-cloner-label">
                             Clone To:
                         </span>
                         <SearchableSelect
@@ -323,117 +269,103 @@ export const CloneModal = ({
                             onChange={handleTargetChange}
                         />
                         {targetGuildId && !resumeMode && (
-                            <div className="sc-modal-subtext" style={{ color: "var(--status-danger)", marginTop: "6px", fontWeight: 600 }}>
+                            <div className="vc-server-cloner-target-status vc-server-cloner-danger">
                                 Warning: Selected items in the target server will be deleted and replaced!
                             </div>
                         )}
                         {targetGuildId && resumeMode && (
-                            <div className="sc-modal-subtext" style={{ color: "var(--text-positive)", marginTop: "6px", fontWeight: 600 }}>
+                            <div className="vc-server-cloner-target-status vc-server-cloner-success">
                                 Resume mode: Only missing items will be added, nothing will be deleted.
                             </div>
                         )}
                     </div>
 
-                    {}
                     {targetGuildId && (
-                        <div style={{ display: "flex", gap: "8px" }}>
-                            <ModeButton
-                                label="Overwrite"
-                                active={!resumeMode}
-                                color="#5865f2"
-                                onClick={() => setResumeMode(false)}
-                            />
-                            <ModeButton
-                                label="Resume"
-                                active={resumeMode}
-                                color="#43b581"
-                                onClick={() => setResumeMode(true)}
-                            />
+                        <div className="vc-server-cloner-mode-buttons">
+                            <Button color={!resumeMode ? Button.Colors.BRAND : Button.Colors.PRIMARY} onClick={() => setResumeMode(false)}>Overwrite</Button>
+                            <Button color={resumeMode ? Button.Colors.GREEN : Button.Colors.PRIMARY} onClick={() => setResumeMode(true)}>Resume</Button>
                         </div>
                     )}
 
-                    {}
-                    <div className="sc-modal-note-box">
+                    <div className="vc-server-cloner-note">
                         <strong>Note:</strong>{" "}
                         Server Icon, Name, Banner, Splash, Description
                         {cloneSystemFlags ? ", and System Channel Flags" : ""} will always be cloned.
                     </div>
 
-                    {}
                     <div>
-                        <span className="sc-modal-label">
+                        <span className="vc-server-cloner-label">
                             Core:
                         </span>
-                        <Checkbox value={cloneChannels} type="inverted" onChange={(_: any, val: boolean) => setCloneChannels(val)}>
-                            <span className="sc-modal-title-bold" style={{ fontWeight: 500 }}>Channels</span>
-                            <span className="sc-modal-subtext" style={{ display: "block", marginTop: "2px" }}>
+                        <Checkbox value={cloneChannels} type="inverted" onChange={(_event: PointerEvent<Element>, value: boolean) => setCloneChannels(value)}>
+                            <span className="vc-server-cloner-option-title">Channels</span>
+                            <span className="vc-server-cloner-option-description">
                                 All channel types with topics, positions, and settings
                             </span>
                         </Checkbox>
 
-                        <Checkbox value={cloneRoles} type="inverted" onChange={(_: any, val: boolean) => setCloneRoles(val)}>
-                            <span className="sc-modal-title-bold" style={{ fontWeight: 500 }}>Roles</span>
-                            <span className="sc-modal-subtext" style={{ display: "block", marginTop: "2px" }}>
+                        <Checkbox value={cloneRoles} type="inverted" onChange={(_event: PointerEvent<Element>, value: boolean) => setCloneRoles(value)}>
+                            <span className="vc-server-cloner-option-title">Roles</span>
+                            <span className="vc-server-cloner-option-description">
                                 With permissions, colors, and icons
                             </span>
                         </Checkbox>
                     </div>
 
-                    {}
                     <div>
-                        <span className="sc-modal-label">
+                        <span className="vc-server-cloner-label">
                             Assets:
                         </span>
-                        <Checkbox value={cloneStickers} type="inverted" onChange={(_: any, val: boolean) => setCloneStickers(val)}>
-                            <span className="sc-modal-title-bold" style={{ fontWeight: 500 }}>Stickers</span>
-                            <span className="sc-modal-subtext" style={{ display: "block", marginTop: "2px" }}>
+                        <Checkbox value={cloneStickers} type="inverted" onChange={(_event: PointerEvent<Element>, value: boolean) => setCloneStickers(value)}>
+                            <span className="vc-server-cloner-option-title">Stickers</span>
+                            <span className="vc-server-cloner-option-description">
                                 Custom stickers (limited by boost level)
                             </span>
                         </Checkbox>
 
-                        <Checkbox value={cloneSoundboard} type="inverted" onChange={(_: any, val: boolean) => setCloneSoundboard(val)}>
-                            <span className="sc-modal-title-bold" style={{ fontWeight: 500 }}>Soundboard</span>
-                            <span className="sc-modal-subtext" style={{ display: "block", marginTop: "2px" }}>
+                        <Checkbox value={cloneSoundboard} type="inverted" onChange={(_event: PointerEvent<Element>, value: boolean) => setCloneSoundboard(value)}>
+                            <span className="vc-server-cloner-option-title">Soundboard</span>
+                            <span className="vc-server-cloner-option-description">
                                 Custom soundboard sounds (limited by boost level)
                             </span>
                         </Checkbox>
                     </div>
 
-                    {}
                     <div>
-                        <span className="sc-modal-label">
+                        <span className="vc-server-cloner-label">
                             Server Settings:
                         </span>
 
                         <Checkbox
                             value={cloneOnboarding}
                             type="inverted"
-                            onChange={(_: any, val: boolean) => setCloneOnboarding(val)}
+                            onChange={(_event: PointerEvent<Element>, value: boolean) => setCloneOnboarding(value)}
                             disabled={!canOnboarding}
                         >
-                            <span className="sc-modal-title-bold" style={{ fontWeight: 500 }}>
+                            <span className="vc-server-cloner-option-title">
                                 Onboarding
                             </span>
-                            <span className="sc-modal-subtext" style={{ display: "block", marginTop: "2px" }}>
+                            <span className="vc-server-cloner-option-description">
                                 {canOnboarding
                                     ? "Welcome prompts, default channels, and customization"
                                     : "Requires both Channels and Roles"}
                             </span>
                         </Checkbox>
 
-                        <Checkbox value={cloneSystemFlags} type="inverted" onChange={(_: any, val: boolean) => setCloneSystemFlags(val)}>
-                            <span className="sc-modal-title-bold" style={{ fontWeight: 500 }}>System Channel Flags</span>
-                            <span className="sc-modal-subtext" style={{ display: "block", marginTop: "2px" }}>
+                        <Checkbox value={cloneSystemFlags} type="inverted" onChange={(_event: PointerEvent<Element>, value: boolean) => setCloneSystemFlags(value)}>
+                            <span className="vc-server-cloner-option-title">System Channel Flags</span>
+                            <span className="vc-server-cloner-option-description">
                                 Join/boost notification toggles
                             </span>
                         </Checkbox>
                     </div>
 
-                    {}
-                    <BoostWarning guild={guild} targetGuildId={targetGuildId} ownedGuilds={ownedGuilds} sourceStickersCount={sourceStickersCount} sourceSoundsCount={sourceSoundsCount} />
+                    <BoostWarning guild={guild} targetGuildId={targetGuildId} sourceStickersCount={sourceStickersCount} sourceSoundsCount={sourceSoundsCount} />
 
                 </div>
             </div>
         </Modal>
     );
-};
+}
+
+export const CloneModal = ErrorBoundary.wrap(CloneModalComponent, { noop: true });

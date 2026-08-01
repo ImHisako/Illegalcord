@@ -4,38 +4,63 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { React } from "@webpack/common";
+import { Button, React } from "@webpack/common";
 
-import { PLUGIN_VERSION,UPDATE_CHECK_URL } from "../constants";
+import { PLUGIN_VERSION, UPDATE_CHECK_URL } from "../constants";
 import { compareVersions } from "../utils/helpers";
 import { showUpdateModal } from "./UpdateModal";
 
 type UpdateStatus = "idle" | "checking" | "up-to-date" | "available" | "failed";
 
+interface GitHubRelease {
+    body?: string;
+    name?: string;
+    tag_name?: string;
+}
+
+function isGitHubRelease(value: unknown): value is GitHubRelease {
+    if (typeof value !== "object" || value === null) return false;
+    const release = value as Record<string, unknown>;
+    return (release.body === undefined || typeof release.body === "string")
+        && (release.name === undefined || typeof release.name === "string")
+        && (release.tag_name === undefined || typeof release.tag_name === "string");
+}
+
 export const VersionDisplay = () => {
     const [status, setStatus] = React.useState<UpdateStatus>("idle");
     const [latestVer, setLatestVer] = React.useState<string | null>(null);
+    const controllerRef = React.useRef<AbortController | null>(null);
 
-    const checkUpdate = React.useCallback(async () => {
+    React.useEffect(() => () => controllerRef.current?.abort(), []);
+
+    async function checkUpdate(): Promise<void> {
         setStatus("checking");
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const controller = new AbortController();
+        controllerRef.current = controller;
+        let timedOut = false;
+        const timeoutId = setTimeout(() => {
+            timedOut = true;
+            controller.abort();
+        }, 5000);
 
+        try {
             const response = await fetch(UPDATE_CHECK_URL, {
                 signal: controller.signal,
                 headers: { Accept: "application/vnd.github.v3+json" },
             });
-
-            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 setStatus("failed");
                 return;
             }
 
-            const data = await response.json();
-            const ver = (data.tag_name || data.name || "").replace(/^v/i, "").trim();
+            const value: unknown = await response.json();
+            if (!isGitHubRelease(value)) {
+                setStatus("failed");
+                return;
+            }
+
+            const ver = (value.tag_name || value.name || "").replace(/^v/i, "").trim();
 
             if (!ver) {
                 setStatus("failed");
@@ -45,40 +70,33 @@ export const VersionDisplay = () => {
             if (compareVersions(ver, PLUGIN_VERSION) > 0) {
                 setLatestVer(ver);
                 setStatus("available");
-                setTimeout(() => showUpdateModal(ver, data.body || "No release notes available."), 500);
+                showUpdateModal(ver, value.body || "No release notes available.");
             } else {
                 setStatus("up-to-date");
             }
-        } catch {
-            setStatus("failed");
+        } catch (error: unknown) {
+            if (timedOut || !(error instanceof DOMException && error.name === "AbortError")) setStatus("failed");
+        } finally {
+            clearTimeout(timeoutId);
+            if (controllerRef.current === controller) controllerRef.current = null;
         }
-    }, []);
+    }
 
     const statusLabel = React.useMemo(() => {
         switch (status) {
             case "checking": return { text: "Checking...", color: "var(--text-muted)" };
             case "up-to-date": return { text: "You're up to date!", color: "var(--text-positive)" };
-            case "available": return { text: `Update available: v${latestVer}`, color: "#ffaa00" };
+            case "available": return { text: `Update available: v${latestVer}`, color: "var(--text-warning)" };
             case "failed": return { text: "Check failed", color: "var(--status-danger)" };
             default: return null;
         }
     }, [status, latestVer]);
 
     return (
-        <div style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "14px 16px",
-            background: "var(--background-secondary)",
-            borderRadius: "8px",
-            marginBottom: "16px",
-        }}>
+        <div className="vc-server-cloner-version">
             <div>
-                <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-normal)" }}>
-                    Server Cloner
-                </div>
-                <div style={{ fontSize: "12px", color: "var(--text-link)", marginTop: "3px", display: "flex", alignItems: "center", gap: "4px" }}>
+                <div className="vc-server-cloner-version-title">Server Cloner</div>
+                <div className="vc-server-cloner-version-status">
                     <span>v{PLUGIN_VERSION}</span>
                     {statusLabel && (
                         <span style={{ color: statusLabel.color }}>
@@ -88,24 +106,12 @@ export const VersionDisplay = () => {
                 </div>
             </div>
 
-            <button
+            <Button
                 onClick={checkUpdate}
                 disabled={status === "checking"}
-                style={{
-                    padding: "7px 14px",
-                    borderRadius: "6px",
-                    border: "none",
-                    background: status === "checking" ? "var(--background-modifier-accent)" : "#5865f2",
-                    color: "white",
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    cursor: status === "checking" ? "not-allowed" : "pointer",
-                    opacity: status === "checking" ? 0.65 : 1,
-                    transition: "background 0.15s ease, opacity 0.15s ease",
-                }}
             >
                 {status === "checking" ? "Checking…" : "Check for Updates"}
-            </button>
+            </Button>
         </div>
     );
 };

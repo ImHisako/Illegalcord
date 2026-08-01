@@ -6,13 +6,12 @@
 
 import { state } from "../store";
 
-export const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+export { sleep } from "@utils/misc";
+
 export const randomDelay = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-export function escapeHtml(str: string): string {
-    const div = document.createElement("div");
-    div.textContent = str;
-    return div.innerHTML;
+export function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
 }
 
 export function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -21,7 +20,7 @@ export function arrayBufferToBase64(buffer: ArrayBuffer): string {
     const chunkSize = 8192;
     for (let i = 0; i < bytes.length; i += chunkSize) {
         const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-        binary += String.fromCharCode.apply(null, chunk as any);
+        binary += String.fromCharCode(...chunk);
     }
     return btoa(binary);
 }
