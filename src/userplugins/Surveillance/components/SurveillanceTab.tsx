@@ -118,7 +118,6 @@ const eventMatchesFilter = (event: SurveillanceEvent, filter: EventFilter) => {
 const eventMatchesQuery = (event: SurveillanceEvent, query: string) => {
     if (!query) return true;
 
-    const value = query.toLowerCase();
     return [
         event.username,
         event.userId,
@@ -128,7 +127,7 @@ const eventMatchesQuery = (event: SurveillanceEvent, query: string) => {
         event.content,
         event.before,
         event.after,
-    ].some(part => part?.toLowerCase().includes(value));
+    ].some(part => part?.toLowerCase().includes(query));
 };
 
 const formatTime = (timestamp: number) =>
@@ -311,8 +310,8 @@ function VoiceParticipantsPanel({ participants, targetUserId }: { participants?:
 }
 
 const EventDetailsModal = ErrorBoundary.wrap(function EventDetailsModal({ event, modalProps }: { event: SurveillanceEvent; modalProps: RenderModalProps; }) {
-    const channel = event.channelId ? ChannelStore.getChannel(event.channelId) : undefined;
-    const guild = event.guildId ? GuildStore.getGuild(event.guildId) : undefined;
+    const channel = !event.channelName && event.channelId ? ChannelStore.getChannel(event.channelId) : undefined;
+    const guild = !event.guildName && event.guildId ? GuildStore.getGuild(event.guildId) : undefined;
     const metadata = Object.entries(event.metadata ?? {}).filter(([, value]) => value != null);
 
     const copyEvent = () => {
@@ -430,8 +429,8 @@ function Stat({ label, value }: { label: string; value: number; }) {
 }
 
 function EventRow({ event }: { event: SurveillanceEvent; }) {
-    const channel = event.channelId ? ChannelStore.getChannel(event.channelId) : undefined;
-    const guild = event.guildId ? GuildStore.getGuild(event.guildId) : undefined;
+    const channel = !event.channelName && event.channelId ? ChannelStore.getChannel(event.channelId) : undefined;
+    const guild = !event.guildName && event.guildId ? GuildStore.getGuild(event.guildId) : undefined;
     const location = [
         event.guildName ?? guild?.name,
         event.channelName ?? channel?.name,
@@ -505,10 +504,10 @@ function SurveillanceTab() {
         [events, page]
     );
 
-    const filteredEvents = useMemo(() =>
-        scopedEvents.filter(event => eventMatchesFilter(event, filter) && eventMatchesQuery(event, query)),
-        [filter, query, scopedEvents]
-    );
+    const filteredEvents = useMemo(() => {
+        const normalizedQuery = query.toLowerCase();
+        return scopedEvents.filter(event => eventMatchesFilter(event, filter) && eventMatchesQuery(event, normalizedQuery));
+    }, [filter, query, scopedEvents]);
 
     const visibleEvents = useMemo(() =>
         filteredEvents.slice(0, visibleEventCount),

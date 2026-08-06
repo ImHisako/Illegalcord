@@ -45,6 +45,7 @@ let lastStatuses = new Map<string, OnlineStatus>();
 let lastActivities = new Map<string, Map<string, string>>();
 let presenceStartTimer: ReturnType<typeof setTimeout> | undefined;
 let presenceTrackingStarted = false;
+let pluginStarted = false;
 
 interface UserContextProps {
     user?: User;
@@ -112,13 +113,24 @@ const updateTargets = (value: string): string[] => {
     targets = [...new Set(value.match(/\d+/g) ?? [])];
     targetIds = new Set(targets);
     targetListeners.forEach(listener => listener());
+    syncPresenceTracking();
     return targets;
 };
 
 const updateServerTargets = (value: string): string[] => {
     serverTargets = [...new Set(value.match(/\d+/g) ?? [])];
     serverTargetIds = new Set(serverTargets);
+
+    for (const [userId, guildIds] of seenServerUsers) {
+        for (const guildId of guildIds) {
+            if (!serverTargetIds.has(guildId)) guildIds.delete(guildId);
+        }
+
+        if (!guildIds.size) seenServerUsers.delete(userId);
+    }
+
     serverTargetListeners.forEach(listener => listener());
+    syncPresenceTracking();
     return serverTargets;
 };
 
@@ -275,32 +287,32 @@ const isBotUser = (userId: string, user?: User) =>
 const shouldIgnoreUser = (userId: string, user?: User) =>
     settings.store.ignoreBots && isBotUser(userId, user);
 
-const shouldTrackUser = (userId: string) => {
-    if (!targetIds.has(userId)) return false;
-    if (shouldIgnoreUser(userId)) return false;
-    if (settings.store.trackSelf) return true;
-    return !isCurrentUser(userId);
-};
-
 const shouldTrackServer = (guildId?: string) =>
     guildId != null && serverTargetIds.has(guildId);
 
 const getScope = (userId: string, guildId?: string): SurveillanceScope | undefined => {
     if (shouldIgnoreUser(userId)) return;
-    if (shouldTrackServer(guildId) && !isCurrentUser(userId)) return "server";
-    if (shouldTrackUser(userId)) return "person";
+
+    const currentUser = isCurrentUser(userId);
+    if (shouldTrackServer(guildId) && !currentUser) return "server";
+    if (targetIds.has(userId) && (settings.store.trackSelf || !currentUser)) return "person";
 };
 
-const shouldTrackEvent = (userId: string, guildId?: string) =>
-    getScope(userId, guildId) != null;
+const hasTargets = () => targetIds.size > 0 || serverTargetIds.size > 0;
 
 function shouldTrackPresence() {
-    return settings.store.logActivities || settings.store.logStatus;
+    return hasTargets() && (settings.store.logActivities || settings.store.logStatus);
 }
 
 function syncPresenceTracking() {
-    if (shouldTrackPresence()) startPresenceTracking();
-    else stopPresenceTracking();
+    if (!pluginStarted) return;
+    if (!shouldTrackPresence()) {
+        stopPresenceTracking();
+        return;
+    }
+
+    if (presenceTrackingStarted) seedPresence();
+    else startPresenceTracking();
 }
 
 const getChannelInfo = (channelId: string | undefined): ChannelInfo => {
@@ -356,7 +368,7 @@ const getGuildInfo = (guildId: string | undefined): Pick<SurveillanceEvent, "gui
 
 const getChannelEventInfo = (event: ChannelFluxEvent): ChannelInfo => {
     const channelId = event.channel?.id ?? event.channelId;
-    const channelInfo = getChannelInfo(channelId);
+    const channelInfo: ChannelInfo = event.channel ? {} : getChannelInfo(channelId);
     const guildId = event.channel?.guild_id ?? event.guildId ?? channelInfo.guildId;
     const guild = guildId ? GuildStore.getGuild(guildId) : undefined;
 
@@ -638,39 +650,47 @@ const getVoiceChanges = (previousState: VoiceState, currentState: VoiceState) =>
 };
 
 const handleVoiceState = (state: VoiceState) => {
+    if (!hasTargets()) return;
     if (!settings.store.logVoice) return;
+    if (!targetIds.has(state.userId) && !serverTargetIds.size) return;
+    if (!targetIds.has(state.userId) && state.guildId && !serverTargetIds.has(state.guildId)) return;
 
-    const previousState = previousVoiceStates.get(state.userId);
     const { channelId, oldChannelId, userId } = state;
-    const guildId = state.guildId ?? getChannelInfo(channelId ?? oldChannelId).guildId;
-    if (!shouldTrackEvent(userId, guildId)) return;
+    const resolvedChannelInfo = state.guildId ? undefined : getChannelInfo(channelId ?? oldChannelId);
+    const guildId = state.guildId ?? resolvedChannelInfo?.guildId;
+    const scope = getScope(userId, guildId);
+    if (!scope) return;
 
+    const previousState = previousVoiceStates.get(userId);
     rememberServerUser(userId, guildId);
 
     if (oldChannelId !== channelId) {
         if (!oldChannelId && channelId) {
-            const channelInfo = getChannelInfo(channelId);
+            const channelInfo = resolvedChannelInfo ?? getChannelInfo(channelId);
             const voiceDetails = getVoiceDetails(`Joined voice channel ${channelInfo.channelName ?? "Unknown channel"}.`, channelId, userId);
 
             addUserEvent("voice_join", userId, voiceDetails.details, {
                 ...channelInfo,
+                scope,
                 voiceParticipants: voiceDetails.voiceParticipants,
             });
         } else if (oldChannelId && !channelId) {
-            const channelInfo = getChannelInfo(oldChannelId);
+            const channelInfo = resolvedChannelInfo ?? getChannelInfo(oldChannelId);
             const voiceDetails = getVoiceDetails(`Left voice channel ${channelInfo.channelName ?? "Unknown channel"}.`, oldChannelId, userId);
 
             addUserEvent("voice_leave", userId, voiceDetails.details, {
                 ...channelInfo,
+                scope,
                 voiceParticipants: voiceDetails.voiceParticipants,
             });
         } else if (oldChannelId && channelId) {
             const oldChannel = getChannelInfo(oldChannelId).channelName ?? "Unknown channel";
-            const channelInfo = getChannelInfo(channelId);
+            const channelInfo = resolvedChannelInfo ?? getChannelInfo(channelId);
             const voiceDetails = getVoiceDetails(`Moved from ${oldChannel} to ${channelInfo.channelName ?? "Unknown channel"}.`, channelId, userId);
 
             addUserEvent("voice_move", userId, voiceDetails.details, {
                 ...channelInfo,
+                scope,
                 voiceParticipants: voiceDetails.voiceParticipants,
             });
         }
@@ -679,11 +699,12 @@ const handleVoiceState = (state: VoiceState) => {
     if (previousState && channelId && oldChannelId === channelId) {
         const changes = getVoiceChanges(previousState, state);
         if (changes.length) {
-            const channelInfo = getChannelInfo(channelId);
+            const channelInfo = resolvedChannelInfo ?? getChannelInfo(channelId);
             const voiceDetails = getVoiceDetails(`Voice state changed: ${changes.join(", ")}.`, channelId, userId);
 
             addUserEvent("voice_update", userId, voiceDetails.details, {
                 ...channelInfo,
+                scope,
                 voiceParticipants: voiceDetails.voiceParticipants,
             });
         }
@@ -694,12 +715,15 @@ const handleVoiceState = (state: VoiceState) => {
 };
 
 const logMessage = (message: Message) => {
+    if (!hasTargets()) return;
     const { author } = message;
     if (!settings.store.logMessages && !settings.store.logMessageChanges) return;
     if (shouldIgnoreUser(author.id, author)) return;
+    if (!targetIds.has(author.id) && !serverTargetIds.size) return;
 
     const info = getChannelInfo(message.channel_id);
-    if (!shouldTrackEvent(author.id, info.guildId)) return;
+    const scope = getScope(author.id, info.guildId);
+    if (!scope) return;
 
     rememberServerUser(author.id, info.guildId);
 
@@ -721,7 +745,7 @@ const logMessage = (message: Message) => {
         userId: author.id,
         username: author.username,
         details: content ? `Sent message: ${content}` : "Sent a message.",
-        scope: getScope(author.id, info.guildId),
+        scope,
         content,
         ...info,
         metadata: {
@@ -733,13 +757,16 @@ const logMessage = (message: Message) => {
 };
 
 const logMessageUpdate = (message: Message) => {
+    if (!hasTargets()) return;
     if (!settings.store.logMessageChanges) return;
     if (shouldIgnoreUser(message.author.id, message.author)) return;
+    if (!targetIds.has(message.author.id) && !serverTargetIds.size) return;
 
     const previousMessage = messageCache.get(message.id);
     const info = getChannelInfo(message.channel_id);
     const guildId = info.guildId ?? previousMessage?.guildId;
-    if (!shouldTrackEvent(message.author.id, guildId)) return;
+    const scope = getScope(message.author.id, guildId);
+    if (!scope) return;
 
     rememberServerUser(message.author.id, guildId);
 
@@ -760,7 +787,7 @@ const logMessageUpdate = (message: Message) => {
         userId: message.author.id,
         username: message.author.username,
         details: content ? `Edited message: ${content}` : "Edited a message.",
-        scope: getScope(message.author.id, guildId),
+        scope,
         before: captureContent && previousContent ? preview(previousContent) : undefined,
         after: content,
         ...info,
@@ -772,12 +799,16 @@ const logMessageUpdate = (message: Message) => {
 };
 
 const logMessageDelete = (messageId: string, channelId: string) => {
+    if (!hasTargets()) return;
     if (!settings.store.logMessageChanges) return;
 
     const snapshot = messageCache.get(messageId);
+    if (!snapshot && !serverTargetIds.size) return;
     const info = getChannelInfo(channelId);
 
     if (!snapshot) {
+        if (!shouldTrackServer(info.guildId)) return;
+
         addServerEvent("message_delete", info.guildId, "Deleted an uncached message.", {
             username: "Unknown user",
             ...info,
@@ -790,7 +821,8 @@ const logMessageDelete = (messageId: string, channelId: string) => {
     }
 
     const guildId = snapshot.guildId ?? info.guildId;
-    if (!shouldTrackEvent(snapshot.userId, guildId)) return;
+    const scope = getScope(snapshot.userId, guildId);
+    if (!scope) return;
 
     rememberServerUser(snapshot.userId, guildId);
 
@@ -801,7 +833,7 @@ const logMessageDelete = (messageId: string, channelId: string) => {
         userId: snapshot.userId,
         username: snapshot.username,
         details: content ? `Deleted message: ${content}` : "Deleted a message.",
-        scope: getScope(snapshot.userId, guildId),
+        scope,
         content,
         ...info,
         metadata: {
@@ -814,11 +846,14 @@ const logMessageDelete = (messageId: string, channelId: string) => {
 };
 
 const logTyping = (userId: string, channelId: string) => {
+    if (!hasTargets()) return;
     if (!settings.store.logTyping) return;
     if (shouldIgnoreUser(userId)) return;
+    if (!targetIds.has(userId) && !serverTargetIds.size) return;
 
     const info = getChannelInfo(channelId);
-    if (!shouldTrackEvent(userId, info.guildId)) return;
+    const scope = getScope(userId, info.guildId);
+    if (!scope) return;
 
     const key = `${userId}:${channelId}`;
     const now = Date.now();
@@ -829,18 +864,21 @@ const logTyping = (userId: string, channelId: string) => {
     typingCooldowns.set(key, now);
     pruneTypingCooldowns(now);
     rememberServerUser(userId, info.guildId);
-    addUserEvent("typing", userId, "Started typing.", info);
+    addUserEvent("typing", userId, "Started typing.", { ...info, scope });
 };
 
 const formatEmoji = (emoji: ReactionEmoji | undefined) =>
     emoji?.name ?? emoji?.id ?? "Unknown emoji";
 
 const logReaction = (type: "reaction_add" | "reaction_remove", event: MessageReactionFluxEvent) => {
+    if (!hasTargets()) return;
     if (!settings.store.logReactions || !event.userId) return;
     if (shouldIgnoreUser(event.userId)) return;
+    if (!targetIds.has(event.userId) && !serverTargetIds.size) return;
 
     const info = getChannelInfo(event.channelId);
-    if (!shouldTrackEvent(event.userId, info.guildId)) return;
+    const scope = getScope(event.userId, info.guildId);
+    if (!scope) return;
 
     rememberServerUser(event.userId, info.guildId);
     addUserEvent(
@@ -849,6 +887,7 @@ const logReaction = (type: "reaction_add" | "reaction_remove", event: MessageRea
         type === "reaction_add" ? `Added reaction ${formatEmoji(event.emoji)}.` : `Removed reaction ${formatEmoji(event.emoji)}.`,
         {
             ...info,
+            scope,
             metadata: {
                 messageId: event.messageId,
                 emojiId: event.emoji?.id ?? null,
@@ -860,9 +899,11 @@ const logReaction = (type: "reaction_add" | "reaction_remove", event: MessageRea
 };
 
 const logReactionClear = (event: { channelId: string; messageId: string; }) => {
+    if (!serverTargetIds.size) return;
     if (!settings.store.logReactions) return;
 
     const info = getChannelInfo(event.channelId);
+    if (!shouldTrackServer(info.guildId)) return;
     addServerEvent("reaction_remove_all", info.guildId, "Removed all reactions from a message.", {
         ...info,
         metadata: {
@@ -872,7 +913,12 @@ const logReactionClear = (event: { channelId: string; messageId: string; }) => {
 };
 
 const logChannelEvent = (type: "channel_create" | "channel_delete" | "channel_update", event: ChannelFluxEvent) => {
+    if (!serverTargetIds.size) return;
+    const guildId = event.channel?.guild_id ?? event.guildId;
+    if (guildId && !shouldTrackServer(guildId)) return;
+
     const info = getChannelEventInfo(event);
+    if (!shouldTrackServer(info.guildId)) return;
     if (type === "channel_update" && !shouldLogUpdateEvent(`channel:${info.channelId ?? "unknown"}`)) return;
 
     const label = info.channelName ?? info.channelId ?? "Unknown channel";
@@ -888,7 +934,12 @@ const logChannelEvent = (type: "channel_create" | "channel_delete" | "channel_up
 };
 
 const logThreadEvent = (type: "thread_create" | "thread_delete" | "thread_update", event: ChannelFluxEvent) => {
+    if (!serverTargetIds.size) return;
+    const guildId = event.channel?.guild_id ?? event.guildId;
+    if (guildId && !shouldTrackServer(guildId)) return;
+
     const info = getChannelEventInfo(event);
+    if (!shouldTrackServer(info.guildId)) return;
     if (type === "thread_update" && !shouldLogUpdateEvent(`thread:${info.channelId ?? "unknown"}`)) return;
 
     const label = info.channelName ?? info.channelId ?? "Unknown thread";
@@ -907,6 +958,7 @@ const logGuildMemberEvent = (
     type: "guild_member_add" | "guild_member_remove" | "guild_member_update",
     event: GuildMemberFluxEvent
 ) => {
+    if (!serverTargetIds.size) return;
     if (type === "guild_member_update" && !settings.store.logMemberUpdates) return;
 
     const guildId = event.guildId ?? event.guild_id ?? event.member?.guildId;
@@ -943,6 +995,7 @@ const logGuildMemberEvent = (
 
 const logGuildEvent = (event: GuildFluxEvent) => {
     const guildId = event.guild?.id ?? event.guildId;
+    if (!shouldTrackServer(guildId)) return;
     if (!shouldLogUpdateEvent(`guild:${guildId ?? "unknown"}`)) return;
 
     const guildName = event.guild?.name ?? GuildStore.getGuild(guildId ?? "")?.name;
@@ -954,6 +1007,7 @@ const logGuildEvent = (event: GuildFluxEvent) => {
 
 const logRoleEvent = (type: "role_create" | "role_delete" | "role_update", event: RoleFluxEvent) => {
     const guildId = event.role?.guildId ?? event.guildId ?? event.guild_id;
+    if (!shouldTrackServer(guildId)) return;
     if (type === "role_update" && !shouldLogUpdateEvent(`role:${guildId ?? "unknown"}:${event.role?.id ?? event.roleId ?? "unknown"}`)) return;
 
     const roleName = event.role?.name ?? event.roleId ?? "Unknown role";
@@ -1004,6 +1058,7 @@ export default definePlugin({
     start() {
         updateTargets(settings.store.targets);
         updateServerTargets(settings.store.serverTargets);
+        pluginStarted = true;
         if (shouldTrackPresence()) presenceStartTimer = setTimeout(startPresenceTracking, 3_000);
 
         if (!SettingsPlugin.customEntries.some(entry => entry.key === SETTINGS_ENTRY_KEY)) {
@@ -1017,6 +1072,7 @@ export default definePlugin({
     },
 
     stop() {
+        pluginStarted = false;
         stopPresenceTracking();
         removeFromArray(SettingsPlugin.customEntries, entry => entry.key === SETTINGS_ENTRY_KEY);
         previousVoiceStates.clear();
@@ -1042,6 +1098,7 @@ export default definePlugin({
         },
 
         MESSAGE_DELETE_BULK({ ids, channelId }: { ids: string[]; channelId: string; }) {
+            if (!hasTargets()) return;
             for (const id of ids) {
                 logMessageDelete(id, channelId);
             }
@@ -1064,6 +1121,7 @@ export default definePlugin({
         },
 
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
+            if (!hasTargets()) return;
             for (const voiceState of voiceStates) {
                 handleVoiceState(voiceState);
             }
@@ -1082,6 +1140,7 @@ export default definePlugin({
         },
 
         CHANNEL_UPDATES({ channels }: { channels: Channel[]; }) {
+            if (!serverTargetIds.size) return;
             for (const channel of channels) {
                 logChannelEvent("channel_update", { channel });
             }
