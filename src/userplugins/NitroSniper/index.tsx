@@ -23,12 +23,15 @@ const Native = VencordNative?.pluginHelpers?.NitroSniper as PluginNative<typeof 
 
 let startTime = 0;
 let claiming = false;
+let altListenerId = 0;
 const claimQueue: ClaimRequest[] = [];
+const seenCodes = new Set<string>();
 
 function resetState() {
     startTime = Date.now();
     claimQueue.length = 0;
     claiming = false;
+    seenCodes.clear();
 }
 
 function toError(error: unknown) {
@@ -83,6 +86,34 @@ function notifyClaim(result: WebhookResult, request: ClaimRequest, giftType: str
 function continueQueue() {
     claiming = false;
     processQueue();
+}
+
+function enqueueClaim(request: ClaimRequest) {
+    if (seenCodes.has(request.code)) return;
+    seenCodes.add(request.code);
+    claimQueue.push(request);
+    processQueue();
+}
+
+async function listenForNightyAltGifts() {
+    if (!Native) return;
+
+    const listenerId = ++altListenerId;
+    try {
+        const error = await Native.startNightyAltDetection();
+        if (error) {
+            logger.warn(error);
+            return;
+        }
+
+        while (listenerId === altListenerId) {
+            const code = await Native.waitForNightyGiftCode();
+            if (!code || listenerId !== altListenerId) return;
+            enqueueClaim({ code });
+        }
+    } catch (error) {
+        logger.error("Nighty alt gift detection failed.", toError(error));
+    }
 }
 
 function handleClaimSuccess(request: ClaimRequest, giftType: Promise<string | null>) {
@@ -164,9 +195,12 @@ export default definePlugin({
 
     start() {
         resetState();
+        void listenForNightyAltGifts();
     },
 
     stop() {
+        altListenerId++;
+        void Native?.stopNightyAltDetection();
         resetState();
         void Native?.cancelCaptchaSolves();
     },
@@ -178,8 +212,7 @@ export default definePlugin({
             const request = createClaimRequest(message);
             if (!request) return;
 
-            claimQueue.push(request);
-            processQueue();
+            enqueueClaim(request);
         }
     }
 });

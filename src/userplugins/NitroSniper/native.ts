@@ -9,6 +9,8 @@ import { setTimeout as sleep } from "timers/promises";
 
 import type { NativeCaptchaResponse, NativeWebhookResponse } from "./types";
 
+export { startNightyAltDetection, stopNightyAltDetection, waitForNightyGiftCode } from "./nightyAlts";
+
 const NONECAP_SOLVES_URL = "https://api.nonecap.com/v1/solves";
 const NOCAPTCHAAI_URL = "https://api.nocaptchaai.com";
 const MAX_RESPONSE_BYTES = 64 * 1024;
@@ -183,7 +185,7 @@ async function solveWithNoCaptchaAI(apiKey: string, sitekey: string, rqdata: str
     if (!task.taskId || task.taskId.length > 256 || /[\r\n]/.test(task.taskId)) {
         return { success: false, error: "NoCaptchaAI returned an invalid task ID." };
     }
-    const taskId = task.taskId;
+    const { taskId } = task;
 
     while (task.status === "idle" || task.status === "processing") {
         await sleep(3000, undefined, { signal });
