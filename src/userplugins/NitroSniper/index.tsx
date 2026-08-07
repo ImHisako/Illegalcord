@@ -11,7 +11,7 @@ import { findByPropsLazy } from "@webpack";
 import { ChannelStore, IconUtils, UserStore } from "@webpack/common";
 
 import { resolveGiftType } from "./giftCode";
-import { settings } from "./settings";
+import { CaptchaWarning, settings } from "./settings";
 import type { CaptchaProps, CaptchaResult, ClaimRequest, WebhookResult } from "./types";
 import { sendClaimWebhook } from "./webhook";
 
@@ -124,6 +124,7 @@ export default definePlugin({
     tags: ["Chat", "Utility"],
     searchTerms: ["nitro", "gift", "redeem", "snipe"],
     settings,
+    settingsAboutComponent: CaptchaWarning,
     patches: [{
         find: '"X-Captcha-Key"',
         replacement: {
@@ -133,12 +134,16 @@ export default definePlugin({
     }],
 
     async solveCaptcha(props: CaptchaProps, showCaptcha: (props: CaptchaProps) => Promise<CaptchaResult>) {
-        const apiKey = settings.store.noneCapApiKey.trim();
+        const { captchaProvider } = settings.store;
+        const apiKey = captchaProvider === "nocaptchaai"
+            ? settings.store.noCaptchaAiApiKey.trim()
+            : settings.store.noneCapApiKey.trim();
         if (!claiming || !apiKey || props.captchaService !== "hcaptcha" || !Native) {
             return showCaptcha(props);
         }
 
         const result = await Native.solveCaptcha(
+            captchaProvider,
             apiKey,
             props.sitekey,
             props.options.rqdata,
@@ -146,7 +151,7 @@ export default definePlugin({
             navigator.userAgent
         );
         if (!result.success || !result.token) {
-            logger.error(result.error ?? "NoneCap solve failed.");
+            logger.error(result.error ?? "CAPTCHA solve failed.");
             return showCaptcha(props);
         }
 

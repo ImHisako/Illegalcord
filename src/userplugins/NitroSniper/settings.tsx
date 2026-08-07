@@ -5,6 +5,7 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
+import { Notice } from "@components/Notice";
 import { OptionType } from "@utils/types";
 import { Button, showToast, Toasts } from "@webpack/common";
 
@@ -38,6 +39,14 @@ function TestWebhookButton() {
     );
 }
 
+export function CaptchaWarning() {
+    return (
+        <Notice.Warning>
+            Automatic CAPTCHA solving sends the site key, request data, Discord page URL, and your user agent to the selected third-party service and may spend credits. If solving fails, NitroSniper opens Discord&apos;s CAPTCHA modal. NoCaptchaAI does not currently document hCaptcha token tasks, so its compatible task mode may stop working if the provider rejects it.
+        </Notice.Warning>
+    );
+}
+
 export const settings = definePluginSettings({
     ignoreOwnGiftLinks: {
         type: OptionType.BOOLEAN,
@@ -45,11 +54,31 @@ export const settings = definePluginSettings({
         default: false,
         restartNeeded: false
     },
+    captchaProvider: {
+        type: OptionType.SELECT,
+        description: "Service used to solve Nitro redemption hCaptchas.",
+        options: [
+            { label: "NoneCap", value: "nonecap", default: true },
+            { label: "NoCaptchaAI", value: "nocaptchaai" }
+        ]
+    },
     noneCapApiKey: {
         type: OptionType.STRING,
         description: "NoneCap API key for automatically solving Nitro redemption CAPTCHAs. Leave empty to use Discord's CAPTCHA modal.",
         default: "",
         placeholder: "nc_live_...",
+        hidden: () => settings.store.captchaProvider !== "nonecap",
+        componentProps: {
+            type: "password",
+            autoComplete: "new-password"
+        }
+    },
+    noCaptchaAiApiKey: {
+        type: OptionType.STRING,
+        description: "NoCaptchaAI API key for automatically solving Nitro redemption hCaptchas. Leave empty to use Discord's CAPTCHA modal.",
+        default: "",
+        placeholder: "nocap_...",
+        hidden: () => settings.store.captchaProvider !== "nocaptchaai",
         componentProps: {
             type: "password",
             autoComplete: "new-password"
