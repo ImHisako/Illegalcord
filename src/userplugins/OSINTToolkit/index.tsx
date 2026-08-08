@@ -10,13 +10,14 @@ import { ApplicationCommandInputType, ApplicationCommandOptionType, findOption, 
 import { findGroupChildrenByChildId, type NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
+import { ImageIcon } from "@components/Icons";
 import { Margins } from "@components/margins";
 import { Notice } from "@components/Notice";
 import { copyWithToast } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import { parseUrl } from "@utils/misc";
 import { formatDurationVerbose, makeCodeblock } from "@utils/text";
-import definePlugin, { OptionType } from "@utils/types";
+import definePlugin, { OptionType, type PluginNative } from "@utils/types";
 import type { CommandArgument, CommandContext, User } from "@vencord/discord-types";
 import { IconUtils, Menu, SelectedChannelStore, showToast, Toasts } from "@webpack/common";
 
@@ -70,8 +71,8 @@ interface ImageContextProps {
     src?: string;
 }
 
+const Native = VencordNative.pluginHelpers.OSINTToolkit as PluginNative<typeof import("./native")>;
 const REQUEST_TIMEOUT_MS = 12_000;
-const GEO_REQUEST_TIMEOUT_MS = 120_000;
 const logger = new Logger("OSINTToolkit");
 const activeRequests = new Set<AbortController>();
 let pluginActive = true;
@@ -443,19 +444,10 @@ function parseGeoAnalysis(data: unknown): GeoAnalysis | undefined {
 }
 
 async function analyzeGeoImage(imageUrl: string, apiKey: string): Promise<GeoAnalysis | undefined> {
-    const data = await fetchJson("https://geoseeer.com/api/v1/analyze", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "X-API-Key": apiKey
-        },
-        body: JSON.stringify({
-            url: imageUrl,
-            analysis_mode: "fast"
-        })
-    }, GEO_REQUEST_TIMEOUT_MS);
+    const result = await Native.analyzeGeoImage(imageUrl, apiKey);
+    if (!result.success) throw new Error(result.error);
 
-    return parseGeoAnalysis(data);
+    return parseGeoAnalysis(result.data);
 }
 
 function createGeoAnalysisMessage(analysis: GeoAnalysis): string {
@@ -515,6 +507,7 @@ const messageContextMenuPatch: NavContextMenuPatchCallback = (children, { itemSr
                         id="vc-osint-geo"
                         label={<span className="vc-osint-geo-label">Geo Osint</span>}
                         action={() => void handleGeoImage(itemSrc)}
+                        icon={ImageIcon}
                     />
                 )
                 : null}
@@ -585,7 +578,9 @@ const messageContextMenuPatch: NavContextMenuPatchCallback = (children, { itemSr
 async function handleGeoImage(imageUrl: string) {
     const apiKey = settings.store.geoSeeerApiKey.trim();
     if (!apiKey) {
-        showToast("Set your GeoSeeer API key in OSINTToolkit settings first.", Toasts.Type.FAILURE);
+        sendBotMessage(SelectedChannelStore.getChannelId(), {
+            content: "Your GeoSeeer API key is missing. Get one from [GeoSeeer](https://geoseeer.com/). We recommend creating the account with a temporary email. For a reliable temporary email, right click any message, then select OSINT Toolkit > Lookup Tools > Snapmail."
+        });
         return;
     }
 
@@ -627,6 +622,7 @@ const imageContextMenuPatch: NavContextMenuPatchCallback = (children, { src }: I
             id="vc-osint-geo"
             label={<span className="vc-osint-geo-label">Geo Osint</span>}
             action={() => void handleGeoImage(src)}
+            icon={ImageIcon}
         />
     );
 };

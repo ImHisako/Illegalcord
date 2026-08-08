@@ -127,6 +127,7 @@ const messageContextMenuPatch: NavContextMenuPatchCallback = (children, { messag
                 id="silent-edit"
                 key="silent-edit"
                 label="Silent Edit"
+                color="danger"
                 action={() => startSilentEdit(message)}
                 icon={SilentEditIcon}
             />
