@@ -19,6 +19,7 @@
 }
 
 .vc-client-diagnostics-tabs {
+    overflow-x: auto;
     margin-bottom: 4px;
 }
 
@@ -57,6 +58,12 @@
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
     background: var(--background-secondary);
+    transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.vc-client-diagnostics-metric:hover {
+    border-color: var(--border-strong);
+    background: var(--background-modifier-hover);
 }
 
 .vc-client-diagnostics-table {
@@ -90,6 +97,10 @@
 
 .vc-client-diagnostics-body:last-child {
     border-bottom: 0;
+}
+
+.vc-client-diagnostics-body:hover {
+    background: var(--background-modifier-hover);
 }
 
 .vc-client-diagnostics-plugin-cell {
@@ -136,8 +147,21 @@
 
 .vc-client-diagnostics-search-controls {
     display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.vc-client-diagnostics-search-field {
+    display: flex;
+    min-width: 0;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+}
+
+.vc-client-diagnostics-search-icon {
+    flex: 0 0 auto;
+    color: var(--interactive-normal);
 }
 
 .vc-client-diagnostics-search-input {
@@ -145,10 +169,15 @@
     flex: 1;
 }
 
-.vc-client-diagnostics-search-controls button {
+.vc-client-diagnostics-search-field button {
     display: inline-flex;
+    flex: 0 0 auto;
     align-items: center;
     gap: 8px;
+}
+
+.vc-client-diagnostics-search-summary {
+    align-self: flex-end;
 }
 
 .vc-client-diagnostics-guide-section {
@@ -210,6 +239,12 @@
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
     background: var(--background-primary);
+    transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.vc-client-diagnostics-monitor-result:hover {
+    border-color: var(--border-strong);
+    background: var(--background-modifier-hover);
 }
 
 .vc-client-diagnostics-monitor-panel {
@@ -241,10 +276,16 @@
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
     background: var(--background-secondary);
+    transition: border-color 120ms ease, background-color 120ms ease;
 }
 
 .vc-client-diagnostics-selected {
     border-color: var(--brand-500);
+    background: var(--background-modifier-selected);
+}
+
+.vc-client-diagnostics-analysis-card:hover {
+    border-color: var(--border-strong);
 }
 
 .vc-client-diagnostics-analysis-card-head {
@@ -383,10 +424,18 @@
         flex-direction: column;
     }
 
-    .vc-client-diagnostics-search-controls,
+    .vc-client-diagnostics-search-field,
     .vc-client-diagnostics-monitor-panel-head {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    .vc-client-diagnostics-search-icon {
+        display: none;
+    }
+
+    .vc-client-diagnostics-search-summary {
+        align-self: flex-start;
     }
 
     .vc-client-diagnostics-monitor-layout {

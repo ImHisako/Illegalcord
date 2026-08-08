@@ -14,7 +14,7 @@ import { removeFromArray } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Activity, Channel, Guild, GuildMember, Message, OnlineStatus, Role, User } from "@vencord/discord-types";
 import { ActivityType } from "@vencord/discord-types/enums";
-import { ChannelStore, GuildStore, Menu, PresenceStore, RelationshipStore, SettingsRouter, UserStore, VoiceStateStore } from "@webpack/common";
+import { ChannelStore, FluxDispatcher, GuildStore, Menu, PresenceStore, RelationshipStore, SettingsRouter, UserStore, VoiceStateStore } from "@webpack/common";
 
 import { recordEvent, trimEvents } from "./store";
 import type { MessageSnapshot, SurveillanceEvent, SurveillanceEventType, SurveillanceScope, VoiceParticipant, VoiceState, VoiceStateFlag } from "./types";
@@ -113,6 +113,7 @@ const updateTargets = (value: string): string[] => {
     targets = [...new Set(value.match(/\d+/g) ?? [])];
     targetIds = new Set(targets);
     targetListeners.forEach(listener => listener());
+    syncFluxTracking();
     syncPresenceTracking();
     return targets;
 };
@@ -130,6 +131,7 @@ const updateServerTargets = (value: string): string[] => {
     }
 
     serverTargetListeners.forEach(listener => listener());
+    syncFluxTracking();
     syncPresenceTracking();
     return serverTargets;
 };
@@ -203,6 +205,7 @@ export const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         default: true,
         description: "Log live messages from monitored users.",
+        onChange: syncFluxTracking,
     },
     captureMessageContent: {
         type: OptionType.BOOLEAN,
@@ -213,16 +216,19 @@ export const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         default: true,
         description: "Log edits and deletes for messages seen during this session.",
+        onChange: syncFluxTracking,
     },
     logTyping: {
         type: OptionType.BOOLEAN,
         default: true,
         description: "Log typing signals with a short cooldown.",
+        onChange: syncFluxTracking,
     },
     logReactions: {
         type: OptionType.BOOLEAN,
         default: true,
         description: "Log live reaction adds and removals.",
+        onChange: syncFluxTracking,
     },
     logStatus: {
         type: OptionType.BOOLEAN,
@@ -240,11 +246,13 @@ export const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         default: true,
         description: "Log voice joins, leaves, moves, and state changes.",
+        onChange: syncFluxTracking,
     },
     logMemberUpdates: {
         type: OptionType.BOOLEAN,
         default: true,
         description: "Log server member update events.",
+        onChange: syncFluxTracking,
     },
     notifyEvents: {
         type: OptionType.BOOLEAN,
@@ -650,8 +658,6 @@ const getVoiceChanges = (previousState: VoiceState, currentState: VoiceState) =>
 };
 
 const handleVoiceState = (state: VoiceState) => {
-    if (!hasTargets()) return;
-    if (!settings.store.logVoice) return;
     if (!targetIds.has(state.userId) && !serverTargetIds.size) return;
     if (!targetIds.has(state.userId) && state.guildId && !serverTargetIds.has(state.guildId)) return;
 
@@ -715,7 +721,6 @@ const handleVoiceState = (state: VoiceState) => {
 };
 
 const logMessage = (message: Message) => {
-    if (!hasTargets()) return;
     const { author } = message;
     if (!settings.store.logMessages && !settings.store.logMessageChanges) return;
     if (shouldIgnoreUser(author.id, author)) return;
@@ -730,13 +735,15 @@ const logMessage = (message: Message) => {
     const captureContent = settings.store.captureMessageContent;
     const content = captureContent ? preview(message.content) : undefined;
 
-    rememberMessage(message.id, {
-        userId: author.id,
-        username: author.username,
-        channelId: message.channel_id,
-        guildId: info.guildId,
-        content: captureContent ? message.content : "",
-    });
+    if (settings.store.logMessageChanges) {
+        rememberMessage(message.id, {
+            userId: author.id,
+            username: author.username,
+            channelId: message.channel_id,
+            guildId: info.guildId,
+            content: captureContent ? message.content : "",
+        });
+    }
 
     if (!settings.store.logMessages) return;
 
@@ -757,8 +764,6 @@ const logMessage = (message: Message) => {
 };
 
 const logMessageUpdate = (message: Message) => {
-    if (!hasTargets()) return;
-    if (!settings.store.logMessageChanges) return;
     if (shouldIgnoreUser(message.author.id, message.author)) return;
     if (!targetIds.has(message.author.id) && !serverTargetIds.size) return;
 
@@ -799,9 +804,6 @@ const logMessageUpdate = (message: Message) => {
 };
 
 const logMessageDelete = (messageId: string, channelId: string) => {
-    if (!hasTargets()) return;
-    if (!settings.store.logMessageChanges) return;
-
     const snapshot = messageCache.get(messageId);
     if (!snapshot && !serverTargetIds.size) return;
     const info = getChannelInfo(channelId);
@@ -846,8 +848,6 @@ const logMessageDelete = (messageId: string, channelId: string) => {
 };
 
 const logTyping = (userId: string, channelId: string) => {
-    if (!hasTargets()) return;
-    if (!settings.store.logTyping) return;
     if (shouldIgnoreUser(userId)) return;
     if (!targetIds.has(userId) && !serverTargetIds.size) return;
 
@@ -871,8 +871,7 @@ const formatEmoji = (emoji: ReactionEmoji | undefined) =>
     emoji?.name ?? emoji?.id ?? "Unknown emoji";
 
 const logReaction = (type: "reaction_add" | "reaction_remove", event: MessageReactionFluxEvent) => {
-    if (!hasTargets()) return;
-    if (!settings.store.logReactions || !event.userId) return;
+    if (!event.userId) return;
     if (shouldIgnoreUser(event.userId)) return;
     if (!targetIds.has(event.userId) && !serverTargetIds.size) return;
 
@@ -899,9 +898,6 @@ const logReaction = (type: "reaction_add" | "reaction_remove", event: MessageRea
 };
 
 const logReactionClear = (event: { channelId: string; messageId: string; }) => {
-    if (!serverTargetIds.size) return;
-    if (!settings.store.logReactions) return;
-
     const info = getChannelInfo(event.channelId);
     if (!shouldTrackServer(info.guildId)) return;
     addServerEvent("reaction_remove_all", info.guildId, "Removed all reactions from a message.", {
@@ -913,7 +909,6 @@ const logReactionClear = (event: { channelId: string; messageId: string; }) => {
 };
 
 const logChannelEvent = (type: "channel_create" | "channel_delete" | "channel_update", event: ChannelFluxEvent) => {
-    if (!serverTargetIds.size) return;
     const guildId = event.channel?.guild_id ?? event.guildId;
     if (guildId && !shouldTrackServer(guildId)) return;
 
@@ -934,7 +929,6 @@ const logChannelEvent = (type: "channel_create" | "channel_delete" | "channel_up
 };
 
 const logThreadEvent = (type: "thread_create" | "thread_delete" | "thread_update", event: ChannelFluxEvent) => {
-    if (!serverTargetIds.size) return;
     const guildId = event.channel?.guild_id ?? event.guildId;
     if (guildId && !shouldTrackServer(guildId)) return;
 
@@ -958,9 +952,6 @@ const logGuildMemberEvent = (
     type: "guild_member_add" | "guild_member_remove" | "guild_member_update",
     event: GuildMemberFluxEvent
 ) => {
-    if (!serverTargetIds.size) return;
-    if (type === "guild_member_update" && !settings.store.logMemberUpdates) return;
-
     const guildId = event.guildId ?? event.guild_id ?? event.member?.guildId;
     if (!shouldTrackServer(guildId)) return;
 
@@ -1021,6 +1012,133 @@ const logRoleEvent = (type: "role_create" | "role_delete" | "role_update", event
     });
 };
 
+const fluxHandlers = {
+    MESSAGE_CREATE({ message }: { message: Message; }) {
+        logMessage(message);
+    },
+    MESSAGE_UPDATE({ message }: { message: Message; }) {
+        logMessageUpdate(message);
+    },
+    MESSAGE_DELETE({ id, channelId }: { id: string; channelId: string; }) {
+        logMessageDelete(id, channelId);
+    },
+    MESSAGE_DELETE_BULK({ ids, channelId }: { ids: string[]; channelId: string; }) {
+        for (const id of ids) logMessageDelete(id, channelId);
+    },
+    MESSAGE_REACTION_ADD(event: MessageReactionFluxEvent) {
+        logReaction("reaction_add", event);
+    },
+    MESSAGE_REACTION_REMOVE(event: MessageReactionFluxEvent) {
+        logReaction("reaction_remove", event);
+    },
+    MESSAGE_REACTION_REMOVE_ALL(event: { channelId: string; messageId: string; }) {
+        logReactionClear(event);
+    },
+    TYPING_START({ userId, channelId }: { userId: string; channelId: string; }) {
+        logTyping(userId, channelId);
+    },
+    VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
+        for (const voiceState of voiceStates) handleVoiceState(voiceState);
+    },
+    CHANNEL_CREATE(event: ChannelFluxEvent) {
+        logChannelEvent("channel_create", event);
+    },
+    CHANNEL_DELETE(event: ChannelFluxEvent) {
+        logChannelEvent("channel_delete", event);
+    },
+    CHANNEL_UPDATE(event: ChannelFluxEvent) {
+        logChannelEvent("channel_update", event);
+    },
+    CHANNEL_UPDATES({ channels }: { channels: Channel[]; }) {
+        for (const channel of channels) logChannelEvent("channel_update", { channel });
+    },
+    THREAD_CREATE(event: ChannelFluxEvent) {
+        logThreadEvent("thread_create", event);
+    },
+    THREAD_DELETE(event: ChannelFluxEvent) {
+        logThreadEvent("thread_delete", event);
+    },
+    THREAD_UPDATE(event: ChannelFluxEvent) {
+        logThreadEvent("thread_update", event);
+    },
+    GUILD_MEMBER_ADD(event: GuildMemberFluxEvent) {
+        logGuildMemberEvent("guild_member_add", event);
+    },
+    GUILD_MEMBER_REMOVE(event: GuildMemberFluxEvent) {
+        logGuildMemberEvent("guild_member_remove", event);
+    },
+    GUILD_MEMBER_UPDATE(event: GuildMemberFluxEvent) {
+        logGuildMemberEvent("guild_member_update", event);
+    },
+    GUILD_UPDATE(event: GuildFluxEvent) {
+        logGuildEvent(event);
+    },
+    GUILD_ROLE_CREATE(event: RoleFluxEvent) {
+        logRoleEvent("role_create", event);
+    },
+    GUILD_ROLE_DELETE(event: RoleFluxEvent) {
+        logRoleEvent("role_delete", event);
+    },
+    GUILD_ROLE_UPDATE(event: RoleFluxEvent) {
+        logRoleEvent("role_update", event);
+    },
+};
+
+type SurveillanceFluxEvent = keyof typeof fluxHandlers;
+
+const subscribedFluxEvents = new Set<SurveillanceFluxEvent>();
+
+function shouldSubscribeFluxEvent(event: SurveillanceFluxEvent) {
+    if (!pluginStarted || !hasTargets()) return false;
+
+    switch (event) {
+        case "MESSAGE_CREATE":
+            return settings.store.logMessages || settings.store.logMessageChanges;
+        case "MESSAGE_UPDATE":
+        case "MESSAGE_DELETE":
+        case "MESSAGE_DELETE_BULK":
+            return settings.store.logMessageChanges;
+        case "MESSAGE_REACTION_ADD":
+        case "MESSAGE_REACTION_REMOVE":
+            return settings.store.logReactions;
+        case "TYPING_START":
+            return settings.store.logTyping;
+        case "VOICE_STATE_UPDATES":
+            return settings.store.logVoice;
+        case "MESSAGE_REACTION_REMOVE_ALL":
+            return serverTargetIds.size > 0 && settings.store.logReactions;
+        case "GUILD_MEMBER_UPDATE":
+            return serverTargetIds.size > 0 && settings.store.logMemberUpdates;
+        default:
+            return serverTargetIds.size > 0;
+    }
+}
+
+function syncFluxTracking() {
+    for (const event of Object.keys(fluxHandlers) as SurveillanceFluxEvent[]) {
+        const shouldSubscribe = shouldSubscribeFluxEvent(event);
+        if (shouldSubscribe === subscribedFluxEvents.has(event)) continue;
+
+        const handler = fluxHandlers[event];
+        if (shouldSubscribe) {
+            FluxDispatcher.subscribe(event, handler);
+            subscribedFluxEvents.add(event);
+        } else {
+            FluxDispatcher.unsubscribe(event, handler);
+            subscribedFluxEvents.delete(event);
+        }
+    }
+
+    const targetsActive = hasTargets();
+    if (!targetsActive || !settings.store.logMessageChanges) messageCache.clear();
+    if (!targetsActive || !settings.store.logTyping) typingCooldowns.clear();
+    if (!targetsActive || !settings.store.logVoice) previousVoiceStates.clear();
+    if (!serverTargetIds.size) {
+        updateCooldowns.clear();
+        seenServerUsers.clear();
+    }
+}
+
 const patchUserContext: NavContextMenuPatchCallback = (children, { user }: UserContextProps) => {
     if (!settings.store.addContextMenu || !user) return;
 
@@ -1059,6 +1177,7 @@ export default definePlugin({
         updateTargets(settings.store.targets);
         updateServerTargets(settings.store.serverTargets);
         pluginStarted = true;
+        syncFluxTracking();
         if (shouldTrackPresence()) presenceStartTimer = setTimeout(startPresenceTracking, 3_000);
 
         if (!SettingsPlugin.customEntries.some(entry => entry.key === SETTINGS_ENTRY_KEY)) {
@@ -1073,6 +1192,7 @@ export default definePlugin({
 
     stop() {
         pluginStarted = false;
+        syncFluxTracking();
         stopPresenceTracking();
         removeFromArray(SettingsPlugin.customEntries, entry => entry.key === SETTINGS_ENTRY_KEY);
         previousVoiceStates.clear();
@@ -1082,108 +1202,5 @@ export default definePlugin({
         seenServerUsers.clear();
         lastStatuses.clear();
         lastActivities.clear();
-    },
-
-    flux: {
-        MESSAGE_CREATE({ message }: { message: Message; }) {
-            logMessage(message);
-        },
-
-        MESSAGE_UPDATE({ message }: { message: Message; }) {
-            logMessageUpdate(message);
-        },
-
-        MESSAGE_DELETE({ id, channelId }: { id: string; channelId: string; }) {
-            logMessageDelete(id, channelId);
-        },
-
-        MESSAGE_DELETE_BULK({ ids, channelId }: { ids: string[]; channelId: string; }) {
-            if (!hasTargets()) return;
-            for (const id of ids) {
-                logMessageDelete(id, channelId);
-            }
-        },
-
-        MESSAGE_REACTION_ADD(event: MessageReactionFluxEvent) {
-            logReaction("reaction_add", event);
-        },
-
-        MESSAGE_REACTION_REMOVE(event: MessageReactionFluxEvent) {
-            logReaction("reaction_remove", event);
-        },
-
-        MESSAGE_REACTION_REMOVE_ALL(event: { channelId: string; messageId: string; }) {
-            logReactionClear(event);
-        },
-
-        TYPING_START({ userId, channelId }: { userId: string; channelId: string; }) {
-            logTyping(userId, channelId);
-        },
-
-        VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
-            if (!hasTargets()) return;
-            for (const voiceState of voiceStates) {
-                handleVoiceState(voiceState);
-            }
-        },
-
-        CHANNEL_CREATE(event: ChannelFluxEvent) {
-            logChannelEvent("channel_create", event);
-        },
-
-        CHANNEL_DELETE(event: ChannelFluxEvent) {
-            logChannelEvent("channel_delete", event);
-        },
-
-        CHANNEL_UPDATE(event: ChannelFluxEvent) {
-            logChannelEvent("channel_update", event);
-        },
-
-        CHANNEL_UPDATES({ channels }: { channels: Channel[]; }) {
-            if (!serverTargetIds.size) return;
-            for (const channel of channels) {
-                logChannelEvent("channel_update", { channel });
-            }
-        },
-
-        THREAD_CREATE(event: ChannelFluxEvent) {
-            logThreadEvent("thread_create", event);
-        },
-
-        THREAD_DELETE(event: ChannelFluxEvent) {
-            logThreadEvent("thread_delete", event);
-        },
-
-        THREAD_UPDATE(event: ChannelFluxEvent) {
-            logThreadEvent("thread_update", event);
-        },
-
-        GUILD_MEMBER_ADD(event: GuildMemberFluxEvent) {
-            logGuildMemberEvent("guild_member_add", event);
-        },
-
-        GUILD_MEMBER_REMOVE(event: GuildMemberFluxEvent) {
-            logGuildMemberEvent("guild_member_remove", event);
-        },
-
-        GUILD_MEMBER_UPDATE(event: GuildMemberFluxEvent) {
-            logGuildMemberEvent("guild_member_update", event);
-        },
-
-        GUILD_UPDATE(event: GuildFluxEvent) {
-            logGuildEvent(event);
-        },
-
-        GUILD_ROLE_CREATE(event: RoleFluxEvent) {
-            logRoleEvent("role_create", event);
-        },
-
-        GUILD_ROLE_DELETE(event: RoleFluxEvent) {
-            logRoleEvent("role_delete", event);
-        },
-
-        GUILD_ROLE_UPDATE(event: RoleFluxEvent) {
-            logRoleEvent("role_update", event);
-        },
     },
 });
