@@ -25,7 +25,9 @@ import { Readable } from "stream";
 import { finished } from "stream/promises";
 import { fileURLToPath } from "url";
 
-const BASE_URL = "https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/";
+const BASE_URL = process.platform === "darwin"
+    ? "https://github.com/Equicord/Equilotl/releases/latest/download/"
+    : "https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/";
 const INSTALLER_PATH_DARWIN = "Equilotl.app/Contents/MacOS/Equilotl";
 const INSTALLER_APP_DARWIN = "Equilotl.app";
 
