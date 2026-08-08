@@ -4,8 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import "./style.css";
+
 import { ApplicationCommandInputType, ApplicationCommandOptionType, findOption, sendBotMessage } from "@api/Commands";
-import type { NavContextMenuPatchCallback } from "@api/ContextMenu";
+import { findGroupChildrenByChildId, type NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Margins } from "@components/margins";
@@ -16,7 +18,7 @@ import { parseUrl } from "@utils/misc";
 import { formatDurationVerbose, makeCodeblock } from "@utils/text";
 import definePlugin, { OptionType } from "@utils/types";
 import type { CommandArgument, CommandContext, User } from "@vencord/discord-types";
-import { IconUtils, Menu } from "@webpack/common";
+import { IconUtils, Menu, SelectedChannelStore, showToast, Toasts } from "@webpack/common";
 
 interface DomainInfo {
     domain: string;
@@ -43,19 +45,39 @@ interface IPInfo {
     zip?: string;
 }
 
+interface GeoLocation {
+    latitude: number;
+    longitude: number;
+    confidence?: number;
+    address?: string;
+    reasoning?: string;
+}
+
+interface GeoAnalysis {
+    locations: GeoLocation[];
+    processingTime?: string;
+    requestsRemaining?: number;
+}
+
 interface MessageContextProps {
+    itemSrc?: string;
     message?: {
         author?: User;
     };
 }
 
+interface ImageContextProps {
+    src?: string;
+}
+
 const REQUEST_TIMEOUT_MS = 12_000;
+const GEO_REQUEST_TIMEOUT_MS = 120_000;
 const logger = new Logger("OSINTToolkit");
 const activeRequests = new Set<AbortController>();
 let pluginActive = true;
 
 const OSINT_TOOLS = [
-    { id: "see-know", name: "See-Know", url: "https://see-know.eu/", description: "Searches public web signals." },
+    { id: "see-know", name: "See-Know", url: "https://see-know.vip/", description: "Searches public web signals." },
     { id: "epieos", name: "Epieos", url: "https://epieos.com/", description: "Checks public email and phone traces." },
     { id: "osintx", name: "Osintx_", url: "https://www.osintx.io/", description: "Collects OSINT links and workflows." },
     { id: "socialeye", name: "SocialEye", url: "https://socialeye.net/", description: "Searches usernames across public sites." },
@@ -67,12 +89,22 @@ const OSINT_TOOLS = [
 ] as const;
 
 const OSINT_RESOURCES = [
+    { id: "osint-catalog", name: "Osint Catalog", url: "https://osint-catalog.xyz/", description: "Catalog of OSINT tools and resources." },
     { id: "pikaosint", name: "PikaOSINT", url: "https://pikaosint.pages.dev/", description: "Curated OSINT tools collection." },
     { id: "osintframework", name: "OSINT Framework", url: "https://osintframework.com/", description: "Categorized OSINT resource index." },
     { id: "photo-osint", name: "Photo OSINT", url: "https://start.me/p/0PgzqO/photo-osint", description: "Photo investigation resource board." }
 ] as const;
 
 const settings = definePluginSettings({
+    geoSeeerApiKey: {
+        type: OptionType.STRING,
+        description: "GeoSeeer API key used for image geolocation.",
+        default: "",
+        placeholder: "Enter your GeoSeeer API key.",
+        componentProps: {
+            type: "password"
+        }
+    },
     enableLogging: {
         type: OptionType.BOOLEAN,
         description: "Log lookup details while debugging.",
@@ -85,6 +117,7 @@ function OSINTToolkitSettingsAbout() {
         <Notice.Warning className={Margins.bottom8}>
             <p>Commands: /domain, /iplookup, /myip and /usersearch.</p>
             <p>Right click a message to copy author identifiers, open username searches and browse OSINT resource lists.</p>
+            <p>Right click an image and choose Geo Osint to analyze its likely location privately in your client.</p>
         </Notice.Warning>
     );
 }
@@ -199,13 +232,13 @@ function normalizeUsername(input: string): string {
     return input.trim().replace(/^@+/, "");
 }
 
-async function fetchJson(url: string): Promise<unknown> {
+async function fetchJson(url: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<unknown> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     activeRequests.add(controller);
 
     try {
-        const response = await fetch(url, { signal: controller.signal });
+        const response = await fetch(url, { ...init, signal: controller.signal });
 
         if (!response.ok) {
             throw new Error(`Request failed with status ${response.status}`);
@@ -383,6 +416,72 @@ function createUserSearchMessage(username: string): string {
     ].join("\n"), "txt");
 }
 
+function parseGeoAnalysis(data: unknown): GeoAnalysis | undefined {
+    if (!isRecord(data) || data.status !== "success" || !Array.isArray(data.locations)) return;
+
+    const locations = data.locations.flatMap(location => {
+        if (!isRecord(location)) return [];
+
+        const latitude = getNumber(location, "latitude");
+        const longitude = getNumber(location, "longitude");
+        if (latitude === undefined || longitude === undefined) return [];
+
+        return [{
+            latitude,
+            longitude,
+            confidence: getNumber(location, "confidence"),
+            address: getString(location, "address"),
+            reasoning: getString(location, "reasoning")
+        }];
+    });
+
+    return {
+        locations,
+        processingTime: getString(data, "processing_time"),
+        requestsRemaining: getNumber(data, "API_Requests_remaining")
+    };
+}
+
+async function analyzeGeoImage(imageUrl: string, apiKey: string): Promise<GeoAnalysis | undefined> {
+    const data = await fetchJson("https://geoseeer.com/api/v1/analyze", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-API-Key": apiKey
+        },
+        body: JSON.stringify({
+            url: imageUrl,
+            analysis_mode: "fast"
+        })
+    }, GEO_REQUEST_TIMEOUT_MS);
+
+    return parseGeoAnalysis(data);
+}
+
+function createGeoAnalysisMessage(analysis: GeoAnalysis): string {
+    const lines = ["[GEO OSINT]"];
+
+    if (!analysis.locations.length) {
+        lines.push("No likely locations found.");
+    } else {
+        analysis.locations.slice(0, 3).forEach((location, index) => {
+            lines.push(
+                "",
+                `Candidate ${index + 1}`,
+                `Address     : ${location.address ?? "Unknown"}`,
+                `Coordinates : ${location.latitude}, ${location.longitude}`,
+                `Confidence  : ${location.confidence === undefined ? "Unknown" : `${Math.round(location.confidence * 100)}%`}`,
+                `Reasoning   : ${location.reasoning?.replace(/\s+/g, " ").slice(0, 400) ?? "Not provided"}`
+            );
+        });
+    }
+
+    if (analysis.processingTime) lines.push("", `Processing time    : ${analysis.processingTime}`);
+    if (analysis.requestsRemaining !== undefined) lines.push(`Requests remaining : ${analysis.requestsRemaining}`);
+
+    return makeCodeblock(lines.join("\n"), "txt");
+}
+
 function getDiscordUserUrl(user: User): string {
     return `https://discord.com/users/${encodeURIComponent(user.id)}`;
 }
@@ -400,7 +499,7 @@ function abortActiveRequests() {
     activeRequests.clear();
 }
 
-const messageContextMenuPatch: NavContextMenuPatchCallback = (children, { message }: MessageContextProps) => {
+const messageContextMenuPatch: NavContextMenuPatchCallback = (children, { itemSrc, message }: MessageContextProps) => {
     const author = message?.author;
     if (!author || children.find(child => child?.props?.id === "vc-osint-toolkit-group")) return;
 
@@ -410,6 +509,15 @@ const messageContextMenuPatch: NavContextMenuPatchCallback = (children, { messag
 
     children.push(
         <Menu.MenuGroup id="vc-osint-toolkit-group">
+            {itemSrc
+                ? (
+                    <Menu.MenuItem
+                        id="vc-osint-geo"
+                        label={<span className="vc-osint-geo-label">Geo Osint</span>}
+                        action={() => void handleGeoImage(itemSrc)}
+                    />
+                )
+                : null}
             <Menu.MenuItem id="vc-osint-toolkit" label="OSINT Toolkit">
                 <Menu.MenuItem id="vc-osint-author" label="Message Author">
                     <Menu.MenuItem
@@ -474,6 +582,55 @@ const messageContextMenuPatch: NavContextMenuPatchCallback = (children, { messag
     );
 };
 
+async function handleGeoImage(imageUrl: string) {
+    const apiKey = settings.store.geoSeeerApiKey.trim();
+    if (!apiKey) {
+        showToast("Set your GeoSeeer API key in OSINTToolkit settings first.", Toasts.Type.FAILURE);
+        return;
+    }
+
+    const parsedUrl = parseUrl(imageUrl);
+    if (!parsedUrl || (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:")) {
+        showToast("This image does not have a public URL that GeoSeeer can analyze.", Toasts.Type.FAILURE);
+        return;
+    }
+
+    const channelId = SelectedChannelStore.getChannelId();
+    showToast("Geo Osint analysis started.", Toasts.Type.MESSAGE);
+    debug("Starting Geo Osint analysis");
+
+    try {
+        const analysis = await analyzeGeoImage(parsedUrl.href, apiKey);
+        if (!pluginActive) return;
+
+        sendBotMessage(channelId, {
+            content: analysis
+                ? createGeoAnalysisMessage(analysis)
+                : "GeoSeeer returned an invalid response."
+        });
+    } catch (error) {
+        if (!pluginActive) return;
+
+        debug("Geo Osint analysis failed", error);
+        sendBotMessage(channelId, { content: "Could not complete the Geo Osint analysis." });
+    }
+}
+
+const imageContextMenuPatch: NavContextMenuPatchCallback = (children, { src }: ImageContextProps) => {
+    if (!src) return;
+
+    const group = findGroupChildrenByChildId("copy-native-link", children) ?? children;
+    if (group.find(child => child?.props?.id === "vc-osint-geo")) return;
+
+    group.push(
+        <Menu.MenuItem
+            id="vc-osint-geo"
+            label={<span className="vc-osint-geo-label">Geo Osint</span>}
+            action={() => void handleGeoImage(src)}
+        />
+    );
+};
+
 export default definePlugin({
     name: "OSINTToolkit",
     description: "Adds OSINT commands and quick lookup links for public domain, IP and username checks.",
@@ -483,7 +640,8 @@ export default definePlugin({
     settingsAboutComponent: SafeOSINTToolkitSettingsAbout,
 
     contextMenus: {
-        message: messageContextMenuPatch
+        message: messageContextMenuPatch,
+        "image-context": imageContextMenuPatch
     },
 
     start() {
