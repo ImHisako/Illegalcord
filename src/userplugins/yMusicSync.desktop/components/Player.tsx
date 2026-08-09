@@ -18,7 +18,7 @@ import type { PlayerDevice } from "../types";
 import { IconButton, PanelButton, ProgressSlider, VolumeSlider } from "./Controls";
 import { TrackCover } from "./TrackCover";
 
-const SETTING_KEYS = ["showPanel", "showVolume", "showSettingsButton"] as const;
+const SETTING_KEYS = ["showPanel", "showVolume", "showSettingsButton"] satisfies Array<keyof typeof settings.store>;
 const NO_DEVICES: PlayerDevice[] = [];
 
 function openSettings(): void {
