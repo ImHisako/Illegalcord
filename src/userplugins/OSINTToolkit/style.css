@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-.vc-osint-geo-label {
+.vc-osint-geo-label,
+.vc-osint-geo-icon,
+.vc-osint-toolkit-label {
     color: var(--orange-345);
 }
