@@ -26,7 +26,7 @@ interface PanelWrapperProps {
 export default definePlugin({
     name: "YMusicSync",
     description: "Control Yandex Music through Ynison and Discord RPC",
-    authors: [EquicordDevs.diram1x],
+    authors: [{ name: "diram1x", id: 710580442180485120n }],
     tags: ["Media", "Utility"],
     searchTerms: ["Yandex Music", "Ynison", "YMusicSync", "Music Controls"],
     settings,
