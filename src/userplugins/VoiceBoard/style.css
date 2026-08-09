@@ -1,0 +1,81 @@
+.vc-voiceboard-denied,
+.vc-voiceboard-denied * {
+    color: var(--vc-vb-color, #ff4d6d) !important;
+    fill: var(--vc-vb-color, #ff4d6d) !important;
+}
+
+.vc-voiceboard-denied {
+    background: color-mix(in srgb, var(--vc-vb-color, #ff4d6d) 14%, transparent) !important;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vc-vb-color, #ff4d6d) 55%, transparent) !important;
+    border-radius: 8px !important;
+    opacity: 0.92 !important;
+}
+
+html.vc-voiceboard-mic-active [class*="soundButton"][class*="playing__"] {
+    border-color: var(--vc-vb-color, #ff4d6d) !important;
+}
+
+.vc-voiceboard-header-accessories {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+}
+
+.vc-voiceboard-credit-avatar {
+    border-radius: 50%;
+}
+
+.vc-voiceboard-settings-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--interactive-normal, #b5bac1);
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.vc-voiceboard-settings-btn:hover {
+    color: var(--interactive-active, #fff);
+    background: transparent;
+}
+
+.vc-voiceboard-menu [role="menuitemcheckbox"][aria-checked="true"] [class*="box"],
+.vc-voiceboard-menu [role="menuitemcheckbox"][aria-checked="true"] [class*="Box"],
+.vc-voiceboard-menu [role="menuitemcheckbox"][aria-checked="true"] [class*="checkIcon"],
+.vc-voiceboard-menu [role="menuitemcheckbox"][aria-checked="true"] [class*="checkboxIcon"],
+.vc-voiceboard-menu [role="menuitemcheckbox"][aria-checked="true"] [class*="icon"] > div,
+.vc-voiceboard-menu [role="menuitemcheckbox"][aria-checked="true"] > div:last-child > div,
+#vc-voiceboard-settings [role="menuitemcheckbox"][aria-checked="true"] [class*="box"],
+#vc-voiceboard-settings [role="menuitemcheckbox"][aria-checked="true"] [class*="Box"],
+#vc-voiceboard-settings [role="menuitemcheckbox"][aria-checked="true"] [class*="checkIcon"],
+#vc-voiceboard-settings [role="menuitemcheckbox"][aria-checked="true"] > div:last-child > div {
+    background: var(--vc-vb-color-soft, hsl(340 55% 42%)) !important;
+    background-color: var(--vc-vb-color-soft, hsl(340 55% 42%)) !important;
+    border-color: var(--vc-vb-color-soft, hsl(340 55% 42%)) !important;
+}
+
+.vc-voiceboard-menu [class*="barFill"],
+.vc-voiceboard-menu [class*="BarFill"],
+.vc-voiceboard-menu [class*="slider"] [class*="fill"],
+#vc-voiceboard-settings [class*="barFill"],
+#vc-voiceboard-settings [class*="BarFill"] {
+    background: var(--vc-vb-color, #ff4d6d) !important;
+    background-color: var(--vc-vb-color, #ff4d6d) !important;
+    border-color: var(--vc-vb-color, #ff4d6d) !important;
+}
+
+.vc-voiceboard-menu,
+#vc-voiceboard-settings {
+    --brand-500: var(--vc-vb-color-soft);
+    --brand-560: var(--vc-vb-color-soft);
+    --brand-experiment: var(--vc-vb-color-soft);
+    --checkbox-background-checked: var(--vc-vb-color-soft);
+    --checkbox-border-checked: var(--vc-vb-color-soft);
+}

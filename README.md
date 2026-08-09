@@ -67,6 +67,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **ScreenshareAlert**
 - **CrashHandlerEnhanched**
 - **SilentDelete**
+- **VoiceBoard** | ( https://github.com/aleeeh07/vc-voiceBoard )
 - **SilentEdit** | ( https://github.com/aurickk/SilentEdit-Vencord )
 - **BoosterCount** | ( https://github.com/Reathe/BoosterCount/tree/main )
 - **Nitro Sniper**: | ( https://github.com/neoarz/NitroSniper/tree/main )
