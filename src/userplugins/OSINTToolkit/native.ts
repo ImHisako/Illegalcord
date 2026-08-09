@@ -106,6 +106,13 @@ export async function searchBreachVip(
             return { success: false, error: "Breach.vip rate limit reached. Try again in one minute." };
         }
 
+        if (response.status === 403 && response.headers.get("cf-mitigated") === "challenge") {
+            return {
+                success: false,
+                error: "Breach.vip blocked the API request with Cloudflare. The command cannot search until the site allows API clients again."
+            };
+        }
+
         if (!response.ok) {
             return { success: false, error: `Breach.vip rejected the search with HTTP ${response.status}.` };
         }
