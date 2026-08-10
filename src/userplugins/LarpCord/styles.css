@@ -1,3 +1,27 @@
+.cp-context-action {
+    color: var(--green-330, #7ee787);
+    font-weight: 600;
+}
+
+.cp-profile-selectors {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.cp-saved-profile-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+}
+
+@media (max-width: 640px) {
+    .cp-profile-selectors {
+        grid-template-columns: 1fr;
+    }
+}
+
 .cp-account-selector-inline {
     width: 100%;
     margin-bottom: 8px;
@@ -593,4 +617,45 @@
     line-height: 1.2;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.cp-connection-form,
+.cp-connection-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cp-connection-list {
+    margin-top: 12px;
+}
+
+.cp-connection {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--background-secondary);
+}
+
+.cp-connection > div {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cp-connection strong,
+.cp-connection span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cp-connection span {
+    color: var(--text-muted);
+    font-size: 12px;
 }

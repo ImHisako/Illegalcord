@@ -7,23 +7,19 @@
 import "./styles.css";
 
 import { ProfileBadge } from "@api/Badges";
-import { addContextMenuPatch, NavContextMenuPatchCallback, removeContextMenuPatch } from "@api/ContextMenu";
+import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { HeaderBarButton } from "@api/HeaderBar";
 import { DataStore } from "@api/index";
-import { definePluginSettings, Settings } from "@api/Settings";
+import { definePluginSettings } from "@api/Settings";
+import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { fetchUserProfile } from "@utils/discord";
-import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalRoot, openModal } from "@utils/modal";
+import { parseUrl } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
-import type { ProfileEffect } from "@vencord/discord-types";
-import { AuthenticationStore, Button, FluxDispatcher, IconUtils, Menu, OAuth2AuthorizeModal, React, Select, SettingsRouter, SnowflakeUtils, Toasts, UserStore } from "@webpack/common";
+import type { ProfileEffect, RenderModalProps, User } from "@vencord/discord-types";
+import { AuthenticationStore, FluxDispatcher, IconUtils, Menu, Modal, openModal, React, Select, SettingsRouter, SnowflakeUtils, Toasts, UserProfileStore, UserStore } from "@webpack/common";
 
-const LarpSettings = Settings as typeof Settings & {
-    seeAllCustomProfile?: boolean;
-    syncOwnCustomProfile?: boolean;
-};
-
-const ICON_SETTING_KEYS: Array<"showIcon"> = ["showIcon"];
+const ICON_SETTING_KEYS: "showIcon"[] = ["showIcon"];
 
 const settings = definePluginSettings({
     showIcon: {
@@ -32,12 +28,6 @@ const settings = definePluginSettings({
         default: true
     }
 });
-
-const LarpModalRoot = ModalRoot as React.ComponentType<any>;
-const LarpModalHeader = ModalHeader as React.ComponentType<any>;
-const LarpModalContent = ModalContent as React.ComponentType<any>;
-const LarpModalFooter = ModalFooter as React.ComponentType<any>;
-const LarpModalCloseButton = ModalCloseButton as React.ComponentType<any>;
 
 function t(value: string) {
     return value;
@@ -76,8 +66,6 @@ const BADGES = [
     { label: t("Active Developer"), flag: FLAG.ACTIVE_DEVELOPER, icon: "https://cdn.discordapp.com/badge-icons/6bdc42827a38498929a4920da12695d9.png" },
 ];
 
-const OLD_NAME_BADGE_ICON = "https://cdn.discordapp.com/badge-icons/6de6d34650760ba5551a79732e98ed60.png";
-
 const NITRO_LEVELS = [
     { label: t("Nitro (0 months)"), icon: "https://cdn.discordapp.com/badge-icons/2ba85e8026a8614b640c2837bcdfe21b.png" },
     { label: t("Bronze (1 month)"), icon: "https://cdn.discordapp.com/badge-icons/4f33c4a9c64ce221936bd256c356f91f.png" },
@@ -95,6 +83,7 @@ const BOOST_LABELS_RAW = [
     "9 Months", "12 Months", "15 Months", "18 Months", "24 Months"
 ];
 const BOOST_LABELS = BOOST_LABELS_RAW.map(l => t(l));
+const NITRO_MONTHS = [0, 1, 2, 3, 6, 12, 24, 36, 72];
 const BOOST_MONTHS = [1, 2, 3, 6, 9, 12, 15, 18, 24];
 const BOOST_ICONS = [
     "https://cdn.discordapp.com/badge-icons/51040c70d4f20a921ad6674ff86fc95c.png",
@@ -132,7 +121,139 @@ const AVATAR_DECORATIONS = [
     { id: "1220514048068812901", label: "Summer" },
     { id: "1427463138634109026", label: "Autumn" },
     { id: "1341506443865489408", label: "Darkness" },
+    { id: "1144003752978829455", label: "Flaming Sword" },
+    { id: "1144006094134456352", label: "Magical Potion" },
+    { id: "1144046002110738634", label: "Fairy Sprites" },
+    { id: "1144048390594908212", label: "Wizard's Staff" },
+    { id: "1144048977138946230", label: "Glowing Runes" },
+    { id: "1144049316009353338", label: "Defensive Shield" },
+    { id: "1144049603109470370", label: "Skull Medallion" },
+    { id: "1144049924397334651", label: "Treasure and Key" },
+    { id: "1207047014769234001", label: "Fire Element" },
+    { id: "1207047597294886923", label: "Water" },
+    { id: "1207047808838799410", label: "Air" },
+    { id: "1207048049571139584", label: "Earth" },
+    { id: "1207048289610899526", label: "Lightning" },
+    { id: "1207048656289534022", label: "Balance" },
+    { id: "1232070870093008937", label: "Stardust" },
+    { id: "1232071157746765906", label: "Black Hole" },
+    { id: "1232072121950146560", label: "Solar Orbit" },
+    { id: "1232072520249643028", label: "UFO" },
+    { id: "1232072859485208687", label: "Astronaut Helmet" },
+    { id: "1197344326133502032", label: "Glitch" },
+    { id: "1197344396983664670", label: "Cybernetic" },
+    { id: "1197344575832981605", label: "Digital Sunrise" },
+    { id: "1197344636558114986", label: "Implant" },
 ];
+
+const PROFILE_EFFECTS = [
+    { id: "1139323092645183591", label: "Hydro Blast" },
+    { id: "1139323093991575696", label: "Sakura Dreams" },
+    { id: "1139323099251232828", label: "Mystic Vines" },
+    { id: "1139323099687436419", label: "Pixie Dust" },
+    { id: "1212582298893946880", label: "Dreamy" },
+    { id: "1212582372877541427", label: "Ki Detonate" },
+    { id: "1212582452640350238", label: "Sushi Mania" },
+    { id: "1139323100568244355", label: "Magic Hearts" },
+    { id: "1139323093551165533", label: "Shatter" },
+    { id: "1139323101008642101", label: "Shuriken Strike" },
+    { id: "1139323101881061466", label: "Power Surge" },
+    { id: "1158572178179108968", label: "Ghoulish Graffiti" },
+    { id: "1158572275507937342", label: "Dark Omens" },
+    { id: "1197344693630009424", label: "Nightrunner" },
+    { id: "1197344764174008452", label: "Uplink Error" },
+    { id: "1217626509737459852", label: "Petal Serenade" },
+    { id: "1217627051217911848", label: "Fellowship of the Spring" },
+    { id: "1217627230818009171", label: "Spring Bloom" },
+    { id: "1228233390260486164", label: "Study Spot" },
+    { id: "1228234634379132958", label: "All Nighter" },
+    { id: "1237654783209508904", label: "Jolly Roger" },
+    { id: "1237654867330469949", label: "Forgotten Treasure" },
+    { id: "1237654942202990602", label: "Haunted Man O' War" },
+    { id: "1232073286582538261", label: "Shooting Stars" },
+    { id: "1232073608168472638", label: "Twilight" },
+    { id: "1207049115339591681", label: "Rock Slide" },
+    { id: "1207049364464345158", label: "Vortex" },
+    { id: "1207049498065375343", label: "Mastery" },
+    { id: "1245088205330710539", label: "Turbo Drive" },
+    { id: "1245088254647205991", label: "Twinkle Trails" }
+] as const;
+
+const CUSTOM_BADGES = [
+    { id: "quest", label: "Completed a quest", icon: "7d9ae358c8c5e118768335dbe68b4fb8" },
+    { id: "orbs", label: "Orbs — Apprentice", icon: "83d8a1eb09a8d64e59233eec5d4d5c2d" },
+    { id: "oldname", label: "Old username", icon: "6de6d34650760ba5551a79732e98ed60" },
+    { id: "gifting_level", label: "Level reached", icon: "ca105ad9cfc8580c765101d17bbb2323" },
+    { id: "gifting_icon", label: "Gifting Icon", icon: "64f2413c9b9803661322aaad25826b62" },
+    { id: "gifting_patron", label: "Gifting Patron", icon: "ac305d1b9481f312ce4419e7f8296558" },
+    { id: "gifting_champion", label: "Gifting Champion", icon: "8b7792c4f65953d3ff564f23429cb79e" },
+    { id: "gifting_luminary", label: "Gifting Luminary", icon: "3119f5504b2cd09576a323908c7c3517" },
+    { id: "gifting_hero", label: "Gifting Hero", icon: "77d65b1f210014a11eb1582ee06ab684" },
+    { id: "gifting_legend", label: "Gifting Legend", icon: "7fe346cfc5da1340087d8759a9e7a395" }
+] as const;
+
+interface FakeConnection {
+    id: string;
+    platform: string;
+    name: string;
+    url?: string;
+}
+
+const CONNECTION_PLATFORMS = [
+    { value: "domain", label: "Website", url: (name: string) => `https://${name}` },
+    { value: "twitter", label: "X (Twitter)", url: (name: string) => `https://x.com/${name.replace(/^@/, "")}` },
+    { value: "github", label: "GitHub", url: (name: string) => `https://github.com/${name}` },
+    { value: "youtube", label: "YouTube", url: (name: string) => `https://youtube.com/@${name.replace(/^@/, "")}` },
+    { value: "twitch", label: "Twitch", url: (name: string) => `https://twitch.tv/${name}` },
+    { value: "spotify", label: "Spotify", url: (name: string) => `https://open.spotify.com/user/${name}` },
+    { value: "tiktok", label: "TikTok", url: (name: string) => `https://tiktok.com/@${name.replace(/^@/, "")}` },
+    { value: "reddit", label: "Reddit", url: (name: string) => `https://reddit.com/user/${name}` },
+    { value: "steam", label: "Steam", url: (name: string) => `https://steamcommunity.com/id/${name}` },
+    { value: "bluesky", label: "Bluesky", url: (name: string) => `https://bsky.app/profile/${name}` },
+    { value: "paypal", label: "PayPal", url: (name: string) => `https://paypal.me/${name}` }
+] as const;
+
+function getConnectionUrl(connection: Pick<FakeConnection, "platform" | "name" | "url">) {
+    const platform = CONNECTION_PLATFORMS.find(item => item.value === connection.platform);
+    const input = connection.url?.trim() || (connection.platform === "domain" && /^https?:\/\//i.test(connection.name)
+        ? connection.name
+        : platform?.url(connection.name.trim()));
+    const url = input ? parseUrl(input) : null;
+    return url?.protocol === "https:" ? url.href : undefined;
+}
+
+function formatFakeConnections(connections: FakeConnection[]) {
+    return connections.flatMap(connection => {
+        const url = getConnectionUrl(connection);
+        if (!connection.name.trim() || !url) return [];
+
+        return [{
+            type: connection.platform,
+            id: connection.id,
+            name: connection.name.trim(),
+            url,
+            verified: true,
+            visibility: 1,
+            showActivity: false,
+            friendSync: false,
+            metadataVisibility: 0,
+            twoWayLink: false,
+            metadata: {}
+        }];
+    });
+}
+
+function getCustomBadgeDescription(id: typeof CUSTOM_BADGES[number]["id"]) {
+    if (id === "oldname") return storedData.oldName ? `Old username: ${storedData.oldName}` : "Old username";
+    if (id === "gifting_level") return `Level ${storedData.levelReached ?? 1} reached`;
+    return CUSTOM_BADGES.find(badge => badge.id === id)?.label ?? id;
+}
+
+function getMonthsAgo(months: number) {
+    const date = new Date();
+    date.setMonth(date.getMonth() - months);
+    return date;
+}
 
 function getString(value: unknown) {
     return typeof value === "string" ? value : "";
@@ -168,6 +289,10 @@ function getDecorationUrl(assetId: string | undefined, animated = false): string
     return `https://cdn.discordapp.com/media/v1/collectibles-shop/${assetId}/${animated ? "animated" : "static"}`;
 }
 
+function getProfileEffectUrl(assetId: string) {
+    return `https://cdn.discordapp.com/media/v1/collectibles-shop/${assetId}/static`;
+}
+
 function cloneProfileEffect(effect: ProfileEffect | null | undefined): ProfileEffect | null {
     if (!effect?.skuId) return null;
 
@@ -193,14 +318,6 @@ function cloneProfileEffect(effect: ProfileEffect | null | undefined): ProfileEf
         staticFrameSrc,
         type: effect.type || 1
     };
-}
-
-function cloneProfileBadges(badges: unknown) {
-    if (!Array.isArray(badges)) return [];
-
-    return badges
-        .map((badge: any, i) => ({ ...badge, id: getString(badge?.id) || `larpcord-profile-badge-${i}`, icon: getString(badge?.icon) }))
-        .filter((badge: any) => badge.icon);
 }
 
 function withBadgeIds(badges: ProfileBadge[]) {
@@ -247,19 +364,16 @@ function getProfileEffects(selected: ProfileEffect | null | undefined) {
         addProfileEffect(effects, data.profileEffect);
     }
 
-    try {
-        const userId = AuthenticationStore?.getId?.();
-        const UserProfileStore = (Vencord as any).Webpack?.findByProps?.("getUserProfile", "getGuildMemberProfile");
-        const profile = userId ? UserProfileStore?.getUserProfile?.(userId) : null;
+    const userId = AuthenticationStore.getId();
+    const profile = userId ? UserProfileStore.getUserProfile(userId) : null;
 
-        addProfileEffect(effects, profile?.profileEffect);
+    addProfileEffect(effects, profile?.profileEffect);
 
-        if (Array.isArray(profile?.collectibles)) {
-            for (const effect of profile.collectibles) {
-                addProfileEffect(effects, effect);
-            }
+    if (Array.isArray(profile?.collectibles)) {
+        for (const effect of profile.collectibles) {
+            addProfileEffect(effects, effect);
         }
-    } catch { }
+    }
 
     return [...effects.values()];
 }
@@ -290,79 +404,28 @@ interface CustomProfileData {
     phone?: string;
     customBadgeIds?: string[];
     oldName?: string;
+    levelReached?: number;
     decorationAsset?: string;
     decorationSkuId?: string;
     profileEffect?: ProfileEffect | null;
+    profileEffectId?: string;
     copiedUserId?: string;
+    fakeConnections?: FakeConnection[];
 }
 
-async function getPublicPluginConfig(_plugin: string, _userId: string): Promise<{ settings?: CustomProfileData; } | null> {
-    return null;
+interface SavedProfile {
+    userId: string;
+    name: string;
+    savedAt: number;
+    data: CustomProfileData;
 }
 
-async function saveOwnPluginConfig(_plugin: string, _token: string, _data: CustomProfileData | { private: boolean; }) {
-    return null;
-}
-
-async function getStoredToken(): Promise<string | null> {
-    return null;
-}
-
-async function storeToken(_token: string) {
-    return null;
-}
-
-async function beginDiscordOAuth(): Promise<{ url: string; scopes: string[]; redirectUri: string; }> {
-    throw new Error("LarpCord sync is unavailable.");
-}
-
-const LS_KEY_DATA = "LarpCord_data";
-const LS_KEY_ENABLED = "LarpCord_enabled";
 const DS_ALL_DATA = "customProfile_allData";
 const DS_ALL_ENABLED = "customProfile_allEnabled";
-const LS_ALL_DATA = "LarpCord_allData";
-const LS_ALL_ENABLED = "LarpCord_allEnabled";
-const LEGACY_LS_PREFIX = "Night" + "cordCP";
-const LEGACY_LS_KEY_DATA = `${LEGACY_LS_PREFIX}_data`;
-const LEGACY_LS_KEY_ENABLED = `${LEGACY_LS_PREFIX}_enabled`;
-const LEGACY_LS_ALL_DATA = `${LEGACY_LS_PREFIX}_allData`;
-const LEGACY_LS_ALL_ENABLED = `${LEGACY_LS_PREFIX}_allEnabled`;
+const DS_SAVED_PROFILES = "larpCord_savedProfiles";
 
 let storedData: CustomProfileData = {};
 let isEnabled = false;
-let domObserver: MutationObserver | null = null;
-
-const publicProfilesCache = new Map<string, { fetched: boolean, data: CustomProfileData | null, timestamp: number; }>();
-const PUBLIC_CACHE_TTL = 1000 * 30;
-
-let _lastSeeAll = false;
-function checkSeeAllSettingChange() {
-    const current = !!LarpSettings.seeAllCustomProfile;
-    if (_lastSeeAll && !current) {
-        publicProfilesCache.clear();
-    }
-    _lastSeeAll = current;
-}
-
-async function fetchPublicProfileIfNeeded(userId: string) {
-    checkSeeAllSettingChange();
-    if (!LarpSettings.seeAllCustomProfile) return;
-    const existing = publicProfilesCache.get(userId);
-    if (existing?.fetched && (Date.now() - existing.timestamp) < PUBLIC_CACHE_TTL) return;
-
-    publicProfilesCache.set(userId, { fetched: false, data: null, timestamp: 0 });
-
-    const result = await getPublicPluginConfig("customProfile", userId);
-    publicProfilesCache.set(userId, { fetched: true, data: result?.settings || null, timestamp: Date.now() });
-
-    try {
-        const UPS = (Vencord as any).Webpack?.findByProps?.("getUserProfile", "getGuildMemberProfile");
-        if (UPS && UPS.emitChange) UPS.emitChange();
-
-        const US = (Vencord as any).Webpack?.findByStoreName("UserStore");
-        if (US && US.emitChange) US.emitChange();
-    } catch { }
-}
 
 let cachedOriginalUser: any = null;
 let cachedFakeUser: any = null;
@@ -371,29 +434,7 @@ let _trueOriginalUser: any = null;
 let _dataVersion: number = 0;
 let allAccountsData: Record<string, CustomProfileData> = {};
 let allAccountsEnabled: Record<string, boolean> = {};
-
-function saveDataSync(data: CustomProfileData, enabled: boolean) {
-    try {
-        localStorage.setItem(LS_KEY_DATA, JSON.stringify(data));
-        localStorage.setItem(LS_KEY_ENABLED, enabled ? "1" : "0");
-    } catch { }
-}
-
-function saveAllDataSync() {
-    try {
-        localStorage.setItem(LS_ALL_DATA, JSON.stringify(allAccountsData));
-        localStorage.setItem(LS_ALL_ENABLED, JSON.stringify(allAccountsEnabled));
-    } catch { }
-}
-
-function getStoredValue(key: string, legacyKey: string) {
-    const value = localStorage.getItem(key);
-    if (value !== null) return value;
-
-    const legacyValue = localStorage.getItem(legacyKey);
-    if (legacyValue !== null) localStorage.setItem(key, legacyValue);
-    return legacyValue;
-}
+let savedProfiles: Record<string, SavedProfile> = {};
 
 function syncCurrentUserData() {
     const myId = _cachedMyId || AuthenticationStore?.getId?.();
@@ -404,34 +445,15 @@ function syncCurrentUserData() {
     }
 }
 
-function loadDataSync() {
-    try {
-        const rawAll = getStoredValue(LS_ALL_DATA, LEGACY_LS_ALL_DATA);
-        if (rawAll) {
-            try { allAccountsData = JSON.parse(rawAll); } catch { allAccountsData = {}; }
-            const rawEnabled = getStoredValue(LS_ALL_ENABLED, LEGACY_LS_ALL_ENABLED);
-            try { allAccountsEnabled = rawEnabled ? JSON.parse(rawEnabled) : {}; } catch { allAccountsEnabled = {}; }
-            syncCurrentUserData();
-            if (!storedData || Object.keys(storedData).length === 0) {
-                const rawOld = getStoredValue(LS_KEY_DATA, LEGACY_LS_KEY_DATA);
-                const enOld = getStoredValue(LS_KEY_ENABLED, LEGACY_LS_KEY_ENABLED);
-                if (rawOld) {
-                    try { storedData = JSON.parse(rawOld); } catch { storedData = {}; }
-                    isEnabled = enOld === "1";
-                }
-            }
-            return;
-        }
-        const raw = getStoredValue(LS_KEY_DATA, LEGACY_LS_KEY_DATA);
-        const en = getStoredValue(LS_KEY_ENABLED, LEGACY_LS_KEY_ENABLED);
-        if (raw) {
-            try { storedData = JSON.parse(raw); } catch { storedData = {}; }
-        } else { storedData = {}; }
-        isEnabled = en === "1";
-    } catch {
-        storedData = {};
-        isEnabled = false;
-    }
+function persistData() {
+    return Promise.all([
+        DataStore.set(DS_ALL_DATA, allAccountsData),
+        DataStore.set(DS_ALL_ENABLED, allAccountsEnabled)
+    ]);
+}
+
+function persistSavedProfiles() {
+    return DataStore.set(DS_SAVED_PROFILES, savedProfiles);
 }
 
 function onAccountSwitch() {
@@ -441,43 +463,14 @@ function onAccountSwitch() {
     cachedOriginalUser = null;
     _trueOriginalUser = null;
     _dataVersion++;
-    _realUsername = "";
-    _realGlobalName = "";
-    if (isEnabled) startDomObserver();
-    else stopDomObserver();
     forceAccountPanelRerender();
 }
 
-loadDataSync();
-
-const HIDE_STYLE_ID = "cp-hide-during-load";
-function injectHideStyle() {
-    if (!isEnabled) return;
-    if (document.getElementById(HIDE_STYLE_ID)) return;
-    const style = document.createElement("style");
-    style.id = HIDE_STYLE_ID;
-    style.textContent = `
-        [class*='nameTag'] [class*='username'],
-        [class*='nameTag'] [class*='discriminator'],
-        [class*='nameTag'] [class*='panelSubtitle']
-        { color: transparent !important; }
-        [class*='accountProfilePopout'] [class*='avatarWrap'] img,
-        [class*='accountProfilePopout'] [class*='avatarWrap'] svg
-        { opacity: 0 !important; }
-    `;
-    const inject = () => {
-        if (!document.head) { requestAnimationFrame(inject); return; }
-        document.head.appendChild(style);
-    };
-    inject();
-}
-function removeHideStyle() {
-    document.getElementById(HIDE_STYLE_ID)?.remove();
-}
-if (isEnabled) injectHideStyle();
-
 let _avatarPatchApplied = false;
+let _avatarModule: any = null;
 let _avatarPatchOrig: any = null;
+let _avatarDecorationModule: any = null;
+let _avatarDecorationOrig: any = null;
 function applyAvatarPatchEarly() {
     if (_avatarPatchApplied) return;
     try {
@@ -485,6 +478,7 @@ function applyAvatarPatchEarly() {
             ?? (window as any).Vencord?.Webpack?.findByProps?.("getUserAvatarURL")
             ?? IconUtils;
         if (!IU?.getUserAvatarURL) return;
+        _avatarModule = IU;
         _avatarPatchOrig = IU.getUserAvatarURL;
         const orig = _avatarPatchOrig;
         IU.getUserAvatarURL = function (user: any, ...args: any[]) {
@@ -494,14 +488,6 @@ function applyAvatarPatchEarly() {
             if (isEnabled && storedData.avatar && isMe(uid)) {
                 return storedData.avatar;
             }
-            checkSeeAllSettingChange();
-            if (LarpSettings.seeAllCustomProfile && !isMe(uid)) {
-                const cached = publicProfilesCache.get(uid);
-                if (cached?.fetched && cached.data?.avatar) {
-                    return cached.data.avatar;
-                }
-                fetchPublicProfileIfNeeded(uid);
-            }
             return orig(user, ...args);
         };
         _avatarPatchApplied = true;
@@ -510,14 +496,16 @@ function applyAvatarPatchEarly() {
 
 async function loadData() {
     try {
-        const allData = await DataStore.get(DS_ALL_DATA) as Record<string, CustomProfileData> | null;
-        const allEnabled = await DataStore.get(DS_ALL_ENABLED) as Record<string, boolean> | null;
+        const [allData, allEnabled, saved] = await Promise.all([
+            DataStore.get(DS_ALL_DATA) as Promise<Record<string, CustomProfileData> | null>,
+            DataStore.get(DS_ALL_ENABLED) as Promise<Record<string, boolean> | null>,
+            DataStore.get(DS_SAVED_PROFILES) as Promise<Record<string, SavedProfile> | null>
+        ]);
+        if (saved && typeof saved === "object") savedProfiles = saved;
         if (allData && typeof allData === "object" && Object.keys(allData).length > 0) {
             allAccountsData = allData;
             allAccountsEnabled = allEnabled || {};
             syncCurrentUserData();
-            saveAllDataSync();
-            saveDataSync(storedData, isEnabled);
             return;
         }
         const d = await DataStore.get(DS_KEY) as CustomProfileData | null;
@@ -528,26 +516,22 @@ async function loadData() {
         if (myId && storedData && Object.keys(storedData).length > 0) {
             allAccountsData[myId] = storedData;
             allAccountsEnabled[myId] = isEnabled;
-            DataStore.set(DS_ALL_DATA, allAccountsData).catch(() => { });
-            DataStore.set(DS_ALL_ENABLED, allAccountsEnabled).catch(() => { });
-            saveAllDataSync();
+            await persistData();
         }
-        saveDataSync(storedData, isEnabled);
-    } catch (err) { }
+    } catch { }
 }
 
-async function copyUserProfile(userId: string, menuUser?: unknown) {
+async function readUserProfile(userId: string, menuUser?: User) {
     try {
         const user = (UserStore.getUser(userId) as any) ?? menuUser;
-        if (!user) return;
+        if (!user) return null;
 
-        const { findByProps } = await import("@webpack") as any;
-        const UserProfileStore = findByProps("getUserProfile", "getGuildMemberProfile") as any;
+        const profileStore = UserProfileStore as any;
         const IU = IconUtils as any;
-        const getProfile = UserProfileStore?._cp_orig_getUserProfile ?? UserProfileStore?.getUserProfile;
-        const cachedProfile = getProfile?.call(UserProfileStore, userId);
+        const getProfile = profileStore._cp_orig_getUserProfile ?? profileStore.getUserProfile;
+        const cachedProfile = getProfile.call(profileStore, userId);
         const fetchedProfile = await fetchUserProfile(userId, undefined, false).catch(() => null);
-        const profile = getProfile?.call(UserProfileStore, userId) ?? fetchedProfile ?? cachedProfile ?? {};
+        const profile = getProfile.call(profileStore, userId) ?? fetchedProfile ?? cachedProfile ?? {};
         const sourceUser = (UserStore.getUser(userId) as any) ?? user;
 
         const newData: CustomProfileData = {
@@ -564,9 +548,12 @@ async function copyUserProfile(userId: string, menuUser?: unknown) {
             nitro: false,
             nitroLevel: -1,
             boostMonths: -1,
+            levelReached: 1,
             decorationAsset: undefined,
             decorationSkuId: undefined,
             profileEffect: null,
+            profileEffectId: undefined,
+            fakeConnections: [],
             createdAt: undefined,
             copiedUserId: userId
         };
@@ -589,13 +576,14 @@ async function copyUserProfile(userId: string, menuUser?: unknown) {
             const premiumSince = profile.premiumSince ?? sourceUser.premiumSince ?? null;
             if (premiumSince) {
                 const months = Math.floor((Date.now() - new Date(premiumSince).getTime()) / (1000 * 60 * 60 * 24 * 30));
-                if (months >= 72) newData.nitroLevel = 7;
-                else if (months >= 36) newData.nitroLevel = 6;
-                else if (months >= 24) newData.nitroLevel = 5;
-                else if (months >= 12) newData.nitroLevel = 4;
-                else if (months >= 6) newData.nitroLevel = 3;
-                else if (months >= 3) newData.nitroLevel = 2;
-                else if (months >= 2) newData.nitroLevel = 1;
+                if (months >= 72) newData.nitroLevel = 8;
+                else if (months >= 36) newData.nitroLevel = 7;
+                else if (months >= 24) newData.nitroLevel = 6;
+                else if (months >= 12) newData.nitroLevel = 5;
+                else if (months >= 6) newData.nitroLevel = 4;
+                else if (months >= 3) newData.nitroLevel = 3;
+                else if (months >= 2) newData.nitroLevel = 2;
+                else if (months >= 1) newData.nitroLevel = 1;
                 else newData.nitroLevel = 0;
             } else {
                 newData.nitroLevel = 0;
@@ -617,10 +605,24 @@ async function copyUserProfile(userId: string, menuUser?: unknown) {
         }
 
         const bannerId = getString(profile.banner ?? sourceUser.banner);
-        if (bannerId) newData.banner = `https://cdn.discordapp.com/banners/${userId}/${bannerId}.${bannerId.startsWith("a_") ? "gif" : "png"}?size=512`;
+        if (bannerId) newData.banner = IU.getUserBannerURL({ id: userId, banner: bannerId, canAnimate: true, size: 512 });
 
         if (profile.accentColor !== undefined) newData.accentColor = profile.accentColor;
         else if (sourceUser.accentColor !== undefined) newData.accentColor = sourceUser.accentColor;
+        const themeColors = profile.themeColors ?? profile.theme_colors;
+        if (Array.isArray(themeColors)) {
+            if (typeof themeColors[0] === "number") newData.accentColor = themeColors[0];
+            if (typeof themeColors[1] === "number") newData.accentColor2 = themeColors[1];
+        }
+        newData.oldName = getString(profile.legacyUsername) || undefined;
+        if (Array.isArray(profile.badges)) {
+            const badgeIds = new Set(profile.badges.map((badge: { id?: unknown; }) => getString(badge.id)));
+            newData.customBadgeIds = [
+                ...(badgeIds.has("quest_completed") ? ["quest"] : []),
+                ...(badgeIds.has("orb_profile_badge") ? ["orbs"] : []),
+                ...(badgeIds.has("legacy_username") ? ["oldname"] : [])
+            ];
+        }
 
         try {
             const ms = Number(BigInt(userId) >> 22n) + 1420070400000;
@@ -648,7 +650,31 @@ async function copyUserProfile(userId: string, menuUser?: unknown) {
         } catch { }
 
         newData.profileEffect = cloneProfileEffect(profile.profileEffect);
-        newData.copiedUserId = userId;
+        if (!newData.profileEffect) newData.profileEffectId = getString(profile.profileEffectId || profile.profileEffect?.skuId) || undefined;
+        const connectedAccounts = profile.connectedAccounts ?? profile.connected_accounts;
+        if (Array.isArray(connectedAccounts)) {
+            newData.fakeConnections = connectedAccounts.flatMap((connection: unknown, index: number) => {
+                if (!connection || typeof connection !== "object") return [];
+                const data = connection as Record<string, unknown>;
+                const name = getString(data.name);
+                const platform = getString(data.type);
+                const url = getString(data.url);
+                if (!name || !platform) return [];
+                return [{ id: getString(data.id) || `${platform}-${index}`, platform, name, ...(url ? { url } : {}) }];
+            });
+        }
+        return newData;
+    } catch (err) {
+        console.error("[LarpCord] profile import error:", err);
+        return null;
+    }
+}
+
+async function copyUserProfile(userId: string, menuUser?: User) {
+    const newData = await readUserProfile(userId, menuUser);
+    if (!newData) return;
+
+    try {
         const myId = AuthenticationStore?.getId?.();
         if (myId) {
             allAccountsData[myId] = newData;
@@ -660,10 +686,7 @@ async function copyUserProfile(userId: string, menuUser?: unknown) {
         cachedOriginalUser = null;
         _trueOriginalUser = null;
         _dataVersion++;
-        saveDataSync(newData, true);
-        saveAllDataSync();
-        DataStore.set(DS_ALL_DATA, allAccountsData).catch(() => { });
-        DataStore.set(DS_ALL_ENABLED, allAccountsEnabled).catch(() => { });
+        await persistData();
 
         forceAccountPanelRerender();
         showLarpCordToast("Profile imported into LarpCord.");
@@ -672,7 +695,21 @@ async function copyUserProfile(userId: string, menuUser?: unknown) {
     }
 }
 
-const userContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: any) => {
+async function saveUserProfile(userId: string, menuUser: User) {
+    const data = await readUserProfile(userId, menuUser);
+    if (!data) return;
+
+    savedProfiles[userId] = {
+        userId,
+        name: data.globalName || data.username || menuUser.globalName || menuUser.username,
+        savedAt: Date.now(),
+        data
+    };
+    await persistSavedProfiles();
+    showLarpCordToast("Profile saved in LarpCord.");
+}
+
+const userContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: { user?: User; }) => {
     if (!children || !Array.isArray(children) || !user || !user.id) return;
     try {
         const me = UserStore.getCurrentUser();
@@ -681,7 +718,17 @@ const userContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: a
 
         children.push(
             <Menu.MenuGroup>
-                {isCopied ? (
+                <Menu.MenuItem
+                    id="copy-user-profile"
+                    label={<span className="cp-context-action">{t("Import Profile into LarpCord")}</span>}
+                    action={() => void copyUserProfile(user.id, user)}
+                />
+                <Menu.MenuItem
+                    id="save-user-profile"
+                    label={<span className="cp-context-action">{t("Save Profile")}</span>}
+                    action={() => void saveUserProfile(user.id, user)}
+                />
+                {isCopied && (
                     <Menu.MenuItem
                         id="remove-copy-profile"
                         label={t("Remove LarpCord Import")}
@@ -695,25 +742,16 @@ const userContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: a
                                 }
                                 storedData = {};
                                 isEnabled = false;
-                                saveDataSync({}, false);
                                 cachedFakeUser = null;
                                 cachedOriginalUser = null;
                                 _trueOriginalUser = null;
                                 _dataVersion++;
-                                saveAllDataSync();
-                                DataStore.set(DS_ALL_DATA, allAccountsData).catch(() => { });
-                                DataStore.set(DS_ALL_ENABLED, allAccountsEnabled).catch(() => { });
+                                void persistData();
                                 forceAccountPanelRerender();
                             } catch (e) {
                                 console.error("[LarpCord] Error removing copy:", e);
                             }
                         }}
-                    />
-                ) : (
-                    <Menu.MenuItem
-                        id="copy-user-profile"
-                        label={t("Import Profile into LarpCord")}
-                        action={() => copyUserProfile(user.id, user)}
                     />
                 )}
             </Menu.MenuGroup>
@@ -723,123 +761,10 @@ const userContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: a
     }
 };
 
-function getRealNames(): { username: string | null; globalName: string | null; } {
-    try {
-        const u = UserStore.getCurrentUser();
-        return { username: u?.username ?? null, globalName: u?.globalName ?? null };
-    } catch { return { username: null, globalName: null }; }
-}
-
-function getRealDateVariants(): string[] {
-    try {
-        const u = UserStore.getCurrentUser();
-        if (!u?.id) return [];
-        const ms = Number(BigInt(u.id) >> 22n) + 1420070400000;
-        const d = new Date(ms);
-        const variants = new Set<string>();
-        const locales = ["en-US", "en-GB", "fr-FR", "de-DE", "it-IT", navigator.language];
-        const fmtSpecs: Intl.DateTimeFormatOptions[] = [
-            { day: "numeric", month: "short", year: "numeric" },
-            { day: "numeric", month: "long", year: "numeric" },
-            { month: "short", day: "numeric", year: "numeric" },
-            { month: "long", day: "numeric", year: "numeric" },
-            { day: "2-digit", month: "2-digit", year: "numeric" },
-        ];
-        for (const loc of locales) {
-            for (const fmt of fmtSpecs) {
-                try {
-                    const s = new Intl.DateTimeFormat(loc, fmt).format(d);
-                    variants.add(s); variants.add(s.replace(/\s/g, " ")); variants.add(s.replace(/\s/g, "\u00a0"));
-                } catch { }
-            }
-        }
-        const day = d.getDate(); const year = d.getFullYear(); const monthsShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        const monthsLong = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-        const mS = monthsShort[d.getMonth()]; const mL = monthsLong[d.getMonth()];
-        const patterns = [`${day} ${mS} ${year}`, `${day} ${mL} ${year}`, `${mS} ${day}, ${year}`, `${mL} ${day}, ${year}`, d.toISOString().slice(0, 10)];
-        for (const p of patterns) { variants.add(p); variants.add(p.replace(/ /g, "\u00a0")); variants.add(p.replace(/\u00a0/g, " ")); }
-        variants.add(year.toString()); return [...variants].filter(v => v.length >= 4);
-    } catch { return []; }
-}
-
-function getFakeDateVariants(isoDate: string): string[] {
-    try {
-        const d = new Date(isoDate + "T12:00:00Z");
-        const variants = new Set<string>();
-        const fmtSpecs: Intl.DateTimeFormatOptions[] = [
-            { day: "numeric", month: "short", year: "numeric" },
-            { day: "numeric", month: "long", year: "numeric" },
-            { month: "short", day: "numeric", year: "numeric" },
-            { month: "long", day: "numeric", year: "numeric" },
-        ];
-        for (const fmt of fmtSpecs) { try { variants.add(new Intl.DateTimeFormat(navigator.language, fmt).format(d)); } catch { } }
-        return [...variants];
-    } catch { return []; }
-}
-
 let _cachedMyId: string | null = null;
-let _realUsername = "";
-let _realGlobalName = "";
 
 function updateCachedRealData() {
     try { const myId = AuthenticationStore?.getId?.(); if (myId) _cachedMyId = myId; } catch { }
-}
-
-let _domQueued = false;
-let _domMutations: MutationRecord[] = [];
-
-function scanTextNode(node: Text) {
-    if (!isEnabled || !node.nodeValue) return;
-    const val = (node as any).__cp_orig || node.nodeValue;
-    let result = val;
-    try { if (_trueOriginalUser) { _realUsername = _trueOriginalUser.username || _realUsername; _realGlobalName = _trueOriginalUser.globalName || _realGlobalName; } } catch { }
-    let replaced = false;
-    if (storedData.createdAt) {
-        const realDates = getRealDateVariants(); const fakeDates = getFakeDateVariants(storedData.createdAt);
-        if (realDates.length > 0 && fakeDates.length > 0) {
-            for (let i = 0; i < realDates.length; i++) {
-                const realDate = realDates[i];
-                if (realDate.length >= 4 && (val.includes(realDate) || val.toLowerCase().includes(realDate.toLowerCase()))) {
-                    result = result.split(realDate).join(fakeDates[0]); replaced = true;
-                }
-            }
-        }
-    }
-    if (_realUsername && storedData.username && result.includes(_realUsername)) { result = result.split(_realUsername).join(storedData.username); replaced = true; }
-    if (_realGlobalName && storedData.globalName && result.includes(_realGlobalName)) { result = result.split(_realGlobalName).join(storedData.globalName); replaced = true; }
-    if (replaced && result !== node.nodeValue) { if ((node as any).__cp_orig === undefined) (node as any).__cp_orig = val; node.nodeValue = result; }
-}
-
-function scanNode(node: Node) {
-    if (node.nodeType === Node.TEXT_NODE) { scanTextNode(node as Text); return; }
-    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
-    let n: Node | null;
-    while ((n = walker.nextNode())) scanTextNode(n as Text);
-}
-
-function processDomBatch() {
-    _domQueued = false;
-    if (!isEnabled) { _domMutations = []; return; }
-    const batch = _domMutations; _domMutations = [];
-    for (const m of batch) { if (m.type === "characterData") scanTextNode(m.target as Text); else for (const n of m.addedNodes) scanNode(n); }
-}
-
-function startDomObserver() {
-    stopDomObserver(); if (!isEnabled) return;
-    scanNode(document.body);
-    domObserver = new MutationObserver(mutations => {
-        if (!isEnabled || !mutations.length) return;
-        _domMutations.push(...mutations);
-        if (!_domQueued) { _domQueued = true; setTimeout(() => requestAnimationFrame(processDomBatch), 10); }
-    });
-    domObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
-}
-
-function stopDomObserver() {
-    domObserver?.disconnect(); domObserver = null;
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    let n: Node | null;
-    while ((n = walker.nextNode())) { if ((n as any).__cp_orig !== undefined) { n.nodeValue = (n as any).__cp_orig; delete (n as any).__cp_orig; } }
 }
 
 function isMe(userId: string | null | undefined): boolean {
@@ -858,13 +783,6 @@ function FolderIcon() {
 function CloseIcon() {
     return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>;
 }
-function TrashIcon() {
-    return <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2h4a1 1 0 1 1 0 2h-1.1l-.9 12.1A3 3 0 0 1 17 23H7a3 3 0 0 1-3-2.9L3.1 8H2a1 1 0 0 1 0-2h4V4Zm2 0v2h6V4H9ZM5.1 8l.9 11.9a1 1 0 0 0 1 .1h6a1 1 0 0 0 1-.1L14.9 8H5.1Z" /></svg>;
-}
-function SaveIcon() {
-    return <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4Zm-5 16a3 3 0 1 1 0-6 3 3 0 0 1 0 6Zm3-10H5V5h10v4Z" /></svg>;
-}
-
 function SectionLabel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties; }) {
     return <div className="cp-section-label" style={style}>{children}</div>;
 }
@@ -927,14 +845,16 @@ function BadgeBtn({ label, icon, active, onClick }: { label: string; icon?: stri
     );
 }
 
-function BadgePicker({ selected, onChange, nitroType, onNitroType, boostLevel, onBoostLevel, customIds, onCustomIds, oldName, onOldName }: {
+function BadgePicker({ selected, onChange, nitroType, onNitroType, boostLevel, onBoostLevel, customIds, onCustomIds, oldName, onOldName, levelReached, onLevelReached }: {
     selected: number; onChange: (v: number) => void;
     nitroType: number; onNitroType: (v: number) => void;
     boostLevel: number; onBoostLevel: (v: number) => void;
     customIds: string[]; onCustomIds: (v: string[]) => void;
     oldName: string; onOldName: (v: string) => void;
+    levelReached: number; onLevelReached: (v: number) => void;
 }) {
     const hasOldName = customIds.includes("oldname");
+    const hasLevel = customIds.includes("gifting_level");
     return (
         <div className="cp-field">
             <SectionLabel>{t("Badges")}</SectionLabel>
@@ -955,16 +875,16 @@ function BadgePicker({ selected, onChange, nitroType, onNitroType, boostLevel, o
             </div>
             <SectionLabel style={{ marginTop: 8 }}>{t("Special Badges")}</SectionLabel>
             <div className="cp-badges">
-                <BadgeBtn label={t("Completed a quest")}
-                    icon="https://cdn.discordapp.com/badge-icons/7d9ae358c8c5e118768335dbe68b4fb8.png"
-                    active={customIds.includes("quest")}
-                    onClick={() => onCustomIds(customIds.includes("quest") ? customIds.filter(x => x !== "quest") : [...customIds, "quest"])} />
-                <BadgeBtn label={t("Orbs — Apprentice")}
-                    icon="https://cdn.discordapp.com/badge-icons/83d8a1eb09a8d64e59233eec5d4d5c2d.png"
-                    active={customIds.includes("orbs")}
-                    onClick={() => onCustomIds(customIds.includes("orbs") ? customIds.filter(x => x !== "orbs") : [...customIds, "orbs"])} />
-                <BadgeBtn label={t("Old username")} icon={OLD_NAME_BADGE_ICON} active={hasOldName}
-                    onClick={() => onCustomIds(hasOldName ? customIds.filter(x => x !== "oldname") : [...customIds, "oldname"])} />
+                {CUSTOM_BADGES.map(badge => {
+                    const active = customIds.includes(badge.id);
+                    return <BadgeBtn
+                        key={badge.id}
+                        label={t(badge.label)}
+                        icon={`https://cdn.discordapp.com/badge-icons/${badge.icon}.png`}
+                        active={active}
+                        onClick={() => onCustomIds(active ? customIds.filter(id => id !== badge.id) : [...customIds, badge.id])}
+                    />;
+                })}
             </div>
             {hasOldName && (
                 <div className="cp-field" style={{ marginTop: 6 }}>
@@ -975,6 +895,14 @@ function BadgePicker({ selected, onChange, nitroType, onNitroType, boostLevel, o
                         {t('Ex : Triggerr#5954 — will appear as "Old username: Triggerr#5954" when hovering the badge.')}
                     </div>
                 </div>
+            )}
+            {hasLevel && (
+                <Field
+                    label={t("Level reached")}
+                    value={String(levelReached)}
+                    type="number"
+                    onChange={value => onLevelReached(Math.max(1, Number(value) || 1))}
+                />
             )}
             <SectionLabel style={{ marginTop: 8 }}>{t("Boost Badge (Server Booster)")}</SectionLabel>
             <div className="cp-badges">
@@ -992,7 +920,7 @@ function ProfilePreview({ data }: { data: CustomProfileData; }) {
     const displayName = data.globalName || currentUser.globalName || currentUser.username;
     const username = data.username || currentUser.username;
     const avatar = data.avatar || IconUtils.getUserAvatarURL(currentUser, true, 128) || IconUtils.getDefaultAvatarURL(currentUser.id);
-    const effectPreview = data.profileEffect ? getProfileEffectPreview(data.profileEffect) : "";
+    const effectPreview = data.profileEffectId ? getProfileEffectUrl(data.profileEffectId) : data.profileEffect ? getProfileEffectPreview(data.profileEffect) : "";
 
     return (
         <div className="cp-profile-preview">
@@ -1018,16 +946,21 @@ function ProfilePreview({ data }: { data: CustomProfileData; }) {
     );
 }
 
-function ProfileEffectPicker({ value, onChange }: { value: ProfileEffect | null | undefined; onChange: (effect: ProfileEffect | null) => void; }) {
+function ProfileEffectPicker({ value, presetId, onChange, onPresetChange }: {
+    value: ProfileEffect | null | undefined;
+    presetId: string;
+    onChange: (effect: ProfileEffect | null) => void;
+    onPresetChange: (id: string) => void;
+}) {
     const effects = getProfileEffects(value);
-    const selectedSkuId = value?.skuId ?? "";
+    const selectedSkuId = presetId || value?.skuId || "";
 
     return (
         <div className="cp-field">
             <SectionLabel>{t("Profile effect")}</SectionLabel>
             <div className="cp-effect-grid">
                 <button
-                    onClick={() => onChange(null)}
+                    onClick={() => { onChange(null); onPresetChange(""); }}
                     className={`cp-effect-tile ${!selectedSkuId ? "cp-effect-tile--on" : ""}`}
                 >
                     <span className="cp-effect-empty">{t("None")}</span>
@@ -1038,7 +971,7 @@ function ProfileEffectPicker({ value, onChange }: { value: ProfileEffect | null 
                     return (
                         <button
                             key={effect.skuId}
-                            onClick={() => onChange(selectedSkuId === effect.skuId ? null : effect)}
+                            onClick={() => { onPresetChange(""); onChange(selectedSkuId === effect.skuId ? null : effect); }}
                             className={`cp-effect-tile ${selectedSkuId === effect.skuId ? "cp-effect-tile--on" : ""}`}
                             title={effect.title || effect.accessibilityLabel || effect.skuId}
                         >
@@ -1047,10 +980,63 @@ function ProfileEffectPicker({ value, onChange }: { value: ProfileEffect | null 
                         </button>
                     );
                 })}
+                {PROFILE_EFFECTS.filter(effect => !effects.some(item => item.skuId === effect.id)).map(effect => (
+                    <button
+                        key={effect.id}
+                        onClick={() => { onChange(null); onPresetChange(selectedSkuId === effect.id ? "" : effect.id); }}
+                        className={`cp-effect-tile ${selectedSkuId === effect.id ? "cp-effect-tile--on" : ""}`}
+                        title={effect.label}
+                    >
+                        <img src={getProfileEffectUrl(effect.id)} alt="" className="cp-effect-img" />
+                        <span className="cp-effect-label">{effect.label}</span>
+                    </button>
+                ))}
             </div>
-            {!effects.length && (
-                <div className="cp-hint">{t("Open a profile with an effect and import it, or use an effect already available on your account.")}</div>
-            )}
+        </div>
+    );
+}
+
+function ConnectionsPicker({ connections, onChange }: { connections: FakeConnection[]; onChange: (connections: FakeConnection[]) => void; }) {
+    const [platform, setPlatform] = React.useState<string>(CONNECTION_PLATFORMS[0].value);
+    const [name, setName] = React.useState("");
+    const [url, setUrl] = React.useState("");
+    const trimmedName = name.trim();
+    const connectionUrl = getConnectionUrl({ platform, name: trimmedName, url });
+
+    function addConnection() {
+        if (!trimmedName || !connectionUrl) return;
+        onChange([...connections, { id: `${Date.now()}-${connections.length}`, platform, name: trimmedName, url: connectionUrl }]);
+        setName("");
+        setUrl("");
+    }
+
+    return (
+        <div className="cp-field">
+            <SectionLabel>{t("Profile connections")}</SectionLabel>
+            <div className="cp-connection-form">
+                <Select
+                    options={CONNECTION_PLATFORMS}
+                    isSelected={(value: string) => value === platform}
+                    select={setPlatform}
+                    serialize={(value: string) => value}
+                />
+                <Field label={t("Account name")} value={name} placeholder="username" onChange={setName} />
+                <Field label={t("Custom HTTPS URL (optional)")} value={url} placeholder="https://example.com/profile" onChange={setUrl} />
+                <Button onClick={addConnection} disabled={!trimmedName || !connectionUrl}>{t("Add connection")}</Button>
+            </div>
+            <div className="cp-connection-list">
+                {connections.map(connection => (
+                    <div className="cp-connection" key={connection.id}>
+                        <div>
+                            <strong>{connection.name}</strong>
+                            <span>{CONNECTION_PLATFORMS.find(item => item.value === connection.platform)?.label ?? connection.platform}</span>
+                        </div>
+                        <button className="cp-clear-btn" onClick={() => onChange(connections.filter(item => item.id !== connection.id))} title={t("Remove")}>
+                            <CloseIcon />
+                        </button>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }
@@ -1058,31 +1044,29 @@ function ProfileEffectPicker({ value, onChange }: { value: ProfileEffect | null 
 function forceAccountPanelRerender() {
     try {
         const WP = (Vencord as any).Webpack;
-        const UserStore = WP?.findByStoreName("UserStore");
-        if (UserStore && UserStore.emitChange) UserStore.emitChange();
-
-        const UPS = WP?.findByStoreName("UserProfileStore");
-        if (UPS && UPS.emitChange) UPS.emitChange();
+        UserStore.emitChange();
+        UserProfileStore.emitChange();
 
         const MAS = WP?.findByProps?.("getUsers", "getValidUsers", "getHasLoggedInAccounts");
-        if (MAS && MAS.emitChange) MAS.emitChange();
+        MAS?.emitChange?.();
 
-        FluxDispatcher.dispatch({ type: "USER_SETTINGS_PROTO_UPDATE", settings: { type: 1, proto: {} } });
-
-        if (isEnabled) startDomObserver();
-        else stopDomObserver();
     } catch { }
 }
 
-function CustomProfileModal({ rootProps }: { rootProps: any; }) {
+function CustomProfileModal(rootProps: RenderModalProps) {
     const myId = AuthenticationStore?.getId?.() || "";
     const [selectedAccountId, setSelectedAccountId] = React.useState(myId);
+    const [selectedSavedProfileId, setSelectedSavedProfileId] = React.useState("");
     const [data, setData] = React.useState<CustomProfileData>(() => ({ ...(allAccountsData[myId] || storedData || {}) }));
     const [saving, setSaving] = React.useState(false);
     const nitroLevel = data.nitroLevel ?? -1;
     const boostLevel = data.boostMonths ?? -1;
     const customIds = data.customBadgeIds ?? [];
     const oldName = data.oldName ?? "";
+    const levelReached = data.levelReached ?? 1;
+    const savedProfileOptions = Object.values(savedProfiles)
+        .sort((a, b) => b.savedAt - a.savedAt)
+        .map(profile => ({ value: profile.userId, label: profile.name }));
 
     const accounts = React.useMemo(() => {
         try {
@@ -1092,15 +1076,10 @@ function CustomProfileModal({ rootProps }: { rootProps: any; }) {
                 if (Array.isArray(users) && users.length > 0) return users;
             }
 
-            const internalStore = (window as any).Vencord?.Webpack?.findStore?.("MultiAccountStore");
-            if (internalStore?.getUsers) {
-                const users = internalStore.getUsers();
-                if (Array.isArray(users) && users.length > 0) return users;
-            }
-        } catch (e) { console.error("[LarpCord] Failed to fetch accounts:", e); }
+        } catch { }
 
         const me = UserStore.getCurrentUser();
-        return me ? [me, { ...me, id: "debug-placeholder", username: "Second Account?", globalName: "Simulation" }] : [];
+        return me ? [me] : [];
     }, []);
 
     React.useEffect(() => {
@@ -1116,6 +1095,21 @@ function CustomProfileModal({ rootProps }: { rootProps: any; }) {
         setData(d => ({ ...d, decorationAsset: asset, decorationSkuId: skuId }));
     }
 
+    function selectSavedProfile(userId: string) {
+        const profile = savedProfiles[userId];
+        if (!profile) return;
+        setSelectedSavedProfileId(userId);
+        setData({ ...profile.data });
+    }
+
+    async function deleteSavedProfile() {
+        if (!selectedSavedProfileId) return;
+        delete savedProfiles[selectedSavedProfileId];
+        setSelectedSavedProfileId("");
+        await persistSavedProfiles();
+        showLarpCordToast("Saved profile removed.");
+    }
+
     async function save() {
         try {
             setSaving(true);
@@ -1127,54 +1121,12 @@ function CustomProfileModal({ rootProps }: { rootProps: any; }) {
             if (selectedAccountId === myId) {
                 storedData = savedData;
                 isEnabled = true;
-                saveDataSync(storedData, true);
                 cachedFakeUser = null;
                 cachedOriginalUser = null;
                 _dataVersion++;
-
-                if (LarpSettings.syncOwnCustomProfile) {
-                    getStoredToken().then(token => {
-                        if (token) {
-                            saveOwnPluginConfig("customProfile", token, { ...savedData, private: false }).then(() => {
-                                publicProfilesCache.delete(myId);
-                            }).catch(e => {
-                                console.error("[LarpCord] Failed to sync to cloud:", e);
-                            });
-                        } else {
-                            beginDiscordOAuth().then(oauthData => {
-                                const clientId = new URL(oauthData.url).searchParams.get("client_id") ?? "";
-                                openModal((p: any) => <OAuth2AuthorizeModal
-                                    {...p}
-                                    scopes={oauthData.scopes}
-                                    responseType="code"
-                                    redirectUri={oauthData.redirectUri}
-                                    permissions={0n}
-                                    clientId={clientId}
-                                    cancelCompletesFlow={false}
-                                    callback={async ({ location }: { location: string; }) => {
-                                        try {
-                                            const res = await fetch(location);
-                                            const json = await res.json();
-                                            if (json?.token) {
-                                                await storeToken(json.token);
-                                                saveOwnPluginConfig("customProfile", json.token, { ...savedData, private: false }).then(() => {
-                                                    publicProfilesCache.delete(myId);
-                                                }).catch(e => console.error("[LarpCord] Failed to sync after OAuth:", e));
-                                            }
-                                        } catch (e) {
-                                            console.error("[LarpCord] OAuth callback error:", e);
-                                        }
-                                    }}
-                                />);
-                            }).catch(e => console.error("[LarpCord] OAuth initiation failed:", e));
-                        }
-                    });
-                }
             }
 
-            saveAllDataSync();
-            DataStore.set(DS_ALL_DATA, allAccountsData).catch(() => { });
-            DataStore.set(DS_ALL_ENABLED, allAccountsEnabled).catch(() => { });
+            await persistData();
 
             updateCachedRealData();
             forceAccountPanelRerender();
@@ -1193,27 +1145,13 @@ function CustomProfileModal({ rootProps }: { rootProps: any; }) {
         if (selectedAccountId === myId) {
             storedData = {};
             isEnabled = false;
-            saveDataSync({}, false);
             cachedFakeUser = null;
             cachedOriginalUser = null;
             _trueOriginalUser = null;
             _dataVersion++;
-
-            if (LarpSettings.syncOwnCustomProfile) {
-                getStoredToken().then(token => {
-                    if (token) {
-                        saveOwnPluginConfig("customProfile", token, { private: true }).catch(() => { });
-                        publicProfilesCache.delete(myId);
-                    }
-                });
-            }
         }
 
-        saveAllDataSync();
-        DataStore.set(DS_ALL_DATA, allAccountsData).catch(() => { });
-        DataStore.set(DS_ALL_ENABLED, allAccountsEnabled).catch(() => { });
-        DataStore.set(DS_KEY, {}).catch(() => { });
-        DataStore.set(DS_ENABLED, false).catch(() => { });
+        await persistData();
 
         forceAccountPanelRerender();
         rootProps.onClose();
@@ -1225,13 +1163,20 @@ function CustomProfileModal({ rootProps }: { rootProps: any; }) {
         : false;
 
     return (
-        <LarpModalRoot {...rootProps} size="medium">
-            <LarpModalHeader separator={false}>
-                <div className="cp-header">
-                    <EditIcon size={16} />
-                    <span className="cp-header-title">LarpCord</span>
-                </div>
-                <div style={{ marginLeft: "auto", marginRight: 8, minWidth: 200 }}>
+        <Modal
+            {...rootProps}
+            size="md"
+            title={<div className="cp-header"><EditIcon size={16} /><span className="cp-header-title">LarpCord</span></div>}
+            actions={[
+                { text: t("Cancel"), variant: "secondary", onClick: rootProps.onClose },
+                { text: t("Reset"), variant: "critical-primary", onClick: () => void reset() },
+                { text: saving ? t("Saving...") : t("Save"), variant: "primary", loading: saving, disabled: saving, onClick: () => void save() }
+            ]}
+        >
+            <div className="cp-content">
+                <div className="cp-profile-selectors">
+                    <div className="cp-field">
+                        <SectionLabel>{t("Account to customize")}</SectionLabel>
                     <Select
                         options={accounts.map((acc: any) => ({
                             value: acc.id,
@@ -1263,10 +1208,29 @@ function CustomProfileModal({ rootProps }: { rootProps: any; }) {
                             );
                         }}
                     />
+                    </div>
+                    <div className="cp-field">
+                        <SectionLabel>{t("Saved profiles")}</SectionLabel>
+                        <div className="cp-saved-profile-row">
+                            <Select
+                                placeholder={savedProfileOptions.length ? t("Choose a saved profile") : t("No saved profiles")}
+                                options={savedProfileOptions}
+                                isDisabled={!savedProfileOptions.length}
+                                isSelected={(value: string) => value === selectedSavedProfileId}
+                                select={selectSavedProfile}
+                                serialize={(value: string) => value}
+                            />
+                            <Button
+                                variant="dangerSecondary"
+                                size="small"
+                                disabled={!selectedSavedProfileId}
+                                onClick={() => void deleteSavedProfile()}
+                            >
+                                {t("Delete")}
+                            </Button>
+                        </div>
+                    </div>
                 </div>
-                <LarpModalCloseButton onClick={rootProps.onClose} />
-            </LarpModalHeader>
-            <LarpModalContent className="cp-content">
 
                 <ProfilePreview data={data} />
                 <Field label={t("Username")} value={data.username ?? ""} placeholder="my_username_00" onChange={v => set("username", v)} />
@@ -1309,6 +1273,7 @@ function CustomProfileModal({ rootProps }: { rootProps: any; }) {
                     boostLevel={boostLevel} onBoostLevel={v => set("boostMonths", v)}
                     customIds={customIds} onCustomIds={v => set("customBadgeIds", v)}
                     oldName={oldName} onOldName={v => set("oldName", v)}
+                    levelReached={levelReached} onLevelReached={v => set("levelReached", v)}
                 />
                 <div className="cp-divider" />
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1361,14 +1326,16 @@ function CustomProfileModal({ rootProps }: { rootProps: any; }) {
                     </a>
                 </div>
                 <div className="cp-divider" />
-                <ProfileEffectPicker value={data.profileEffect} onChange={effect => set("profileEffect", effect)} />
-            </LarpModalContent>
-            <LarpModalFooter className="cp-footer">
-                <button className="cp-btn cp-btn-ghost" onClick={rootProps.onClose}>{t("Cancel")}</button>
-                <button className="cp-btn cp-btn-danger" onClick={reset}><TrashIcon /><span>{t("Reset")}</span></button>
-                <button className="cp-btn cp-btn-primary" onClick={save} disabled={saving}><SaveIcon /><span>{saving ? t("Saving...") : t("Save")}</span></button>
-            </LarpModalFooter>
-        </LarpModalRoot>
+                <ProfileEffectPicker
+                    value={data.profileEffect}
+                    presetId={data.profileEffectId ?? ""}
+                    onChange={effect => set("profileEffect", effect)}
+                    onPresetChange={id => set("profileEffectId", id || undefined)}
+                />
+                <div className="cp-divider" />
+                <ConnectionsPicker connections={data.fakeConnections ?? []} onChange={connections => set("fakeConnections", connections)} />
+            </div>
+        </Modal>
     );
 }
 
@@ -1376,77 +1343,18 @@ function CustomProfileIcon() {
     return <EditIcon size={18} />;
 }
 
+function openLarpCord() {
+    openModal(props => <CustomProfileModal {...props} />);
+}
+
 function CustomProfileButton() {
     const { showIcon } = settings.use(ICON_SETTING_KEYS);
     if (!showIcon) return null;
 
-    return <HeaderBarButton icon={CustomProfileIcon} tooltip="LarpCord" onClick={() => openModal(props => <CustomProfileModal rootProps={props} />)} />;
+    return <HeaderBarButton icon={CustomProfileIcon} tooltip="LarpCord" onClick={openLarpCord} />;
 }
 
 const CustomProfileButtonWithBoundary = ErrorBoundary.wrap(CustomProfileButton, { noop: true });
-
-function CPDMNotice({ userId }: { userId: string; }) {
-    const cached = publicProfilesCache.get(userId);
-
-    const data = cached?.fetched ? cached?.data : null;
-    const hasRealModifications = data && (
-        data.username || data.globalName || data.avatar || data.banner ||
-        data.bio || data.pronouns || data.accentColor != null ||
-        data.badgeFlags || data.nitro || data.decorationAsset ||
-        data.profileEffect ||
-        (data.customBadgeIds && data.customBadgeIds.length > 0) ||
-        data.createdAt
-    );
-
-    const [showRaw, setShowRaw] = React.useState(false);
-
-    if (!LarpSettings.seeAllCustomProfile || !hasRealModifications) return null;
-
-    return (
-        <div style={{
-            margin: "8px 0 12px 0",
-            padding: "10px 14px",
-            background: "rgba(250, 166, 26, 0.1)",
-            border: "1px solid rgba(250, 166, 26, 0.4)",
-            borderRadius: 6,
-            display: "flex",
-            alignItems: "flex-start",
-            gap: 10,
-        }}>
-            <span style={{ fontSize: 18, flexShrink: 0 }}>⚠️</span>
-            <div style={{ flex: 1 }}>
-                <span style={{ color: "var(--text-warning, #faa61a)", fontWeight: 600, fontSize: 13 }}>
-                    LarpCord warning. This user has a client-side profile override enabled.
-                </span>
-                <br />
-                <span
-                    role="button"
-                    style={{ color: "var(--text-link)", fontSize: 12, cursor: "pointer", marginTop: 2, display: "inline-block" }}
-                    onClick={() => setShowRaw(r => !r)}
-                >
-                    {showRaw ? "Hide raw profile" : "View raw profile"}
-                </span>
-                {showRaw && (() => {
-                    const data = cached!.data!;
-                    const fields: [string, string][] = [];
-                    if (data.username) fields.push(["Username", data.username]);
-                    if (data.globalName) fields.push(["Display name", data.globalName]);
-                    if (data.bio) fields.push(["Bio", data.bio]);
-                    if (data.pronouns) fields.push(["Pronouns", data.pronouns]);
-                    if (data.createdAt) fields.push(["Account created", data.createdAt]);
-                    if (data.nitro) fields.push(["Nitro", "Simulated"]);
-                    return (
-                        <div style={{ marginTop: 6, fontSize: 12, color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 2 }}>
-                            {fields.map(([k, v]) => (
-                                <span key={k}><strong>{k}:</strong> {v}</span>
-                            ))}
-                        </div>
-                    );
-                })()}
-            </div>
-        </div>
-    );
-}
 
 export default definePlugin({
     name: "LarpCord",
@@ -1462,15 +1370,17 @@ export default definePlugin({
         priority: 10
     },
 
+    contextMenus: {
+        "user-context": userContextMenuPatch
+    },
+
+    flux: {
+        CONNECTION_OPEN() {
+            onAccountSwitch();
+        }
+    },
+
     patches: [
-        {
-            find: "getRecipientId()",
-            noWarn: true,
-            replacement: {
-                match: /(children:\[)(\i\.isDM\(\).{0,300})/,
-                replace: "$1$self.renderDMNotice(this.props),$2"
-            }
-        },
         {
             find: '"SHOULD_LOAD");',
             replacement: {
@@ -1554,13 +1464,6 @@ export default definePlugin({
         }
     ],
 
-    _copiedUserId: null as string | null,
-
-    isCopiedUser(userId: string | null | undefined): boolean {
-        if (!isEnabled || !userId || !this._copiedUserId) return false;
-        return userId === this._copiedUserId;
-    },
-
     fakeCurrentUser(user: any) {
         if (!user || (!isEnabled && this._forceNative !== true) || !isMe(user.id)) return user;
 
@@ -1639,7 +1542,10 @@ export default definePlugin({
         }
 
         const storedProfileEffect = cloneProfileEffect(storedData.profileEffect);
-        if (storedProfileEffect) {
+        if (storedData.profileEffectId) {
+            clone.profileEffect = { skuId: storedData.profileEffectId, expireAt: null };
+            clone.profileEffectId = storedData.profileEffectId;
+        } else if (storedProfileEffect) {
             clone.profileEffect = storedProfileEffect;
             clone.profileEffectId = storedProfileEffect.skuId;
         }
@@ -1659,144 +1565,6 @@ export default definePlugin({
         cachedDataHash = _dataVersion;
 
         return clone;
-    },
-
-    fakeOtherUser(realUser: any, data: CustomProfileData) {
-        if (!realUser || !realUser.id) return realUser;
-        const clone = Object.create(realUser);
-
-        if (data.username) clone.username = data.username;
-        if (data.globalName) clone.globalName = data.globalName;
-
-        if (data.avatar) clone.avatar = data.avatar;
-
-        if (data.email) clone.email = data.email;
-        if (data.phone) clone.phone = data.phone;
-
-        if (data.createdAt) {
-            const fakeCreatedAt = new Date(data.createdAt + "T12:00:00Z");
-            Object.defineProperty(clone, "createdAt", {
-                get: () => fakeCreatedAt,
-                configurable: true,
-                enumerable: true
-            });
-            clone.__cp_fakeCreatedAt = fakeCreatedAt.getTime();
-        }
-
-        const decoration = getStoredDecorationData(data);
-        if (decoration) {
-            clone.avatarDecoration = decoration;
-            clone.avatarDecorationData = decoration;
-        }
-
-        const profileEffect = cloneProfileEffect(data.profileEffect);
-        if (profileEffect) {
-            clone.profileEffect = profileEffect;
-            clone.profileEffectId = profileEffect.skuId;
-        }
-
-        const wantedFlags = data.badgeFlags != null ? data.badgeFlags : realUser.publicFlags;
-        clone.publicFlags = wantedFlags;
-        clone.flags = wantedFlags;
-
-        if (data.nitro) {
-            clone.premiumType = 2;
-            const LEVEL_MONTHS = [1, 2, 3, 6, 12, 24, 36, 72];
-            const since = new Date();
-            since.setMonth(since.getMonth() - (LEVEL_MONTHS[data.nitroLevel!] ?? 1));
-            clone.premiumSince = since;
-
-            const bm = data.boostMonths ?? -1;
-            if (bm >= 0) {
-                const BOOST_M = [1, 2, 3, 6, 9, 12, 15, 18, 24];
-                const boostSince = new Date();
-                boostSince.setMonth(boostSince.getMonth() - (BOOST_M[bm] ?? 1));
-                clone.premiumGuildSince = boostSince;
-            } else {
-                clone.premiumGuildSince = null;
-            }
-        } else if (data.nitro === false) {
-            clone.premiumType = 0;
-            clone.premiumSince = null;
-            clone.premiumGuildSince = null;
-        }
-
-        clone.__cp_fake_other = true;
-        return clone;
-    },
-
-    hookOtherUserProfile(profile: any, data: CustomProfileData) {
-        if (!profile) return profile;
-        try {
-            const merged: any = {};
-
-            if (data.bio) merged.bio = data.bio;
-            if (data.pronouns) merged.pronouns = data.pronouns;
-            if (data.accentColor != null) merged.accentColor = data.accentColor;
-            if (data.banner) merged.banner = data.banner;
-
-            const decoration = getStoredDecorationData(data);
-            if (decoration) {
-                merged.avatarDecoration = decoration;
-                merged.avatarDecorationData = decoration;
-            }
-
-            if (data.profileEffect !== undefined) {
-                const profileEffect = cloneProfileEffect(data.profileEffect);
-                merged.profileEffect = profileEffect;
-                merged.profileEffectId = profileEffect?.skuId;
-            }
-
-            if (data.nitro || data.badgeFlags != null) {
-                merged.premiumType = data.nitro ? 2 : 0;
-
-                if (data.nitro) {
-                    if (data.accentColor != null) {
-                        const c2 = data.accentColor2 ?? data.accentColor;
-                        merged.themeColors = [data.accentColor, c2];
-                    }
-                    const nl = data.nitroLevel ?? 0;
-                    const LEVEL_MONTHS = [1, 2, 3, 6, 12, 24, 36, 72];
-                    const since = new Date();
-                    since.setMonth(since.getMonth() - (LEVEL_MONTHS[nl] ?? 1));
-                    merged.premiumSince = since;
-
-                    const bm = data.boostMonths ?? -1;
-                    if (bm >= 0) {
-                        const BOOST_M = [1, 2, 3, 6, 9, 12, 15, 18, 24];
-                        const boostSince = new Date();
-                        boostSince.setMonth(boostSince.getMonth() - (BOOST_M[bm] ?? 1));
-                        merged.premiumGuildSince = boostSince;
-                    } else {
-                        merged.premiumGuildSince = null;
-                    }
-                } else {
-                    merged.premiumSince = null;
-                    merged.premiumGuildSince = null;
-                }
-
-                merged.publicFlags = (data.badgeFlags != null) ? data.badgeFlags : profile.publicFlags;
-                merged.badges = [];
-            } else if (data.nitro === false) {
-                merged.premiumType = profile.premiumType ?? 0;
-                merged.premiumSince = null;
-                merged.premiumGuildSince = null;
-            }
-
-            const badgesArr = cloneProfileBadges(profile.badges);
-            const customIds = data.customBadgeIds ?? [];
-            if (customIds.includes("quest")) badgesArr.push({ id: "quest", icon: "7d9ae358c8c5e118768335dbe68b4fb8", description: "Completed a quest" });
-            if (customIds.includes("orbs")) badgesArr.push({ id: "orbs", icon: "83d8a1eb09a8d64e59233eec5d4d5c2d", description: "Orbs — Apprentice" });
-            if (customIds.includes("oldname")) {
-                const dText = data.oldName ? "Originally known as " + data.oldName : "Originally known as ...";
-                badgesArr.push({ id: "legacy_username", icon: "6de6d34650760ba5551a79732e98ed60", description: dText });
-            }
-            if (badgesArr.length > 0) merged.badges = badgesArr;
-
-            return mergeProfile(profile, merged);
-        } catch (e) {
-            return profile;
-        }
     },
 
     _cachedProfile: null as any,
@@ -1822,10 +1590,20 @@ export default definePlugin({
                 merged.avatarDecorationData = storedDecoration;
             }
 
-            if (storedData.profileEffect !== undefined) {
+            if (storedData.profileEffectId) {
+                merged.profileEffect = { skuId: storedData.profileEffectId, expireAt: null };
+                merged.profileEffectId = storedData.profileEffectId;
+            } else if (storedData.profileEffect !== undefined) {
                 const profileEffect = cloneProfileEffect(storedData.profileEffect);
                 merged.profileEffect = profileEffect;
                 merged.profileEffectId = profileEffect?.skuId;
+            }
+
+            if (storedData.fakeConnections?.length) {
+                const connections = formatFakeConnections(storedData.fakeConnections);
+                const existing = profile.connectedAccounts ?? profile.connected_accounts ?? [];
+                merged.connectedAccounts = [...existing, ...connections];
+                merged.connected_accounts = merged.connectedAccounts;
             }
 
             if (isEnabled && (storedData.nitro || storedData.badgeFlags != null)) {
@@ -1837,16 +1615,12 @@ export default definePlugin({
                         merged.themeColors = [storedData.accentColor, c2];
                     }
                     const nl = storedData.nitroLevel ?? 0;
-                    const LEVEL_MONTHS = [1, 2, 3, 6, 12, 24, 36, 72];
-                    const since = new Date();
-                    since.setMonth(since.getMonth() - (LEVEL_MONTHS[nl] ?? 1));
+                    const since = getMonthsAgo(NITRO_MONTHS[nl] ?? 0);
                     merged.premiumSince = since;
 
                     const bm = storedData.boostMonths ?? -1;
                     if (bm >= 0) {
-                        const BOOST_M = [1, 2, 3, 6, 9, 12, 15, 18, 24];
-                        const boostSince = new Date();
-                        boostSince.setMonth(boostSince.getMonth() - (BOOST_M[bm] ?? 1));
+                        const boostSince = getMonthsAgo(BOOST_MONTHS[bm] ?? 1);
                         merged.premiumGuildSince = boostSince;
                     } else {
                         merged.premiumGuildSince = null;
@@ -1893,25 +1667,6 @@ export default definePlugin({
         return "***-***-" + fake.slice(-4);
     },
 
-    renderDMNotice(props: any) {
-        try {
-            if (!LarpSettings.seeAllCustomProfile) return null;
-            const channel = props?.channel;
-            if (!channel?.isDM?.()) return null;
-            const recipientId = channel.recipients?.[0];
-            if (!recipientId) return null;
-            fetchPublicProfileIfNeeded(recipientId);
-            const cached = publicProfilesCache.get(recipientId);
-            if (!cached?.fetched || !cached?.data) return null;
-            const d = cached.data;
-            const hasRealModifications = d.username || d.globalName || d.avatar || d.banner ||
-                d.bio || d.pronouns || d.accentColor != null || d.badgeFlags ||
-                d.nitro || d.decorationAsset || d.profileEffect || (d.customBadgeIds && d.customBadgeIds.length > 0) || d.createdAt;
-            if (!hasRealModifications) return null;
-            return <CPDMNotice userId={recipientId} />;
-        } catch { return null; }
-    },
-
     patchBannerUrl({ displayProfile }: any) {
         try {
             const uid = displayProfile?.userId;
@@ -1921,47 +1676,29 @@ export default definePlugin({
                 return storedData.banner;
             }
 
-            checkSeeAllSettingChange();
-            if (LarpSettings.seeAllCustomProfile) {
-                const cached = publicProfilesCache.get(uid);
-                if (cached?.fetched && cached.data?.banner && cached.data?.nitro) {
-                    return cached.data.banner;
-                }
-            }
             return null;
         } catch { return null; }
     },
 
     toolboxActions: {
-        [t("Open LarpCord")]() { openModal(props => <CustomProfileModal rootProps={props} />); },
+        [t("Open LarpCord")]: openLarpCord,
     },
 
-    _origGetUserAvatarURL: null as any,
     _origExtractTimestamp: null as any,
     _forceNative: false,
 
     async start() {
+        await loadData();
+        updateCachedRealData();
         applyAvatarPatchEarly();
-        addContextMenuPatch("user-context", userContextMenuPatch);
-
-        loadData().then(() => {
-            if (LarpSettings.syncOwnCustomProfile && storedData && Object.keys(storedData).length > 0) {
-                getStoredToken().then(t => {
-                    if (t) {
-                        saveOwnPluginConfig("customProfile", t, { ...storedData, private: false }).catch(e => {
-                            console.error("[LarpCord] Auto-sync on startup failed:", e);
-                        });
-                    }
-                });
-            }
-        });
-
-        FluxDispatcher.subscribe("CONNECTION_OPEN", onAccountSwitch);
 
         try {
             const US = (Vencord as any).Webpack?.findByProps?.("getCurrentUser", "getUser");
             if (US && !US._cp_perfect_hook) {
                 const origCurrent = US.getCurrentUser.bind(US);
+                const origGet = US.getUser.bind(US);
+                US._cp_orig_getCurrentUser = origCurrent;
+                US._cp_orig_getUser = origGet;
 
                 let _lastRealUser: any = null;
                 let _lastFakeResult: any = null;
@@ -1970,10 +1707,6 @@ export default definePlugin({
                 US.getCurrentUser = () => {
                     const realUser = origCurrent();
                     if (realUser) {
-                        if (realUser !== _lastRealUser) {
-                            if (realUser.username) _realUsername = realUser.username;
-                            if (realUser.globalName) _realGlobalName = realUser.globalName;
-                        }
                         if (realUser === _lastRealUser && _lastCacheVersion === _dataVersion && _lastFakeResult) {
                             return _lastFakeResult;
                         }
@@ -1985,22 +1718,12 @@ export default definePlugin({
                     return this.fakeCurrentUser(realUser);
                 };
 
-                const origGet = US.getUser.bind(US);
                 US.getUser = (id: string) => {
                     const user = origGet(id);
                     if (!user) return user;
 
                     if (isEnabled && isMe(id)) {
                         return this.fakeCurrentUser(user);
-                    }
-
-                    checkSeeAllSettingChange();
-
-                    if (LarpSettings.seeAllCustomProfile) {
-                        const cached = publicProfilesCache.get(id);
-                        if (cached?.fetched && cached.data) {
-                            return this.fakeOtherUser(user, cached.data);
-                        }
                     }
 
                     return user;
@@ -2026,6 +1749,7 @@ export default definePlugin({
                     return member;
                 };
                 GMS._cp_member_hook = true;
+                GMS._cp_orig_getMember = origGetMember;
             }
         } catch { }
 
@@ -2050,14 +1774,6 @@ export default definePlugin({
                             return this.hookUserProfile(profile);
                         }
 
-                        if (LarpSettings.seeAllCustomProfile) {
-                            fetchPublicProfileIfNeeded(userId);
-                            const cached = publicProfilesCache.get(userId);
-                            if (cached?.fetched && cached.data && profile) {
-                                return this.hookOtherUserProfile(profile, cached.data);
-                            }
-                        }
-
                         return profile;
                     } catch (e) {
                         console.error("[LarpCord] Error in getUserProfile hook:", e);
@@ -2073,14 +1789,6 @@ export default definePlugin({
 
                         if (isEnabled && isMe(userId) && profile) {
                             return this.hookUserProfile(profile);
-                        }
-
-                        if (LarpSettings.seeAllCustomProfile) {
-                            fetchPublicProfileIfNeeded(userId);
-                            const cached = publicProfilesCache.get(userId);
-                            if (cached?.fetched && cached.data && profile) {
-                                return this.hookOtherUserProfile(profile, cached.data);
-                            }
                         }
 
                         return profile;
@@ -2110,6 +1818,7 @@ export default definePlugin({
 
                 if (MAS.getUsers) {
                     const origGetUsers = MAS.getUsers.bind(MAS);
+                    MAS._cp_orig_getUsers = origGetUsers;
                     MAS.getUsers = () => {
                         const users = origGetUsers();
                         if (!users || !Array.isArray(users)) return users;
@@ -2119,6 +1828,7 @@ export default definePlugin({
 
                 if (MAS.getValidUsers) {
                     const origGetValid = MAS.getValidUsers.bind(MAS);
+                    MAS._cp_orig_getValidUsers = origGetValid;
                     MAS.getValidUsers = () => {
                         const users = origGetValid();
                         if (!users || !Array.isArray(users)) return users;
@@ -2139,35 +1849,17 @@ export default definePlugin({
                     if (isEnabled && storedData.createdAt && isMe(snowflake)) {
                         return new Date(storedData.createdAt + "T12:00:00Z").getTime();
                     }
-                    if (LarpSettings.seeAllCustomProfile) {
-                        const cached = publicProfilesCache.get(snowflake);
-                        if (cached?.fetched && cached.data?.createdAt) {
-                            return new Date(cached.data.createdAt + "T12:00:00Z").getTime();
-                        }
-                    }
                     return origExtract(snowflake);
                 };
             }
         } catch { }
 
-        loadData().then(() => {
-            updateCachedRealData();
-            if (!_avatarPatchApplied) {
-                applyAvatarPatchEarly();
-            } else {
-            }
-            if (isEnabled) {
-                forceAccountPanelRerender();
-                requestAnimationFrame(() => removeHideStyle());
-            } else {
-                removeHideStyle();
-            }
-        });
-
         try {
             const decoMod = (Vencord as any).Webpack?.findByProps?.("getAvatarDecorationURL");
-            if (decoMod?.getAvatarDecorationURL) {
+            if (decoMod?.getAvatarDecorationURL && !_avatarDecorationOrig) {
                 const origDeco = decoMod.getAvatarDecorationURL.bind(decoMod);
+                _avatarDecorationModule = decoMod;
+                _avatarDecorationOrig = origDeco;
                 decoMod.getAvatarDecorationURL = (opts: any) => {
                     try {
                         const { avatarDecoration, userId, canAnimate } = opts ?? {};
@@ -2186,48 +1878,12 @@ export default definePlugin({
                             }
                         }
 
-                        if (LarpSettings.seeAllCustomProfile && userId) {
-                            const cached = publicProfilesCache.get(userId);
-                            if (cached?.fetched && cached.data?.decorationAsset) {
-                                const asset = getString(cached.data.decorationAsset);
-                                if (asset) {
-                                    const dec = AVATAR_DECORATIONS.find(d => d.id === asset);
-                                    const passthrough = dec ? (dec as any).passthrough : asset.startsWith("a_");
-                                    return getDecorationUrl(asset, passthrough);
-                                }
-                            }
-                        }
                     } catch { }
                     return origDeco(opts);
                 };
             }
         } catch { }
 
-        if (!_avatarPatchApplied) {
-            applyAvatarPatchEarly();
-        }
-
-        try {
-            const GMS = (Vencord as any).Webpack?.findByProps?.("getMember", "getMembers", "getMemberIds");
-            if (GMS?.getMember && !GMS._cp_member_hook) {
-                const _origGetMember = GMS.getMember.bind(GMS);
-                GMS.getMember = (guildId: string, userId: string) => {
-                    const member = _origGetMember(guildId, userId);
-                    try {
-                        const myId = UserStore.getCurrentUser()?.id;
-                        if (isEnabled && userId === myId && member) {
-                            const customNick = storedData.globalName || storedData.username;
-                            if (customNick) {
-                                return { ...member, nick: customNick };
-                            }
-                        }
-                    } catch { }
-                    return member;
-                };
-                GMS._cp_member_hook = true;
-                GMS._cp_orig_getMember = _origGetMember;
-            }
-        } catch { }
     },
 
     userProfileBadges: [
@@ -2236,50 +1892,7 @@ export default definePlugin({
                 const style = { borderRadius: "50%", width: "22px", height: "22px" };
 
                 const isCurrentUser = userId === UserStore.getCurrentUser()?.id;
-                if (!isCurrentUser) {
-                    if (!LarpSettings.seeAllCustomProfile) return nativeBadges || [];
-                    const cached = publicProfilesCache.get(userId);
-                    if (!cached?.fetched || !cached.data) return nativeBadges || [];
-                    const d = cached.data;
-
-                    const badges: ProfileBadge[] = [...(nativeBadges || [])].filter(b => {
-                        const desc = (b.description || "").toLowerCase();
-                        const icon = (b.iconSrc || "").toLowerCase();
-                        const nitroKw = ["nitro", "subscriber", "abonn", "premium", "inscrit"];
-                        if (nitroKw.some(k => desc.includes(k))) return false;
-                        if (icon.includes("nitro") || icon.includes("premium")) return false;
-                        const boostKw = ["booster", "boost"];
-                        if (boostKw.some(k => desc.includes(k))) return false;
-                        if (icon.includes("boost") || icon.includes("leveling")) return false;
-                        return true;
-                    });
-
-                    const extra: any[] = [];
-                    const wantedFlags = d.badgeFlags ?? 0;
-                    for (const badge of BADGES) {
-                        if (wantedFlags & badge.flag) {
-                            extra.push({ description: badge.label, iconSrc: badge.icon, position: 0, props: { style } });
-                        }
-                    }
-                    const nl = d.nitroLevel ?? -1;
-                    if (nl >= 0 && nl < NITRO_LEVELS.length) {
-                        extra.push({ description: "Nitro", iconSrc: NITRO_LEVELS[nl].icon, position: 0, props: { style } });
-                    }
-                    const bm = d.boostMonths ?? -1;
-                    if (bm >= 0 && bm < BOOST_ICONS.length) {
-                        extra.push({ description: `Server Booster \u2014 ${BOOST_LABELS[bm]}`, iconSrc: BOOST_ICONS[bm], position: 0, props: { style } });
-                    }
-                    if (d.customBadgeIds?.includes("quest")) extra.push({ description: "Completed a quest", iconSrc: "https://cdn.discordapp.com/badge-icons/7d9ae358c8c5e118768335dbe68b4fb8.png", position: 0, props: { style } });
-                    if (d.customBadgeIds?.includes("orbs")) extra.push({ description: "Orbs \u2014 Apprentice", iconSrc: "https://cdn.discordapp.com/badge-icons/83d8a1eb09a8d64e59233eec5d4d5c2d.png", position: 0, props: { style } });
-                    if (d.customBadgeIds?.includes("oldname")) {
-                        const oldNameText = d.oldName ? `Old username: ${d.oldName}` : "Old username";
-                        extra.push({ description: oldNameText, iconSrc: OLD_NAME_BADGE_ICON, position: 0, props: { style } });
-                    }
-                    badges.push(...extra);
-                    return withBadgeIds(badges);
-                }
-
-                if (!isEnabled) return nativeBadges || [];
+                if (!isCurrentUser || !isEnabled) return nativeBadges || [];
 
                 let badges: ProfileBadge[] = [...(nativeBadges || [])];
 
@@ -2316,72 +1929,25 @@ export default definePlugin({
                 });
 
                 const badgeList: any[] = [];
-
-                if (storedData.badgeFlags && (storedData.badgeFlags & FLAG.STAFF)) {
-                    badgeList.push({ description: t("Staff Discord"), iconSrc: "https://cdn.discordapp.com/badge-icons/5e74e9b61934fc1f67c65515d1f7e60d.png", position: 0, props: { style } });
-                }
-
-                if (storedData.badgeFlags && (storedData.badgeFlags & FLAG.PARTNER)) {
-                    badgeList.push({ description: t("Partner"), iconSrc: "https://cdn.discordapp.com/badge-icons/3f9748e53446a137a052f3454e2de41e.png", position: 0, props: { style } });
+                for (const badge of BADGES) {
+                    if (wantedFlags & badge.flag) {
+                        badgeList.push({ description: badge.label, iconSrc: badge.icon, position: 0, props: { style } });
+                    }
                 }
 
                 if (hasNitroFake) {
-                    badgeList.push({ description: "NITRO\nSubscribed since 10/22/21", iconSrc: NITRO_LEVELS[nl].icon, position: 0, props: { style, title: "Nitro" } });
-                }
-
-                if (storedData.badgeFlags && (storedData.badgeFlags & FLAG.HYPESQUAD)) {
-                    badgeList.push({ description: t("HypeSquad Events"), iconSrc: "https://cdn.discordapp.com/badge-icons/bf01d1073931f921909045f3a39fd264.png", position: 0, props: { style } });
-                }
-
-                if (storedData.badgeFlags && (storedData.badgeFlags & FLAG.BUG_HUNTER_2)) {
-                    badgeList.push({ description: t("Bug Hunter Lvl 2"), iconSrc: "https://cdn.discordapp.com/badge-icons/848f79194d4be5ff5f81505cbd0ce1e6.png", position: 0, props: { style } });
-                }
-
-                if (storedData.badgeFlags && (storedData.badgeFlags & FLAG.BALANCE)) {
-                    badgeList.push({ description: t("HypeSquad Balance"), iconSrc: "https://cdn.discordapp.com/badge-icons/3aa41de486fa12454c3761e8e223442e.png", position: 0, props: { style } });
-                }
-                if (storedData.badgeFlags && (storedData.badgeFlags & FLAG.BRAVERY)) {
-                    badgeList.push({ description: t("HypeSquad Bravery"), iconSrc: "https://cdn.discordapp.com/badge-icons/8a88d63823d8a71cd5e390baa45efa02.png", position: 0, props: { style } });
-                }
-                if (storedData.badgeFlags && (storedData.badgeFlags & FLAG.BRILLIANCE)) {
-                    badgeList.push({ description: t("HypeSquad Brilliance"), iconSrc: "https://cdn.discordapp.com/badge-icons/011940fd013da3f7fb926e4a1cd2e618.png", position: 0, props: { style } });
-                }
-
-                if (storedData.badgeFlags && (storedData.badgeFlags & FLAG.BUG_HUNTER_1)) {
-                    badgeList.push({ description: t("Bug Hunter Lvl 1"), iconSrc: "https://cdn.discordapp.com/badge-icons/2717692c7dca7289b35297368a940dd0.png", position: 0, props: { style } });
-                }
-
-                if (storedData.badgeFlags && (storedData.badgeFlags & FLAG.DEV_VERIFIED)) {
-                    badgeList.push({ description: t("Verified Developer"), iconSrc: "https://cdn.discordapp.com/badge-icons/6df5892e0f35b051f8b61eace34f4967.png", position: 0, props: { style } });
-                }
-
-                if (storedData.badgeFlags && (storedData.badgeFlags & FLAG.MOD_ALUMNI)) {
-                    badgeList.push({ description: t("Former Moderator"), iconSrc: "https://cdn.discordapp.com/badge-icons/fee1624003e2fee35cb398e125dc479b.png", position: 0, props: { style } });
-                }
-
-                if (storedData.badgeFlags && (storedData.badgeFlags & FLAG.EARLY_SUPPORTER)) {
-                    badgeList.push({ description: t("Early Supporter"), iconSrc: "https://cdn.discordapp.com/badge-icons/7060786766c9c840eb3019e725d2b358.png", position: 0, props: { style } });
+                    const since = getMonthsAgo(NITRO_MONTHS[nl] ?? 0).toLocaleDateString();
+                    badgeList.push({ description: `Nitro\nSubscribed since ${since}`, iconSrc: NITRO_LEVELS[nl].icon, position: 0, props: { style, title: "Nitro" } });
                 }
 
                 if (hasBoostFake) {
                     badgeList.push({ description: `Server Booster — ${BOOST_LABELS[bm]}`, iconSrc: BOOST_ICONS[bm], position: 0, props: { style, title: `Server Booster — ${BOOST_LABELS[bm]}` } });
                 }
 
-                if (storedData.badgeFlags && (storedData.badgeFlags & FLAG.ACTIVE_DEVELOPER)) {
-                    badgeList.push({ description: t("Active Developer"), iconSrc: "https://cdn.discordapp.com/badge-icons/6bdc42827a38498929a4920da12695d9.png", position: 0, props: { style } });
-                }
-
-                if (storedData.customBadgeIds?.includes("oldname")) {
-                    const oldNameText = storedData.oldName ? `Old username\u00a0: ${storedData.oldName}` : "Old username";
-                    badgeList.push({ description: oldNameText, iconSrc: OLD_NAME_BADGE_ICON, position: 0, props: { style, title: oldNameText } });
-                }
-
-                if (storedData.customBadgeIds?.includes("quest")) {
-                    badgeList.push({ description: "Completed a quest", iconSrc: "https://cdn.discordapp.com/badge-icons/7d9ae358c8c5e118768335dbe68b4fb8.png", position: 0, props: { style } });
-                }
-
-                if (storedData.customBadgeIds?.includes("orbs")) {
-                    badgeList.push({ description: "Orbs — Apprentice", iconSrc: "https://cdn.discordapp.com/badge-icons/83d8a1eb09a8d64e59233eec5d4d5c2d.png", position: 0, props: { style } });
+                for (const badge of CUSTOM_BADGES) {
+                    if (!storedData.customBadgeIds?.includes(badge.id)) continue;
+                    const description = getCustomBadgeDescription(badge.id);
+                    badgeList.push({ description, iconSrc: `https://cdn.discordapp.com/badge-icons/${badge.icon}.png`, position: 0, props: { style, title: description } });
                 }
 
                 badges.push(...badgeList);
@@ -2391,18 +1957,41 @@ export default definePlugin({
     ] as ProfileBadge[],
 
     stop() {
-        removeContextMenuPatch("user-context", userContextMenuPatch);
-        FluxDispatcher.unsubscribe("CONNECTION_OPEN", onAccountSwitch);
-        stopDomObserver();
-        removeHideStyle();
         if (this._origExtractTimestamp && SnowflakeUtils) {
             (SnowflakeUtils as any).extractTimestamp = this._origExtractTimestamp;
             this._origExtractTimestamp = null;
         }
-        if (this._origGetUserAvatarURL && IconUtils) {
-            (IconUtils as any).getUserAvatarURL = this._origGetUserAvatarURL;
-            this._origGetUserAvatarURL = null;
+        if (_avatarModule && _avatarPatchOrig) {
+            _avatarModule.getUserAvatarURL = _avatarPatchOrig;
+            _avatarModule = null;
+            _avatarPatchOrig = null;
+            _avatarPatchApplied = false;
         }
+        if (_avatarDecorationModule && _avatarDecorationOrig) {
+            _avatarDecorationModule.getAvatarDecorationURL = _avatarDecorationOrig;
+            _avatarDecorationModule = null;
+            _avatarDecorationOrig = null;
+        }
+        try {
+            const US = (Vencord as any).Webpack?.findByProps?.("getCurrentUser", "getUser");
+            if (US?._cp_perfect_hook) {
+                if (US._cp_orig_getCurrentUser) US.getCurrentUser = US._cp_orig_getCurrentUser;
+                if (US._cp_orig_getUser) US.getUser = US._cp_orig_getUser;
+                delete US._cp_perfect_hook;
+                delete US._cp_orig_getCurrentUser;
+                delete US._cp_orig_getUser;
+            }
+        } catch { }
+        try {
+            const MAS = (Vencord as any).Webpack?.findByProps?.("getUsers", "getValidUsers", "getHasLoggedInAccounts");
+            if (MAS?._cp_perfect_hook) {
+                if (MAS._cp_orig_getUsers) MAS.getUsers = MAS._cp_orig_getUsers;
+                if (MAS._cp_orig_getValidUsers) MAS.getValidUsers = MAS._cp_orig_getValidUsers;
+                delete MAS._cp_perfect_hook;
+                delete MAS._cp_orig_getUsers;
+                delete MAS._cp_orig_getValidUsers;
+            }
+        } catch { }
         try {
             const GMS = (Vencord as any).Webpack?.findByProps?.("getMember", "getMembers", "getMemberIds");
             if (GMS?._cp_member_hook) {
@@ -2431,6 +2020,6 @@ export default definePlugin({
     },
 
     settingsAboutComponent() {
-        return <Button onClick={() => openModal(props => <CustomProfileModal rootProps={props} />)}>Open LarpCord</Button>;
+        return <Button onClick={openLarpCord}>Open LarpCord</Button>;
     },
 });

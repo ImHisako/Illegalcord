@@ -7,13 +7,15 @@
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
 import { HeaderBarButton } from "@api/HeaderBar";
 import { definePluginSettings } from "@api/Settings";
-import { compileStyle, disableStyle, enableStyle, isStyleEnabled, requireStyle } from "@api/Styles";
+import { compileStyle, disableStyle, enableStyle, requireStyle } from "@api/Styles";
 import ErrorBoundary from "@components/ErrorBoundary";
 import definePlugin, { IconComponent, OptionType } from "@utils/types";
-import type { Channel, Message, VoiceState } from "@vencord/discord-types";
-import { ApplicationStreamingStore, Menu, React, showToast, StreamerModeStore, Toasts, useEffect, UserStore, useState, useStateFromStores, VoiceStateStore } from "@webpack/common";
+import type { Channel, Message } from "@vencord/discord-types";
+import { ApplicationStreamingStore, Menu, React, showToast, StreamerModeStore, Toasts, useEffect, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 import style from "./styles.css?managed";
+
+const managedStyle = requireStyle(style);
 
 const ProtectionMode = {
     Blur: "blur",
@@ -32,7 +34,10 @@ let autoEnabled = false;
 let autoSuppressedForStream = false;
 let lastAppliedActive: boolean | undefined;
 let lastStyleSource = "";
+let baseStyleSource = "";
 let styleDirty = true;
+let styleConfigDirty = true;
+let clickRevealPrefixes: string[] = [];
 const revealedMessageIds = new Set<string>();
 const stateListeners = new Set<() => void>();
 
@@ -68,11 +73,7 @@ function isOwnStreamKey(streamKey: string) {
 }
 
 function isScreensharing() {
-    const currentUser = UserStore.getCurrentUser();
-    if (ApplicationStreamingStore.getCurrentUserActiveStream()) return true;
-    if (ApplicationStreamingStore.getActiveStreamForUser(currentUser.id)) return true;
-
-    return VoiceStateStore.getVoiceStateForUser(currentUser.id)?.selfStream === true;
+    return ApplicationStreamingStore.getCurrentUserActiveStream() !== null;
 }
 
 function isProtectionSourceActive() {
@@ -83,13 +84,11 @@ function isStreamProofActive() {
     return manualEnabled || autoEnabled;
 }
 
-function getFilter(strong: boolean) {
-    const mode = settings.store.protectionMode;
-
+function getFilter(mode: ProtectionMode, blurStrength: number, strong: boolean) {
     if (mode === ProtectionMode.Dim) return "opacity: .12; filter: grayscale(1) saturate(.25);";
     if (mode === ProtectionMode.Blackout) return "opacity: .18; filter: brightness(0); background: var(--background-modifier-accent);";
 
-    const blur = Math.max(2, settings.store.blurStrength);
+    const blur = Math.max(2, blurStrength);
     return `filter: blur(${strong ? blur + 8 : blur}px);`;
 }
 
@@ -101,32 +100,24 @@ function getHoverSelector(selector: string) {
     return selector.split(",").map(part => `${part.trim()}:hover`).join(",");
 }
 
-function getHoverRevealRule(selector: string) {
-    if (!settings.store.revealOnHover) return "";
-
-    return getRevealRule(getHoverSelector(selector));
-}
-
 function getClickRevealSelectors() {
     return [...revealedMessageIds]
-        .map(id => `#message-content-${id},#message-accessories-${id},#message-username-${id},#message-reply-context-${id}`)
+        .map(id => clickRevealPrefixes.map(prefix => `${prefix}${id}`).join(","))
         .join(",");
 }
 
-function getMessageHoverRevealRule() {
-    if (!settings.store.revealOnHover) return "";
-
+function getMessageHoverRevealRule(protectMessages: boolean, protectMedia: boolean, protectUsernames: boolean) {
     const selectors: string[] = [];
 
-    if (settings.store.protectMessages) {
+    if (protectMessages) {
         selectors.push(`${MESSAGE_ROW_SELECTOR}:hover [id^="message-content-"]`);
     }
 
-    if (settings.store.protectMedia) {
+    if (protectMedia) {
         selectors.push(`${MESSAGE_ROW_SELECTOR}:hover [id^="message-accessories-"]`);
     }
 
-    if (settings.store.protectUsernames) {
+    if (protectUsernames) {
         selectors.push(
             `${MESSAGE_ROW_SELECTOR}:hover [id^="message-username-"]`,
             `${MESSAGE_ROW_SELECTOR}:hover [id^="message-reply-context-"]`
@@ -136,44 +127,65 @@ function getMessageHoverRevealRule() {
     return selectors.length ? getRevealRule(selectors.join(",")) : "";
 }
 
-function buildRules(selector: string, strong = false) {
-    const filter = getFilter(strong);
-    const reveal = getHoverRevealRule(selector);
-    const hoverSelector = getHoverSelector(selector);
+function buildRules(selector: string, filter: string, revealOnHover: boolean) {
+    const hoverSelector = revealOnHover ? getHoverSelector(selector) : "";
+    const reveal = hoverSelector ? getRevealRule(hoverSelector) : "";
 
     return `${selector}{${filter}transition:filter .16s ease,opacity .16s ease;user-select:none;cursor:help;border-radius:4px;}${selector} a{pointer-events:none;}${reveal}${reveal ? `${hoverSelector} a{pointer-events:auto;}` : ""}`;
 }
 
 function buildStyle() {
-    const rules: string[] = [];
+    if (styleConfigDirty) {
+        const {
+            blurStrength,
+            protectChannelList,
+            protectDmList,
+            protectionMode,
+            protectMedia,
+            protectMessages,
+            protectUsernames,
+            revealOnClick,
+            revealOnHover
+        } = settings.store;
+        const rules: string[] = [];
+        const filter = getFilter(protectionMode, blurStrength, false);
 
-    if (settings.store.protectMessages) {
-        rules.push(buildRules('[id^="message-content-"]'));
+        if (protectMessages) {
+            rules.push(buildRules('[id^="message-content-"]', filter, revealOnHover));
+        }
+
+        if (protectMedia) {
+            rules.push(buildRules('[id^="message-accessories-"]', getFilter(protectionMode, blurStrength, true), revealOnHover));
+        }
+
+        if (protectUsernames) {
+            rules.push(buildRules('[id^="message-username-"],[id^="message-reply-context-"]', filter, revealOnHover));
+        }
+
+        if (protectDmList) {
+            rules.push(buildRules('[data-list-id="private-channels"] [data-list-item-id^="private-channels-uid_"],[data-list-id="private-channels"] [href^="/channels/@me/"]', filter, revealOnHover));
+        }
+
+        if (protectChannelList) {
+            rules.push(buildRules('[data-list-id="channels"] [data-list-item-id^="channels___"]', filter, revealOnHover));
+        }
+
+        if (revealOnHover) {
+            rules.push(getMessageHoverRevealRule(protectMessages, protectMedia, protectUsernames));
+        }
+
+        clickRevealPrefixes = [];
+        if (revealOnClick && protectMessages) clickRevealPrefixes.push("#message-content-");
+        if (revealOnClick && protectMedia) clickRevealPrefixes.push("#message-accessories-");
+        if (revealOnClick && protectUsernames) clickRevealPrefixes.push("#message-username-", "#message-reply-context-");
+
+        baseStyleSource = rules.join("");
+        styleConfigDirty = false;
     }
 
-    if (settings.store.protectMedia) {
-        rules.push(buildRules('[id^="message-accessories-"]', true));
-    }
+    if (!clickRevealPrefixes.length || !revealedMessageIds.size) return baseStyleSource;
 
-    if (settings.store.protectUsernames) {
-        rules.push(buildRules('[id^="message-username-"],[id^="message-reply-context-"]'));
-    }
-
-    if (settings.store.protectDmList) {
-        rules.push(buildRules('[data-list-id="private-channels"] [data-list-item-id^="private-channels-uid_"],[data-list-id="private-channels"] [href^="/channels/@me/"]'));
-    }
-
-    if (settings.store.protectChannelList) {
-        rules.push(buildRules('[data-list-id="channels"] [data-list-item-id^="channels___"]'));
-    }
-
-    rules.push(getMessageHoverRevealRule());
-
-    if (settings.store.revealOnClick && revealedMessageIds.size) {
-        rules.push(getRevealRule(getClickRevealSelectors()));
-    }
-
-    return rules.join("");
+    return baseStyleSource + getRevealRule(getClickRevealSelectors());
 }
 
 function syncStyle() {
@@ -185,12 +197,11 @@ function syncStyle() {
         return false;
     }
 
-    const managedStyle = requireStyle(style);
     managedStyle.source = source;
     lastStyleSource = source;
     styleDirty = false;
 
-    if (isStyleEnabled(style)) {
+    if (managedStyle.dom?.isConnected) {
         compileStyle(managedStyle);
     }
 
@@ -206,6 +217,7 @@ function showStateToast(active: boolean) {
 function applyStreamProof(showFeedback = false) {
     const active = isStreamProofActive();
     const activeChanged = active !== lastAppliedActive;
+    const styleEnabled = managedStyle.dom?.isConnected ?? false;
 
     if (!active && revealedMessageIds.size) {
         revealedMessageIds.clear();
@@ -214,8 +226,8 @@ function applyStreamProof(showFeedback = false) {
 
     if (active) syncStyle();
 
-    if (active && !isStyleEnabled(style)) enableStyle(style);
-    else if (!active && isStyleEnabled(style)) disableStyle(style);
+    if (active && !styleEnabled) enableStyle(style);
+    else if (!active && styleEnabled) disableStyle(style);
 
     if (showFeedback) showStateToast(active);
     if (activeChanged) {
@@ -286,15 +298,9 @@ function handleStreamEvent(event: StreamEvent | string, value: boolean) {
     setAutoEnabledForStream(value);
 }
 
-function handleOwnVoiceState(voiceStates: VoiceState[]) {
-    const currentUserId = UserStore.getCurrentUser().id;
-    if (!voiceStates.some(state => state.userId === currentUserId)) return;
-
-    syncAutoState();
-}
-
 function updateActiveStyle() {
     styleDirty = true;
+    styleConfigDirty = true;
     applyStreamProof();
 }
 
@@ -442,15 +448,12 @@ const StreamProofDisabledIcon: IconComponent = ({ height = 20, width = 20, class
     </svg>
 );
 
-const StreamProofButton: ChatBarButtonFactory = ({ isMainChat }) => {
-    const { showChatBarButton } = settings.use(CHAT_BUTTON_SETTINGS);
+function StreamProofChatBarButton() {
     const sharing = useStateFromStores(
-        [ApplicationStreamingStore, VoiceStateStore, StreamerModeStore],
+        [ApplicationStreamingStore, StreamerModeStore],
         isProtectionSourceActive
     );
     useStreamProofUpdates();
-
-    if (!isMainChat || !showChatBarButton) return null;
 
     const active = isStreamProofActive();
     const tooltip = active
@@ -470,6 +473,14 @@ const StreamProofButton: ChatBarButtonFactory = ({ isMainChat }) => {
             </span>
         </ChatBarButton>
     );
+}
+
+const StreamProofButton: ChatBarButtonFactory = ({ isMainChat }) => {
+    const { showChatBarButton } = settings.use(CHAT_BUTTON_SETTINGS);
+
+    if (!isMainChat || !showChatBarButton) return null;
+
+    return <StreamProofChatBarButton />;
 };
 
 const WrappedStreamProofButton = ErrorBoundary.wrap(StreamProofButton, { noop: true });
@@ -479,15 +490,12 @@ const StreamProofHeaderIcon: IconComponent = props => isStreamProofActive()
     ? <StreamProofDisabledIcon {...props} />
     : <StreamProofIcon {...props} />;
 
-function StreamProofHeaderButton() {
-    const { showHeaderBarButton } = settings.use(HEADER_BUTTON_SETTINGS);
+function VisibleStreamProofHeaderButton() {
     const sharing = useStateFromStores(
-        [ApplicationStreamingStore, VoiceStateStore, StreamerModeStore],
+        [ApplicationStreamingStore, StreamerModeStore],
         isProtectionSourceActive
     );
     useStreamProofUpdates();
-
-    if (!showHeaderBarButton) return null;
 
     const active = isStreamProofActive();
     const tooltip = active
@@ -504,6 +512,12 @@ function StreamProofHeaderButton() {
             onClick={toggleStreamProof}
         />
     );
+}
+
+function StreamProofHeaderButton() {
+    const { showHeaderBarButton } = settings.use(HEADER_BUTTON_SETTINGS);
+
+    return showHeaderBarButton ? <VisibleStreamProofHeaderButton /> : null;
 }
 
 const WrappedStreamProofHeaderButton = ErrorBoundary.wrap(StreamProofHeaderButton, { noop: true });
@@ -551,23 +565,8 @@ export default definePlugin({
         STREAM_DELETE(event: StreamEvent | string) {
             handleStreamEvent(event, false);
         },
-        STREAM_START() {
-            syncAutoState();
-        },
-        STREAM_STOP() {
-            syncAutoState();
-        },
         STREAMER_MODE_UPDATE() {
             if (settings.store.includeStreamerMode) syncAutoState();
-        },
-        RTC_CONNECTION_STATE() {
-            syncAutoState();
-        },
-        VOICE_CHANNEL_SELECT() {
-            syncAutoState();
-        },
-        VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
-            handleOwnVoiceState(voiceStates);
         }
     },
 
@@ -581,7 +580,10 @@ export default definePlugin({
         autoSuppressedForStream = false;
         lastAppliedActive = false;
         lastStyleSource = "";
+        baseStyleSource = "";
         styleDirty = true;
+        styleConfigDirty = true;
+        clickRevealPrefixes = [];
         revealedMessageIds.clear();
         disableStyle(style);
         emitStateChange();
