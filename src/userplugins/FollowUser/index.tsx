@@ -5,30 +5,24 @@
  */
 
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { definePluginSettings, useSettings } from "@api/Settings";
+import { ChannelToolbarButton } from "@api/HeaderBar";
+import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
-import { LazyComponent } from "@utils/lazyReact";
 import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Channel, User } from "@vencord/discord-types";
-import { filters, find, findByPropsLazy, findStoreLazy } from "@webpack";
+import { findByPropsLazy, findStoreLazy } from "@webpack";
 import {
     ChannelStore,
     Menu,
     PermissionsBits,
     PermissionStore,
-    React,
     SelectedChannelStore,
     Toasts,
     UserStore
 } from "@webpack/common";
 import type { PropsWithChildren, SVGProps } from "react";
-
-const HeaderBarIcon = LazyComponent(() => {
-    const filter = filters.byCode(".HEADER_BAR_BADGE");
-    return find(m => m.Icon && filter(m.Icon)).Icon;
-});
 
 interface BaseIconProps extends IconProps {
     viewBox: string;
@@ -146,6 +140,8 @@ export const settings = definePluginSettings({
         default: true,
     }
 });
+
+const FOLLOW_SETTING_KEYS = ["followUserId"] satisfies Array<keyof typeof settings.store>;
 
 const ChannelActions: {
     disconnect: () => void;
@@ -282,23 +278,36 @@ const UserContext: NavContextMenuPatchCallback = (children, { user }: UserContex
     ));
 };
 
+function FollowIndicator() {
+    const { followUserId } = settings.use(FOLLOW_SETTING_KEYS);
+    if (!followUserId) return null;
+
+    return (
+        <ChannelToolbarButton
+            tooltip={`Following ${UserStore.getUser(followUserId).username} (click to trigger manually, right-click to unfollow)`}
+            icon={UnfollowIcon}
+            onClick={() => triggerFollow()}
+            onContextMenu={() => settings.store.followUserId = ""}
+        />
+    );
+}
+
+const SafeFollowIndicator = ErrorBoundary.wrap(FollowIndicator, { noop: true });
+
 export default definePlugin({
     name: "FollowUser",
     description: "Adds a follow option in the user context menu to always be in the same VC as them",
     tags: ["Friends", "Utility"],
     authors: [Devs.D3SOX],
+    dependencies: ["HeaderBarAPI"],
 
     settings,
 
-    patches: [
-        {
-            find: "toolbar:function",
-            replacement: {
-                match: /(function \i\(\i\){)(.{1,200}toolbar.{1,100}mobileToolbar)/,
-                replace: "$1$self.addIconToToolBar(arguments[0]);$2"
-            }
-        },
-    ],
+    headerBarButton: {
+        icon: UnfollowIcon,
+        location: "channeltoolbar",
+        render: () => <SafeFollowIndicator />
+    },
 
     contextMenus: {
         "user-context": UserContext
@@ -347,42 +356,5 @@ export default definePlugin({
                 }
             }
         },
-    },
-
-    FollowIndicator() {
-        const { plugins: { FollowUser: { followUserId } } } = useSettings(["plugins.FollowUser.followUserId"]);
-        if (followUserId) {
-            return (
-                <HeaderBarIcon
-                    tooltip={`Following ${UserStore.getUser(followUserId).username} (click to trigger manually, right-click to unfollow)`}
-                    icon={UnfollowIcon}
-                    onClick={() => {
-                        triggerFollow();
-                    }}
-                    onContextMenu={() => {
-                        settings.store.followUserId = "";
-                    }}
-                />
-            );
-        }
-
-        return null;
-    },
-
-    addIconToToolBar(e: { toolbar: React.ReactNode[] | React.ReactNode; }) {
-        if (Array.isArray(e.toolbar)) {
-            return e.toolbar.push(
-                <ErrorBoundary noop={true} key="follow-indicator">
-                    <this.FollowIndicator />
-                </ErrorBoundary>
-            );
-        }
-
-        e.toolbar = [
-            <ErrorBoundary noop={true} key="follow-indicator">
-                <this.FollowIndicator />
-            </ErrorBoundary>,
-            e.toolbar,
-        ];
     },
 });
