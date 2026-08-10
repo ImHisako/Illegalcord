@@ -17,7 +17,7 @@ import { fetchUserProfile } from "@utils/discord";
 import { parseUrl } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import type { ProfileEffect, RenderModalProps, User } from "@vencord/discord-types";
-import { AuthenticationStore, FluxDispatcher, IconUtils, Menu, Modal, openModal, React, Select, SettingsRouter, SnowflakeUtils, Toasts, UserProfileStore, UserStore } from "@webpack/common";
+import { AuthenticationStore, Constants, FluxDispatcher, IconUtils, Menu, Modal, openModal, React, RestAPI, Select, SettingsRouter, SnowflakeUtils, Toasts, UserProfileStore, UserStore } from "@webpack/common";
 
 const ICON_SETTING_KEYS: "showIcon"[] = ["showIcon"];
 
@@ -287,10 +287,6 @@ function getDecorationUrl(assetId: string | undefined, animated = false): string
     if (!/^\d+$/.test(assetId)) return `https://cdn.discordapp.com/avatar-decoration-presets/${assetId}.png?size=240&passthrough=${animated}`;
 
     return `https://cdn.discordapp.com/media/v1/collectibles-shop/${assetId}/${animated ? "animated" : "static"}`;
-}
-
-function getProfileEffectUrl(assetId: string) {
-    return `https://cdn.discordapp.com/media/v1/collectibles-shop/${assetId}/static`;
 }
 
 function cloneProfileEffect(effect: ProfileEffect | null | undefined): ProfileEffect | null {
@@ -920,7 +916,7 @@ function ProfilePreview({ data }: { data: CustomProfileData; }) {
     const displayName = data.globalName || currentUser.globalName || currentUser.username;
     const username = data.username || currentUser.username;
     const avatar = data.avatar || IconUtils.getUserAvatarURL(currentUser, true, 128) || IconUtils.getDefaultAvatarURL(currentUser.id);
-    const effectPreview = data.profileEffectId ? getProfileEffectUrl(data.profileEffectId) : data.profileEffect ? getProfileEffectPreview(data.profileEffect) : "";
+    const effectPreview = data.profileEffect ? getProfileEffectPreview(data.profileEffect) : "";
 
     return (
         <div className="cp-profile-preview">
@@ -953,7 +949,37 @@ function ProfileEffectPicker({ value, presetId, onChange, onPresetChange }: {
     onPresetChange: (id: string) => void;
 }) {
     const effects = getProfileEffects(value);
+    const [catalogEffects, setCatalogEffects] = React.useState<ProfileEffect[]>([]);
     const selectedSkuId = presetId || value?.skuId || "";
+
+    React.useEffect(() => {
+        let cancelled = false;
+
+        void Promise.allSettled(PROFILE_EFFECTS.map(async preset => {
+            const { body }: { body: { items: ProfileEffect[]; }; } = await RestAPI.get({
+                url: Constants.Endpoints.COLLECTIBLES_PRODUCTS(preset.id)
+            });
+
+            return cloneProfileEffect(body.items[0]);
+        })).then(results => {
+            if (cancelled) return;
+
+            const loadedEffects = results.flatMap(result => result.status === "fulfilled" && result.value ? [result.value] : []);
+            setCatalogEffects(loadedEffects);
+
+            const selectedEffect = loadedEffects.find(effect => effect.skuId === presetId);
+            if (selectedEffect) {
+                onChange(selectedEffect);
+                onPresetChange("");
+            }
+        });
+
+        return () => { cancelled = true; };
+    }, []);
+
+    for (const effect of catalogEffects) {
+        if (!effects.some(item => item.skuId === effect.skuId)) effects.push(effect);
+    }
 
     return (
         <div className="cp-field">
@@ -980,17 +1006,6 @@ function ProfileEffectPicker({ value, presetId, onChange, onPresetChange }: {
                         </button>
                     );
                 })}
-                {PROFILE_EFFECTS.filter(effect => !effects.some(item => item.skuId === effect.id)).map(effect => (
-                    <button
-                        key={effect.id}
-                        onClick={() => { onChange(null); onPresetChange(selectedSkuId === effect.id ? "" : effect.id); }}
-                        className={`cp-effect-tile ${selectedSkuId === effect.id ? "cp-effect-tile--on" : ""}`}
-                        title={effect.label}
-                    >
-                        <img src={getProfileEffectUrl(effect.id)} alt="" className="cp-effect-img" />
-                        <span className="cp-effect-label">{effect.label}</span>
-                    </button>
-                ))}
             </div>
         </div>
     );
@@ -1165,7 +1180,7 @@ function CustomProfileModal(rootProps: RenderModalProps) {
     return (
         <Modal
             {...rootProps}
-            size="md"
+            size="lg"
             title={<div className="cp-header"><EditIcon size={16} /><span className="cp-header-title">LarpCord</span></div>}
             actions={[
                 { text: t("Cancel"), variant: "secondary", onClick: rootProps.onClose },
@@ -1539,6 +1554,10 @@ export default definePlugin({
         if (storedDecoration) {
             clone.avatarDecoration = storedDecoration;
             clone.avatarDecorationData = storedDecoration;
+        } else if (storedData.copiedUserId) {
+            clone.avatarDecoration = null;
+            clone.avatarDecorationData = null;
+            clone.avatar_decoration_data = null;
         }
 
         const storedProfileEffect = cloneProfileEffect(storedData.profileEffect);
@@ -1588,6 +1607,10 @@ export default definePlugin({
             if (storedDecoration) {
                 merged.avatarDecoration = storedDecoration;
                 merged.avatarDecorationData = storedDecoration;
+            } else if (storedData.copiedUserId) {
+                merged.avatarDecoration = null;
+                merged.avatarDecorationData = null;
+                merged.avatar_decoration_data = null;
             }
 
             if (storedData.profileEffectId) {
@@ -1599,10 +1622,9 @@ export default definePlugin({
                 merged.profileEffectId = profileEffect?.skuId;
             }
 
-            if (storedData.fakeConnections?.length) {
+            if (storedData.fakeConnections !== undefined) {
                 const connections = formatFakeConnections(storedData.fakeConnections);
-                const existing = profile.connectedAccounts ?? profile.connected_accounts ?? [];
-                merged.connectedAccounts = [...existing, ...connections];
+                merged.connectedAccounts = connections;
                 merged.connected_accounts = merged.connectedAccounts;
             }
 
@@ -1888,13 +1910,16 @@ export default definePlugin({
 
     userProfileBadges: [
         {
-            getBadges({ userId, badges: nativeBadges }: { userId: string; guildId: string; badges: ProfileBadge[]; }) {
+            replaceAll({ userId }: { userId: string; }) {
+                return isEnabled && !!storedData.copiedUserId && userId === UserStore.getCurrentUser()?.id;
+            },
+            getBadges({ userId }: { userId: string; guildId: string; }) {
                 const style = { borderRadius: "50%", width: "22px", height: "22px" };
 
                 const isCurrentUser = userId === UserStore.getCurrentUser()?.id;
-                if (!isCurrentUser || !isEnabled) return nativeBadges || [];
+                if (!isCurrentUser || !isEnabled) return [];
 
-                let badges: ProfileBadge[] = [...(nativeBadges || [])];
+                let badges: ProfileBadge[] = [];
 
                 const nl = storedData.nitroLevel ?? -1;
                 const bm = storedData.boostMonths ?? -1;

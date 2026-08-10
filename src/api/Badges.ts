@@ -46,6 +46,7 @@ export interface ProfileBadge {
     onContextMenu?(event: React.MouseEvent, props: ProfileBadge & BadgeUserArgs): void;
     /** Should the user display this badge? */
     shouldShow?(userInfo: BadgeUserArgs): boolean;
+    replaceAll?(userInfo: BadgeUserArgs): boolean;
     /** Optional props (e.g. style) for the badge, ignored for component badges */
     props?: HTMLProps<HTMLImageElement>;
     /** Insert at start or end? */
@@ -85,7 +86,9 @@ export function removeProfileBadge(badge: ProfileBadge) {
  */
 export function _getBadges(args: BadgeUserArgs) {
     const badges = [] as ProfileBadge[];
-    for (const badge of Badges) {
+    const replacements = [...Badges].filter(badge => badge.replaceAll?.(args));
+
+    for (const badge of replacements.length ? replacements : Badges) {
         if (badge.shouldShow && !badge.shouldShow(args)) {
             continue;
         }
@@ -104,6 +107,8 @@ export function _getBadges(args: BadgeUserArgs) {
             badges.push(...b);
         }
     }
+
+    if (replacements.length) return badges;
 
     const donorBadges = BadgeAPIPlugin.getDonorBadges(args.userId);
     const equicordDonorBadges = BadgeAPIPlugin.getEquicordDonorBadges(args.userId);
