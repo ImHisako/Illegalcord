@@ -288,8 +288,14 @@ function getDecorationUrl(assetId: string | undefined, animated = false): string
     return `https://cdn.discordapp.com/media/v1/collectibles-shop/${assetId}/${animated ? "animated" : "static"}`;
 }
 
-function cloneProfileEffect(effect: ProfileEffect | null | undefined): ProfileEffect | null {
-    if (!effect?.skuId) return null;
+type ProfileEffectData = Omit<ProfileEffect, "skuId"> & {
+    skuId?: string;
+    sku_id?: string;
+};
+
+function cloneProfileEffect(effect: ProfileEffectData | null | undefined): ProfileEffect | null {
+    const skuId = effect?.skuId || effect?.sku_id;
+    if (!skuId) return null;
 
     const effectItems = Array.isArray(effect.effects)
         ? effect.effects
@@ -302,7 +308,7 @@ function cloneProfileEffect(effect: ProfileEffect | null | undefined): ProfileEf
     if (!effectItems.length && !reducedMotionSrc && !thumbnailPreviewSrc && !staticFrameSrc) return null;
 
     return {
-        skuId: String(effect.skuId),
+        skuId,
         title: effect.title,
         description: effect.description,
         accessibilityLabel: effect.accessibilityLabel,
@@ -948,7 +954,7 @@ function ProfileEffectPicker({ value, presetId, onChange, onPresetChange }: {
         let cancelled = false;
 
         void Promise.allSettled(PROFILE_EFFECTS.map(async preset => {
-            const { body }: { body: { items: ProfileEffect[]; }; } = await RestAPI.get({
+            const { body }: { body: { items: ProfileEffectData[]; }; } = await RestAPI.get({
                 url: Constants.Endpoints.COLLECTIBLES_PRODUCTS(preset.id)
             });
 
