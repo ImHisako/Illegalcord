@@ -34,8 +34,25 @@ function resetState() {
     seenCodes.clear();
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+}
+
 function toError(error: unknown) {
-    return error instanceof Error ? error : new Error(String(error));
+    if (error instanceof Error) return error;
+
+    const body = isRecord(error) && isRecord(error.body) ? error.body : null;
+    const message = body && typeof body.message === "string"
+        ? body.message
+        : isRecord(error) && typeof error.message === "string"
+            ? error.message
+            : null;
+    const status = isRecord(error) && typeof error.status === "number" ? error.status : null;
+    const detail = status !== null
+        ? `Discord returned status ${status}${message ? `: ${message}` : ""}`
+        : message ?? "Discord rejected the gift redemption";
+
+    return new Error(/[.!?]$/.test(detail) ? detail : `${detail}.`);
 }
 
 function isOwnMessage(message: Message) {
