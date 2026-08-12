@@ -13,6 +13,7 @@ export { startNightyAltDetection, stopNightyAltDetection, waitForNightyGiftCode 
 
 const NONECAP_SOLVES_URL = "https://api.nonecap.com/v1/solves";
 const NOCAPTCHAAI_URL = "https://api.nocaptchaai.com";
+const VOIDSOLVER_URL = "https://api.voidsolver.tech";
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const SOLVE_TIMEOUT_MS = 115_000;
 const activeSolves = new Set<AbortController>();
@@ -136,6 +137,37 @@ function parseNoCaptchaAI(data: unknown) {
     };
 }
 
+async function requestVoidSolver(path: string, apiKey: string, signal: AbortSignal, body?: Record<string, unknown>) {
+    const response = await fetch(`${VOIDSOLVER_URL}${path}`, {
+        method: body ? "POST" : "GET",
+        headers: {
+            Authorization: `Bearer ${apiKey}`,
+            ...(body ? { "Content-Type": "application/json" } : {})
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        redirect: "error",
+        signal
+    });
+    const data = await readJson(response);
+
+    if (!response.ok) {
+        throw new Error(getErrorMessage(data, `VoidSolver returned status ${response.status}.`));
+    }
+
+    return data;
+}
+
+function parseVoidSolver(data: unknown) {
+    if (!isRecord(data)) throw new Error("VoidSolver returned an invalid response.");
+
+    return {
+        taskId: typeof data.taskId === "string" ? data.taskId : null,
+        status: typeof data.status === "string" ? data.status : null,
+        token: typeof data.uuid === "string" ? data.uuid : null,
+        error: getErrorMessage(data, "VoidSolver could not solve the CAPTCHA.")
+    };
+}
+
 async function solveWithNoneCap(apiKey: string, sitekey: string, rqdata: string | undefined, url: string, userAgent: string, signal: AbortSignal): Promise<NativeCaptchaResponse> {
     let solve = parseSolve(await requestNoneCap(
         `${NONECAP_SOLVES_URL}?wait=90`,
@@ -203,20 +235,52 @@ async function solveWithNoCaptchaAI(apiKey: string, sitekey: string, rqdata: str
     return { success: true, token: task.token };
 }
 
+async function solveWithVoidSolver(apiKey: string, proxy: string | undefined, sitekey: string, rqdata: string | undefined, url: string, userAgent: string, signal: AbortSignal): Promise<NativeCaptchaResponse> {
+    let task = parseVoidSolver(await requestVoidSolver("/solve-advance", apiKey, signal, {
+        url,
+        sitekey,
+        user_agent: userAgent,
+        ...(proxy ? { proxy } : {}),
+        ...(rqdata ? { rqdata } : {})
+    }));
+
+    if (!task.taskId || !/^[a-zA-Z0-9_-]{1,256}$/.test(task.taskId)) {
+        return { success: false, error: "VoidSolver returned an invalid task ID." };
+    }
+    const { taskId } = task;
+
+    do {
+        await sleep(2000, undefined, { signal });
+        task = parseVoidSolver(await requestVoidSolver(
+            `/solve-advance/task/${encodeURIComponent(taskId)}`,
+            apiKey,
+            signal
+        ));
+    } while (task.status === "solving");
+
+    if (task.status !== "success" || !task.token) {
+        return { success: false, error: task.error };
+    }
+
+    return { success: true, token: task.token };
+}
+
 export async function solveCaptcha(
     _: IpcMainInvokeEvent,
     provider: string,
     apiKey: string,
+    proxy: string | undefined,
     sitekey: string,
     rqdata: string | undefined,
     pageUrl: string,
     userAgent: string
 ): Promise<NativeCaptchaResponse> {
-    if (provider !== "nonecap" && provider !== "nocaptchaai") return { success: false, error: "CAPTCHA service is invalid." };
+    if (provider !== "nonecap" && provider !== "nocaptchaai" && provider !== "voidsolver") return { success: false, error: "CAPTCHA service is invalid." };
     const key = typeof apiKey === "string" ? apiKey.trim() : "";
     const url = typeof pageUrl === "string" ? validatePageUrl(pageUrl) : null;
     if (!key || key.length > 512 || /[\r\n]/.test(key)) return { success: false, error: "CAPTCHA API key is invalid." };
     if (typeof sitekey !== "string" || !sitekey || sitekey.length > 256) return { success: false, error: "CAPTCHA site key is invalid." };
+    if (proxy !== undefined && (typeof proxy !== "string" || proxy.length > 2048 || /[\r\n]/.test(proxy))) return { success: false, error: "CAPTCHA proxy is invalid." };
     if (rqdata !== undefined && (typeof rqdata !== "string" || rqdata.length > 20_000)) return { success: false, error: "CAPTCHA request data is invalid." };
     if (!url) return { success: false, error: "Discord page URL is invalid." };
     if (typeof userAgent !== "string" || userAgent.length > 512 || /[\r\n]/.test(userAgent)) return { success: false, error: "User agent is invalid." };
@@ -226,14 +290,14 @@ export async function solveCaptcha(
     activeSolves.add(controller);
 
     try {
-        return provider === "nocaptchaai"
-            ? await solveWithNoCaptchaAI(key, sitekey, rqdata, url, userAgent, controller.signal)
-            : await solveWithNoneCap(key, sitekey, rqdata, url, userAgent, controller.signal);
+        if (provider === "nocaptchaai") return await solveWithNoCaptchaAI(key, sitekey, rqdata, url, userAgent, controller.signal);
+        if (provider === "voidsolver") return await solveWithVoidSolver(key, proxy, sitekey, rqdata, url, userAgent, controller.signal);
+        return await solveWithNoneCap(key, sitekey, rqdata, url, userAgent, controller.signal);
     } catch (error) {
         return {
             success: false,
             error: error instanceof Error && error.name === "AbortError"
-                ? `${provider === "nocaptchaai" ? "NoCaptchaAI" : "NoneCap"} solve timed out.`
+                ? `${provider === "nocaptchaai" ? "NoCaptchaAI" : provider === "voidsolver" ? "VoidSolver" : "NoneCap"} solve timed out.`
                 : error instanceof Error
                     ? error.message
                     : "CAPTCHA solve failed."

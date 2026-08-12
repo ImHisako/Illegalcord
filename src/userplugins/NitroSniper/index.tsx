@@ -168,7 +168,9 @@ export default definePlugin({
         const { captchaProvider } = settings.store;
         const apiKey = captchaProvider === "nocaptchaai"
             ? settings.store.noCaptchaAiApiKey.trim()
-            : settings.store.noneCapApiKey.trim();
+            : captchaProvider === "voidsolver"
+                ? settings.store.voidSolverApiKey.trim()
+                : settings.store.noneCapApiKey.trim();
         if (!claiming || !apiKey || props.captchaService !== "hcaptcha" || !Native) {
             return showCaptcha(props);
         }
@@ -176,6 +178,7 @@ export default definePlugin({
         const result = await Native.solveCaptcha(
             captchaProvider,
             apiKey,
+            captchaProvider === "voidsolver" ? settings.store.voidSolverProxy.trim() || undefined : undefined,
             props.sitekey,
             props.options.rqdata,
             `${location.origin}/channels/@me`,

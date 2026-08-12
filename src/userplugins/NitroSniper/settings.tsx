@@ -59,7 +59,8 @@ export const settings = definePluginSettings({
         description: "Service used to solve Nitro redemption hCaptchas.",
         options: [
             { label: "NoneCap", value: "nonecap", default: true },
-            { label: "NoCaptchaAI", value: "nocaptchaai" }
+            { label: "NoCaptchaAI", value: "nocaptchaai" },
+            { label: "VoidSolver", value: "voidsolver" }
         ]
     },
     noneCapApiKey: {
@@ -83,6 +84,24 @@ export const settings = definePluginSettings({
             type: "password",
             autoComplete: "new-password"
         }
+    },
+    voidSolverApiKey: {
+        type: OptionType.STRING,
+        description: "VoidSolver API key for automatically solving Nitro redemption hCaptchas. Leave empty to use Discord's CAPTCHA modal.",
+        default: "",
+        placeholder: "VoidSolver API key",
+        hidden: () => settings.store.captchaProvider !== "voidsolver",
+        componentProps: {
+            type: "password",
+            autoComplete: "new-password"
+        }
+    },
+    voidSolverProxy: {
+        type: OptionType.STRING,
+        description: "Optional proxy sent to VoidSolver in http://user:pass@ip:port format.",
+        default: "",
+        placeholder: "http://user:pass@ip:port",
+        hidden: () => settings.store.captchaProvider !== "voidsolver"
     },
     webhookUrl: {
         type: OptionType.STRING,
