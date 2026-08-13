@@ -1,0 +1,173 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+.vc-illegal-ml-root {
+    display: flex;
+    flex-direction: column;
+    height: min(70vh, 720px);
+}
+
+.vc-illegal-ml-toolbar {
+    display: grid;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.vc-illegal-ml-tabs,
+.vc-illegal-ml-actions,
+.vc-illegal-ml-backup-actions,
+.vc-illegal-ml-entry-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vc-illegal-ml-stats {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.vc-illegal-ml-stats span {
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+    border-radius: 6px;
+    color: var(--text-muted);
+    background: var(--background-secondary);
+    font-size: 11px;
+    text-align: center;
+}
+
+.vc-illegal-ml-stats strong {
+    color: var(--text-normal);
+    font-size: 15px;
+}
+
+.vc-illegal-ml-search-help {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.vc-illegal-ml-search-help span {
+    display: block;
+    margin-top: 6px;
+    line-height: 1.5;
+}
+
+.vc-illegal-ml-scroller {
+    padding: 12px 16px 20px;
+}
+
+.vc-illegal-ml-entry {
+    padding: 12px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--background-secondary);
+}
+
+.vc-illegal-ml-entry-protected {
+    border-color: var(--status-positive);
+    box-shadow: inset 3px 0 var(--status-positive);
+}
+
+.vc-illegal-ml-entry-header,
+.vc-illegal-ml-entry-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.vc-illegal-ml-entry-footer {
+    margin-top: 10px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.vc-illegal-ml-meta {
+    margin-left: 8px;
+    color: var(--text-muted);
+}
+
+.vc-illegal-ml-status {
+    align-self: flex-start;
+    padding: 2px 7px;
+    border-radius: 999px;
+    color: var(--white-500);
+    background: var(--status-danger);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.vc-illegal-ml-status-edited {
+    background: var(--status-warning);
+}
+
+.vc-illegal-ml-status-ghostPinged {
+    background: var(--status-positive);
+}
+
+.vc-illegal-ml-content {
+    margin-top: 10px;
+    color: var(--text-normal);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.vc-illegal-ml-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.vc-illegal-ml-attachments span {
+    padding: 3px 7px;
+    border-radius: 4px;
+    color: var(--text-muted);
+    background: var(--background-primary);
+    font-size: 11px;
+}
+
+.vc-illegal-ml-history {
+    margin-top: 10px;
+    color: var(--text-muted);
+}
+
+.vc-illegal-ml-history-entry {
+    padding: 8px;
+    margin-top: 6px;
+    border-left: 2px solid var(--status-warning);
+    background: var(--background-primary);
+}
+
+.vc-illegal-ml-history-entry time {
+    font-size: 11px;
+}
+
+.vc-illegal-ml-empty {
+    padding: 40px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.vc-illegal-ml-load-more {
+    width: 100%;
+}
+
+@media (width <= 900px) {
+    .vc-illegal-ml-stats {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .vc-illegal-ml-entry-footer {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
