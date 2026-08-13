@@ -245,6 +245,7 @@ async function solveWithVoidSolver(apiKey: string, proxy: string | undefined, si
     }));
 
     if (!task.taskId || !/^[a-zA-Z0-9_-]{1,256}$/.test(task.taskId)) {
+        await requestVoidSolver("/balance", apiKey, signal);
         return { success: false, error: "VoidSolver returned an invalid task ID." };
     }
     const { taskId } = task;
