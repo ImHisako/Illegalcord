@@ -8,18 +8,21 @@ import "./style.css";
 
 import { ApplicationCommandInputType, ApplicationCommandOptionType, findOption, sendBotMessage } from "@api/Commands";
 import { findGroupChildrenByChildId, type NavContextMenuPatchCallback } from "@api/ContextMenu";
+import * as DataStore from "@api/DataStore";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
-import { ImageIcon } from "@components/Icons";
+import { EyeIcon, ImageIcon } from "@components/Icons";
 import { Margins } from "@components/margins";
 import { Notice } from "@components/Notice";
+import SettingsPlugin from "@plugins/_core/settings";
 import { copyWithToast } from "@utils/discord";
+import { LazyComponent } from "@utils/lazyReact";
 import { Logger } from "@utils/Logger";
-import { classes, parseUrl } from "@utils/misc";
+import { classes, parseUrl, removeFromArray } from "@utils/misc";
 import { formatDurationVerbose, makeCodeblock } from "@utils/text";
 import definePlugin, { OptionType, type PluginNative } from "@utils/types";
 import type { CommandArgument, CommandContext, User } from "@vencord/discord-types";
-import { IconUtils, Menu, SelectedChannelStore, showToast, Toasts } from "@webpack/common";
+import { IconUtils, MaskedLink, Menu, SelectedChannelStore, SettingsRouter, showToast, Toasts } from "@webpack/common";
 import type { ComponentProps } from "react";
 
 interface DomainInfo {
@@ -72,14 +75,28 @@ interface ImageContextProps {
     src?: string;
 }
 
+const CORDCAT_TITLES = {
+    query: "full lookup",
+    user: "user lookup",
+    invite: "invite lookup",
+    guild: "guild widget",
+    status: "service status"
+} as const;
+
+type CordCatTool = keyof typeof CORDCAT_TITLES;
+
+const SETTINGS_ENTRY_KEY = "illegalcord_osint_fanboy_club";
+export const OSINT_HISTORY_KEY = "OSINTToolkit_recentInvestigations";
 const Native = VencordNative.pluginHelpers.OSINTToolkit as PluginNative<typeof import("./native")>;
+const OSINTFanboyClub = LazyComponent(() => require("./components/OSINTFanboyClub").default);
 const REQUEST_TIMEOUT_MS = 12_000;
 const logger = new Logger("OSINTToolkit");
 const activeRequests = new Set<AbortController>();
 let pluginActive = true;
 let nextGeoSeeerApiKey = 0;
+let recentInvestigationsReady = Promise.resolve();
 
-const OSINT_TOOLS = [
+export const OSINT_TOOLS = [
     { id: "see-know", name: "See-Know", url: "https://see-know.vip/", description: "Searches public web signals." },
     { id: "epieos", name: "Epieos", url: "https://epieos.com/", description: "Checks public email and phone traces." },
     { id: "osintx", name: "Osintx_", url: "https://www.osintx.io/", description: "Collects OSINT links and workflows." },
@@ -91,20 +108,20 @@ const OSINT_TOOLS = [
     { id: "tempemail", name: "Snapmail", url: "https://www.snapmail.in/", description: "Creates temporary email inboxes." }
 ] as const;
 
-const OSINT_RESOURCES = [
+export const OSINT_RESOURCES = [
     { id: "osint-catalog", name: "Osint Catalog", url: "https://osint-catalog.xyz/", description: "Catalog of OSINT tools and resources." },
     { id: "pikaosint", name: "PikaOSINT", url: "https://pikaosint.pages.dev/", description: "Curated OSINT tools collection." },
     { id: "osintframework", name: "OSINT Framework", url: "https://osintframework.com/", description: "Categorized OSINT resource index." },
     { id: "photo-osint", name: "Photo OSINT", url: "https://start.me/p/0PgzqO/photo-osint", description: "Photo investigation resource board." }
 ] as const;
 
-const OPSEC_RESOURCES = [
+export const OPSEC_RESOURCES = [
     { id: "fake-name-generator", name: "Fake Name Generator", url: "https://www.fakenamegenerator.com/", description: "Generates fictional identity details." },
     { id: "random-user", name: "Random User", url: "https://randomuser.me/", description: "Generates random user profiles." },
     { id: "this-person-does-not-exist", name: "This Person Does Not Exist", url: "https://thispersondoesnotexist.com/", description: "Generates synthetic profile photos." }
 ] as const;
 
-const PRIVACY_BROWSERS = [
+export const PRIVACY_BROWSERS = [
     { id: "waterfox", name: "Waterfox", url: "https://www.waterfox.com/", description: "Privacy-focused Firefox-based browser." },
     { id: "mullvad", name: "Mullvad Browser", url: "https://mullvad.net/en/download/browser/windows", description: "Privacy browser developed with the Tor Project." },
     { id: "librewolf", name: "LibreWolf", url: "https://librewolf.net/", description: "Privacy-focused Firefox fork." }
@@ -114,7 +131,16 @@ const BREACH_VIP_FIELDS: readonly string[] = [
     "uuid", "username", "ip", "domain", "discordid", "steamid", "email", "password", "name", "phone"
 ];
 
-const settings = definePluginSettings({
+export const settings = definePluginSettings({
+    cordCatApiKey: {
+        type: OptionType.STRING,
+        description: "CordCat API key used by the CordCat slash commands.",
+        default: "",
+        placeholder: "cc_your_api_key_here",
+        componentProps: {
+            type: "password"
+        }
+    },
     geoSeeerApiKey: {
         type: OptionType.STRING,
         description: "GeoSeeer API keys used for image geolocation. Enter one key per line.",
@@ -129,13 +155,19 @@ const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Log lookup details while debugging.",
         default: false
+    },
+    clearRecentInvestigationsOnRestart: {
+        type: OptionType.BOOLEAN,
+        description: "Clear recent investigations whenever OSINTToolkit starts.",
+        default: true
     }
 });
 
 function OSINTToolkitSettingsAbout() {
     return (
         <Notice.Warning className={Margins.bottom8}>
-            <p>Commands: /domain, /iplookup, /myip, /usersearch and /breachvip.</p>
+            <p>Commands: /domain, /iplookup, /myip, /usersearch, /breachvip, /cordcat, /cordcatuser, /cordcatinvite, /cordcatguild and /cordcatstatus.</p>
+            <p>Get a CordCat API key from <MaskedLink href="https://dis.cord.cat/dashboard">the CordCat dashboard</MaskedLink> and see <MaskedLink href="https://dis.cord.cat/docs#intro">the API documentation</MaskedLink>. The status command works without a key.</p>
             <p>Right click a message to copy author identifiers, open username searches and browse OSINT resource lists.</p>
             <p>Right click an image and choose Geo Osint to analyze its likely location privately in your client.</p>
         </Notice.Warning>
@@ -417,7 +449,7 @@ function createIPMessage(info: IPInfo): string {
     ].join("\n"), "txt");
 }
 
-function getUsernameSearchUrls(username: string) {
+export function getUsernameSearchUrls(username: string) {
     const encoded = encodeURIComponent(username);
 
     return {
@@ -453,6 +485,95 @@ function createBreachVipMessage(results: unknown[], total: number): string {
 
     if (shown < total) lines.push("", `Showing ${shown} of ${total} results.`);
     return makeCodeblock(lines.join("\n"), "json");
+}
+
+function createCordCatMessage(tool: CordCatTool, data: unknown): string {
+    const serialized = JSON.stringify(data, null, 2) ?? "null";
+    const truncated = serialized.length > 1_750
+        ? `${serialized.slice(0, 1_750)}\n... Response truncated.`
+        : serialized;
+
+    return `**CordCat ${CORDCAT_TITLES[tool]}**\n${makeCodeblock(truncated, "json")}`;
+}
+
+async function executeCordCat(tool: CordCatTool, value: string, refresh: boolean, ctx: CommandContext) {
+    try {
+        const data = await lookupCordCat(tool, value, refresh);
+        if (!pluginActive) return;
+
+        sendBotMessage(ctx.channel.id, { content: createCordCatMessage(tool, data) });
+    } catch (error) {
+        sendBotMessage(ctx.channel.id, {
+            content: error instanceof Error ? error.message : "Could not complete the CordCat lookup."
+        });
+    }
+}
+
+export async function lookupDomain(input: string): Promise<DomainInfo> {
+    const domain = normalizeDomain(input);
+    if (!isValidDomain(domain)) throw new Error("Invalid domain. Use a root domain like example.com.");
+
+    const info = await getDomainInfo(domain);
+    if (!info) throw new Error(`Could not retrieve public RDAP information for ${domain}.`);
+    return info;
+}
+
+export async function lookupIP(input?: string): Promise<IPInfo> {
+    const ip = input?.trim();
+    if (ip && !isPublicIPv4(ip)) throw new Error("Invalid public IPv4 address. Use an address like 8.8.8.8.");
+
+    const info = await getIPInfo(ip);
+    if (!info) throw new Error("Could not retrieve public IP information.");
+    return info;
+}
+
+export function lookupUsername(input: string) {
+    const username = normalizeUsername(input);
+    if (!username) throw new Error("Invalid username.");
+    return getUsernameSearchUrls(username);
+}
+
+export async function lookupBreachVip(
+    term: string,
+    fields: string[],
+    minecraft: boolean,
+    wildcard: boolean,
+    caseSensitive: boolean
+): Promise<{ results: unknown[]; total: number; }> {
+    const result = await Native.searchBreachVip(term, fields, minecraft, wildcard, caseSensitive);
+    if (!result.success) throw new Error(result.error);
+    return { results: result.results, total: result.total };
+}
+
+export async function lookupCordCat(tool: CordCatTool, value: string, refresh: boolean): Promise<unknown> {
+    const apiKey = settings.store.cordCatApiKey.trim();
+    if (tool !== "status" && !apiKey) {
+        throw new Error("Your CordCat API key is missing. Add it in Osint Fanboy club or the OSINTToolkit settings.");
+    }
+
+    debug("Querying CordCat", tool, value);
+    const result = await Native.queryCordCat(tool, value, refresh, apiKey);
+    if (!result.success) throw new Error(result.error);
+    return result.data;
+}
+
+export async function geolocateImage(imageUrl: string): Promise<GeoAnalysis> {
+    const apiKeys = [...new Set(settings.store.geoSeeerApiKey.split(/\r?\n/).map(key => key.trim()).filter(Boolean))];
+    if (!apiKeys.length) throw new Error("Your GeoSeeer API keys are missing. Add at least one key in Osint Fanboy club.");
+
+    const parsedUrl = parseUrl(imageUrl);
+    if (!parsedUrl || (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:")) {
+        throw new Error("Enter a public HTTP or HTTPS image URL.");
+    }
+
+    const analysis = await analyzeGeoImage(parsedUrl.href, apiKeys);
+    if (!analysis) throw new Error("GeoSeeer returned an invalid response.");
+    return analysis;
+}
+
+export async function getRecentInvestigations(): Promise<unknown> {
+    await recentInvestigationsReady;
+    return DataStore.get<unknown>(OSINT_HISTORY_KEY);
 }
 
 function parseGeoAnalysis(data: unknown): GeoAnalysis | undefined {
@@ -526,7 +647,7 @@ function getAvatarSearchUrl(avatarUrl: string): string {
     return `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(avatarUrl)}`;
 }
 
-function openExternal(url: string) {
+export function openExternal(url: string) {
     VencordNative.native.openExternal(url);
 }
 
@@ -699,7 +820,7 @@ const imageContextMenuPatch: NavContextMenuPatchCallback = (children, { src }: I
 
 export default definePlugin({
     name: "OSINTToolkit",
-    description: "Adds OSINT commands and quick lookup links for public domain, IP and username checks.",
+    description: "Adds OSINT commands and quick lookup links, including CordCat Discord intelligence tools.",
     tags: ["Utility", "Privacy"],
     authors: [{ name: "irritably", id: 928787166916640838n }],
     settings,
@@ -709,10 +830,25 @@ export default definePlugin({
         message: messageContextMenuPatch,
         "image-context": imageContextMenuPatch
     },
+    toolboxActions: {
+        "Open Osint Fanboy club": () => SettingsRouter.openUserSettings(`${SETTINGS_ENTRY_KEY}_panel`)
+    },
 
     start() {
         pluginActive = true;
         activeRequests.clear();
+        recentInvestigationsReady = settings.store.clearRecentInvestigationsOnRestart
+            ? DataStore.del(OSINT_HISTORY_KEY)
+            : Promise.resolve();
+
+        if (!SettingsPlugin.customEntries.some(entry => entry.key === SETTINGS_ENTRY_KEY)) {
+            SettingsPlugin.customEntries.push({
+                key: SETTINGS_ENTRY_KEY,
+                title: "Osint Fanboy club",
+                Component: OSINTFanboyClub,
+                Icon: EyeIcon
+            });
+        }
     },
 
     commands: [
@@ -908,11 +1044,113 @@ export default definePlugin({
                     content: result.success ? createBreachVipMessage(result.results, result.total) : result.error
                 });
             }
+        },
+        {
+            name: "cordcat",
+            description: "Runs a full CordCat lookup for a Discord user ID.",
+            inputType: ApplicationCommandInputType.BUILT_IN,
+            options: [
+                {
+                    name: "discord_id",
+                    description: "Discord user ID to look up.",
+                    type: ApplicationCommandOptionType.STRING,
+                    required: true
+                },
+                {
+                    name: "refresh",
+                    description: "Bypasses CordCat's cached result and returns changes.",
+                    type: ApplicationCommandOptionType.BOOLEAN
+                }
+            ],
+            execute: async (args: CommandArgument[], ctx: CommandContext) => {
+                const discordId = findOption<string>(args, "discord_id", "").trim();
+                if (!/^\d{17,20}$/.test(discordId)) {
+                    sendBotMessage(ctx.channel.id, { content: "Invalid Discord user ID. Use a 17 to 20 digit snowflake." });
+                    return;
+                }
+
+                await executeCordCat("query", discordId, findOption<boolean>(args, "refresh", false), ctx);
+            }
+        },
+        {
+            name: "cordcatuser",
+            description: "Fetches a Discord user's public profile through CordCat.",
+            inputType: ApplicationCommandInputType.BUILT_IN,
+            options: [
+                {
+                    name: "discord_id",
+                    description: "Discord user ID to look up.",
+                    type: ApplicationCommandOptionType.STRING,
+                    required: true
+                }
+            ],
+            execute: async (args: CommandArgument[], ctx: CommandContext) => {
+                const discordId = findOption<string>(args, "discord_id", "").trim();
+                if (!/^\d{17,20}$/.test(discordId)) {
+                    sendBotMessage(ctx.channel.id, { content: "Invalid Discord user ID. Use a 17 to 20 digit snowflake." });
+                    return;
+                }
+
+                await executeCordCat("user", discordId, false, ctx);
+            }
+        },
+        {
+            name: "cordcatinvite",
+            description: "Validates a Discord invite through CordCat.",
+            inputType: ApplicationCommandInputType.BUILT_IN,
+            options: [
+                {
+                    name: "code",
+                    description: "Discord invite code without the URL.",
+                    type: ApplicationCommandOptionType.STRING,
+                    required: true
+                }
+            ],
+            execute: async (args: CommandArgument[], ctx: CommandContext) => {
+                const code = findOption<string>(args, "code", "").trim();
+                if (!/^[a-z0-9_-]{2,100}$/i.test(code)) {
+                    sendBotMessage(ctx.channel.id, { content: "Invalid Discord invite code." });
+                    return;
+                }
+
+                await executeCordCat("invite", code, false, ctx);
+            }
+        },
+        {
+            name: "cordcatguild",
+            description: "Fetches a Discord server's public widget through CordCat.",
+            inputType: ApplicationCommandInputType.BUILT_IN,
+            options: [
+                {
+                    name: "guild_id",
+                    description: "Discord server ID with its public widget enabled.",
+                    type: ApplicationCommandOptionType.STRING,
+                    required: true
+                }
+            ],
+            execute: async (args: CommandArgument[], ctx: CommandContext) => {
+                const guildId = findOption<string>(args, "guild_id", "").trim();
+                if (!/^\d{17,20}$/.test(guildId)) {
+                    sendBotMessage(ctx.channel.id, { content: "Invalid Discord server ID. Use a 17 to 20 digit snowflake." });
+                    return;
+                }
+
+                await executeCordCat("guild", guildId, false, ctx);
+            }
+        },
+        {
+            name: "cordcatstatus",
+            description: "Shows the current CordCat service status.",
+            inputType: ApplicationCommandInputType.BUILT_IN,
+            execute: async (_args: CommandArgument[], ctx: CommandContext) => {
+                await executeCordCat("status", "", false, ctx);
+            }
         }
     ],
 
     stop() {
         pluginActive = false;
         abortActiveRequests();
+        removeFromArray(SettingsPlugin.customEntries, entry => entry.key === SETTINGS_ENTRY_KEY);
     }
 });

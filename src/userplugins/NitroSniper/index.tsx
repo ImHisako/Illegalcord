@@ -8,11 +8,11 @@ import { Logger } from "@utils/Logger";
 import definePlugin, { type PluginNative } from "@utils/types";
 import { Message } from "@vencord/discord-types";
 import { findByPropsLazy } from "@webpack";
-import { ChannelStore, IconUtils, UserStore } from "@webpack/common";
+import { ChannelStore, GuildStore, IconUtils, UserStore } from "@webpack/common";
 
 import { resolveGiftType } from "./giftCode";
 import { CaptchaWarning, settings } from "./settings";
-import type { CaptchaProps, CaptchaResult, ClaimRequest, WebhookResult } from "./types";
+import type { CaptchaProps, CaptchaResult, ClaimRequest, VoidSolverTaskResult, WebhookResult } from "./types";
 import { sendClaimWebhook } from "./webhook";
 
 const GIFT_LINK_REGEX = /(?:discord\.gift\/|discord\.com\/gifts?\/)([a-zA-Z0-9]{16,24})/;
@@ -24,6 +24,7 @@ const Native = VencordNative?.pluginHelpers?.NitroSniper as PluginNative<typeof 
 let startTime = 0;
 let claiming = false;
 let altListenerId = 0;
+let voidSolverTask: VoidSolverTaskResult | undefined;
 const claimQueue: ClaimRequest[] = [];
 const seenCodes = new Set<string>();
 
@@ -31,6 +32,7 @@ function resetState() {
     startTime = Date.now();
     claimQueue.length = 0;
     claiming = false;
+    voidSolverTask = undefined;
     seenCodes.clear();
 }
 
@@ -76,25 +78,34 @@ function createClaimRequest(message: Message): ClaimRequest | null {
     if (!code) return null;
 
     const authorId = message.author?.id;
+    const channel = ChannelStore.getChannel(message.channel_id);
+    const guildId = channel?.guild_id;
+    const currentUser = UserStore.getCurrentUser();
 
     return {
         code,
+        source: "discord",
+        detectedAccount: currentUser.globalName ?? currentUser.username,
+        detectedAccountId: currentUser.id,
         authorId,
         authorName: message.author?.globalName ?? message.author?.username,
         authorUsername: message.author?.username,
         authorAvatarUrl: message.author ? IconUtils.getUserAvatarURL(message.author, false, 128) : undefined,
         channelId: message.channel_id,
-        guildId: ChannelStore.getChannel(message.channel_id)?.guild_id,
+        channelName: channel?.name,
+        guildId,
+        guildName: guildId ? GuildStore.getGuild(guildId)?.name : undefined,
         messageId: message.id
     };
 }
 
-function notifyClaim(result: WebhookResult, request: ClaimRequest, giftType: string | null) {
+function notifyClaim(result: WebhookResult, request: ClaimRequest, giftType: string | null, task?: VoidSolverTaskResult) {
     void sendClaimWebhook(
         settings.store.webhookUrl,
         result,
         request,
-        giftType
+        giftType,
+        task
     ).catch(webhookError => {
         logger.error("Failed to send NitroSniper webhook notification", webhookError);
     });
@@ -124,9 +135,16 @@ async function listenForNightyAltGifts() {
         }
 
         while (listenerId === altListenerId) {
-            const code = await Native.waitForNightyGiftCode();
-            if (!code || listenerId !== altListenerId) return;
-            enqueueClaim({ code });
+            const detection = await Native.waitForNightyGiftCode();
+            if (!detection || listenerId !== altListenerId) return;
+            enqueueClaim({
+                code: detection.code,
+                source: "nighty",
+                detectedAccount: detection.accountName,
+                authorName: detection.authorName,
+                channelName: detection.channelName,
+                guildName: detection.guildName
+            });
         }
     } catch (error) {
         logger.error("Nighty alt gift detection failed.", toError(error));
@@ -135,13 +153,15 @@ async function listenForNightyAltGifts() {
 
 function handleClaimSuccess(request: ClaimRequest, giftType: Promise<string | null>) {
     logger.info(`Successfully redeemed code: ${request.code}`);
-    void giftType.then(type => notifyClaim("claimed", request, type));
+    const task = voidSolverTask;
+    void giftType.then(type => notifyClaim("claimed", request, type, task));
     continueQueue();
 }
 
 function handleClaimFailure(request: ClaimRequest, error: Error, giftType: Promise<string | null>) {
     logger.error(`Failed to redeem code: ${request.code}`, error);
-    void giftType.then(type => notifyClaim("failed", request, type));
+    const task = voidSolverTask;
+    void giftType.then(type => notifyClaim("failed", request, type, task));
     continueQueue();
 }
 
@@ -152,6 +172,7 @@ function processQueue() {
     if (!request) return;
 
     claiming = true;
+    voidSolverTask = undefined;
     const giftType = settings.store.webhookUrl.trim()
         ? resolveGiftType(request.code)
         : Promise.resolve(null);
@@ -201,6 +222,7 @@ export default definePlugin({
             `${location.origin}/channels/@me`,
             navigator.userAgent
         );
+        voidSolverTask = result.task;
         if (!result.success || !result.token) {
             logger.error(result.error ?? "CAPTCHA solve failed.");
             return showCaptcha(props);

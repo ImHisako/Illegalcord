@@ -9,7 +9,9 @@ import { type FSWatcher, watch } from "fs";
 import { open } from "fs/promises";
 import { resolve, sep } from "path";
 
-const GIFT_LOG_REGEX = /\[GIFT DETECTED\].{0,500}?\| Code: ([a-zA-Z0-9]{16,24}) \|/;
+import type { NightyGiftDetection } from "./types";
+
+const GIFT_LOG_REGEX = /\[GIFT DETECTED\] Account: (.{1,100}?) \| Code: ([a-zA-Z0-9]{16,24}) \| Server: (.{1,500}?) \| Channel: (.{1,200}?) \| Author: (.{1,100}?)\s*$/;
 const MAX_READ_BYTES = 1024 * 1024;
 
 let watcher: FSWatcher | undefined;
@@ -18,17 +20,17 @@ let logOffset = 0;
 let pendingText = "";
 let reading = false;
 let readAgain = false;
-const giftQueue: string[] = [];
+const giftQueue: NightyGiftDetection[] = [];
 const seenCodes = new Set<string>();
-const waiters: Array<(code: string | null) => void> = [];
+const waiters: Array<(detection: NightyGiftDetection | null) => void> = [];
 
-function enqueueGift(code: string) {
-    if (seenCodes.has(code)) return;
-    seenCodes.add(code);
+function enqueueGift(detection: NightyGiftDetection) {
+    if (seenCodes.has(detection.code)) return;
+    seenCodes.add(detection.code);
 
     const waiter = waiters.shift();
-    if (waiter) waiter(code);
-    else giftQueue.push(code);
+    if (waiter) waiter(detection);
+    else giftQueue.push(detection);
 }
 
 async function readNewLogEntries() {
@@ -60,8 +62,16 @@ async function readNewLogEntries() {
             const lines = pendingText.split(/\r?\n/);
             pendingText = lines.pop() ?? "";
             for (const line of lines) {
-                const code = line.match(GIFT_LOG_REGEX)?.[1];
-                if (code) enqueueGift(code);
+                const match = line.match(GIFT_LOG_REGEX);
+                if (!match) continue;
+
+                enqueueGift({
+                    accountName: match[1].trim(),
+                    code: match[2],
+                    guildName: match[3].trim(),
+                    channelName: match[4].trim(),
+                    authorName: match[5].trim()
+                });
             }
         } finally {
             await file.close();
@@ -122,9 +132,9 @@ export async function startNightyAltDetection(_: IpcMainInvokeEvent): Promise<st
     }
 }
 
-export function waitForNightyGiftCode(_: IpcMainInvokeEvent): Promise<string | null> {
-    const code = giftQueue.shift();
-    if (code) return Promise.resolve(code);
+export function waitForNightyGiftCode(_: IpcMainInvokeEvent): Promise<NightyGiftDetection | null> {
+    const detection = giftQueue.shift();
+    if (detection) return Promise.resolve(detection);
     if (!watcher) return Promise.resolve(null);
 
     return new Promise(resolve => waiters.push(resolve));

@@ -6,13 +6,26 @@
 
 export interface ClaimRequest {
     code: string;
+    source: "discord" | "nighty";
+    detectedAccount?: string;
+    detectedAccountId?: string;
     authorId?: string;
     authorName?: string;
     authorUsername?: string;
     authorAvatarUrl?: string;
     channelId?: string;
+    channelName?: string;
     guildId?: string;
+    guildName?: string;
     messageId?: string;
+}
+
+export interface NightyGiftDetection {
+    code: string;
+    accountName: string;
+    guildName: string;
+    channelName: string;
+    authorName: string;
 }
 
 export type WebhookResult = "claimed" | "failed";
@@ -71,6 +84,17 @@ export interface NativeCaptchaResponse {
     success: boolean;
     token?: string;
     error?: string;
+    task?: VoidSolverTaskResult;
+}
+
+export interface VoidSolverTaskResult {
+    taskId: string;
+    externalTaskId?: string;
+    status: string;
+    solveTime?: number;
+    site?: string;
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 export interface GiftCodeResolution {

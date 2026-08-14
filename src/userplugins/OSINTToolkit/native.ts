@@ -10,13 +10,17 @@ type GeoAnalyzeResult = { success: true; data: unknown; } | { success: false; er
 type BreachVipSearchResult =
     | { success: true; results: unknown[]; total: number; }
     | { success: false; error: string; };
+type CordCatResult = { success: true; data: unknown; } | { success: false; error: string; };
 
 const GEO_API_URL = "https://geoseeer.com/api/v1/analyze";
 const BREACH_VIP_API_URL = "https://breach.vip/api/search";
+const CORDCAT_API_URL = "https://api.cord.cat";
 const GEO_REQUEST_TIMEOUT_MS = 120_000;
 const BREACH_VIP_REQUEST_TIMEOUT_MS = 12_000;
+const CORDCAT_REQUEST_TIMEOUT_MS = 12_000;
 const MAX_RESPONSE_BYTES = 1_048_576;
 const MAX_BREACH_VIP_RESPONSE_BYTES = 20_971_520;
+const MAX_CORDCAT_RESPONSE_BYTES = 4_194_304;
 const BREACH_VIP_FIELDS = new Set([
     "uuid", "username", "ip", "domain", "discordid", "steamid", "email", "password", "name", "phone"
 ]);
@@ -35,7 +39,7 @@ async function readResponse(response: Response, maxBytes = MAX_RESPONSE_BYTES): 
         size += value.length;
         if (size > maxBytes) {
             await reader.cancel();
-            throw new Error("GeoSeeer returned too much data.");
+            throw new Error("The service returned too much data.");
         }
 
         chunks.push(value);
@@ -53,6 +57,114 @@ async function readResponse(response: Response, maxBytes = MAX_RESPONSE_BYTES): 
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
+}
+
+async function getCordCatError(response: Response): Promise<string | undefined> {
+    try {
+        const data = await readResponse(response);
+        if (!isRecord(data)) return;
+
+        const message = typeof data.message === "string" ? data.message : data.error;
+        return typeof message === "string" && message.trim() ? message.trim() : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+export async function queryCordCat(
+    _event: IpcMainInvokeEvent,
+    tool: unknown,
+    value: unknown,
+    refresh: unknown,
+    apiKey: unknown
+): Promise<CordCatResult> {
+    if (typeof tool !== "string" || typeof value !== "string" || typeof refresh !== "boolean" || typeof apiKey !== "string") {
+        return { success: false, error: "The CordCat request is invalid." };
+    }
+
+    const key = apiKey.trim();
+    if (tool !== "status" && (!key || key.length > 512 || /[\r\n]/.test(key))) {
+        return { success: false, error: "The CordCat API key is invalid." };
+    }
+
+    let path: string;
+    switch (tool) {
+        case "query":
+            if (!/^\d{17,20}$/.test(value)) return { success: false, error: "The Discord user ID is invalid." };
+            path = `/api/v2/query/${value}${refresh ? "?refresh=1" : ""}`;
+            break;
+        case "user":
+            if (!/^\d{17,20}$/.test(value)) return { success: false, error: "The Discord user ID is invalid." };
+            path = `/api/tools/user/${value}`;
+            break;
+        case "invite":
+            if (!/^[a-z0-9_-]{2,100}$/i.test(value)) return { success: false, error: "The Discord invite code is invalid." };
+            path = `/api/tools/invite/${encodeURIComponent(value)}`;
+            break;
+        case "guild":
+            if (!/^\d{17,20}$/.test(value)) return { success: false, error: "The Discord server ID is invalid." };
+            path = `/api/tools/guild-widget/${value}`;
+            break;
+        case "status":
+            path = "/api/status";
+            break;
+        default:
+            return { success: false, error: "The CordCat tool is invalid." };
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), CORDCAT_REQUEST_TIMEOUT_MS);
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (key) headers["X-API-Key"] = key;
+
+    try {
+        let response = await fetch(`${CORDCAT_API_URL}${path}`, {
+            headers,
+            redirect: "error",
+            signal: controller.signal
+        });
+
+        if (tool === "user" && response.status === 400) {
+            response = await fetch(`${CORDCAT_API_URL}/api/v2/query/${value}`, {
+                headers,
+                redirect: "error",
+                signal: controller.signal
+            });
+
+            if (response.ok) {
+                const data = await readResponse(response, MAX_CORDCAT_RESPONSE_BYTES);
+                if (isRecord(data) && isRecord(data.userInfo)) return { success: true, data: data.userInfo };
+                return { success: false, error: "CordCat returned an invalid user profile." };
+            }
+        }
+
+        if (response.status === 401) return { success: false, error: "CordCat rejected the API key." };
+        if (response.status === 403 && tool === "guild") {
+            return { success: false, error: "This Discord server does not have its public widget enabled." };
+        }
+        if (response.status === 404) return { success: false, error: "CordCat could not find that resource." };
+        if (response.status === 429) return { success: false, error: "The CordCat rate limit was reached. Try again later." };
+        if (!response.ok) {
+            const detail = await getCordCatError(response);
+            return {
+                success: false,
+                error: detail ?? (response.status === 400
+                    ? "CordCat rejected the Discord ID. Copy the numeric user ID again and retry."
+                    : `CordCat rejected the request with HTTP ${response.status}.`)
+            };
+        }
+
+        return { success: true, data: await readResponse(response, MAX_CORDCAT_RESPONSE_BYTES) };
+    } catch (error) {
+        return {
+            success: false,
+            error: error instanceof Error && error.name === "AbortError"
+                ? "The CordCat request timed out."
+                : "Could not reach CordCat."
+        };
+    } finally {
+        clearTimeout(timeout);
+    }
 }
 
 export async function searchBreachVip(
@@ -122,7 +234,7 @@ export async function searchBreachVip(
             return { success: false, error: "Breach.vip returned an invalid response." };
         }
 
-        return { success: true, results: data.results.slice(0, 10), total: data.results.length };
+        return { success: true, results: data.results, total: data.results.length };
     } catch (error) {
         return {
             success: false,

@@ -7,7 +7,7 @@
 import { IpcMainInvokeEvent } from "electron";
 import { setTimeout as sleep } from "timers/promises";
 
-import type { NativeCaptchaResponse, NativeWebhookResponse } from "./types";
+import type { NativeCaptchaResponse, NativeWebhookResponse, VoidSolverTaskResult } from "./types";
 
 export { startNightyAltDetection, stopNightyAltDetection, waitForNightyGiftCode } from "./nightyAlts";
 
@@ -160,11 +160,44 @@ async function requestVoidSolver(path: string, apiKey: string, signal: AbortSign
 function parseVoidSolver(data: unknown) {
     if (!isRecord(data)) throw new Error("VoidSolver returned an invalid response.");
 
+    const payload = isRecord(data.data) ? data.data : data;
+    const taskIdValue = payload.taskId ?? payload.task_id ?? payload.id;
+    const taskId = typeof taskIdValue === "string"
+        ? taskIdValue
+        : typeof taskIdValue === "number" && Number.isFinite(taskIdValue)
+            ? String(taskIdValue)
+            : null;
+    const externalTaskId = typeof payload.externalTaskId === "string" ? payload.externalTaskId : undefined;
+    const solveTime = typeof payload.solveTime === "number" && Number.isFinite(payload.solveTime) ? payload.solveTime : undefined;
+
     return {
-        taskId: typeof data.taskId === "string" ? data.taskId : null,
-        status: typeof data.status === "string" ? data.status : null,
-        token: typeof data.uuid === "string" ? data.uuid : null,
-        error: getErrorMessage(data, "VoidSolver could not solve the CAPTCHA.")
+        taskId,
+        status: typeof payload.status === "string" ? payload.status : typeof data.status === "string" ? data.status : null,
+        token: typeof payload.solvedToken === "string"
+            ? payload.solvedToken
+            : typeof payload.uuid === "string"
+                ? payload.uuid
+                : typeof payload.token === "string"
+                    ? payload.token
+                    : null,
+        externalTaskId,
+        solveTime,
+        site: typeof payload.site === "string" ? payload.site : undefined,
+        createdAt: typeof payload.createdAt === "string" ? payload.createdAt : undefined,
+        updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : undefined,
+        error: getErrorMessage(payload, getErrorMessage(data, "VoidSolver could not solve the CAPTCHA."))
+    };
+}
+
+function getVoidSolverTaskResult(task: ReturnType<typeof parseVoidSolver>, taskId: string): VoidSolverTaskResult {
+    return {
+        taskId: task.taskId ?? taskId,
+        externalTaskId: task.externalTaskId,
+        status: task.status ?? "unknown",
+        solveTime: task.solveTime,
+        site: task.site,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt
     };
 }
 
@@ -235,35 +268,36 @@ async function solveWithNoCaptchaAI(apiKey: string, sitekey: string, rqdata: str
     return { success: true, token: task.token };
 }
 
-async function solveWithVoidSolver(apiKey: string, proxy: string | undefined, sitekey: string, rqdata: string | undefined, url: string, userAgent: string, signal: AbortSignal): Promise<NativeCaptchaResponse> {
-    let task = parseVoidSolver(await requestVoidSolver("/solve-advance", apiKey, signal, {
-        url,
-        sitekey,
-        user_agent: userAgent,
+async function solveWithVoidSolver(apiKey: string, proxy: string | undefined, sitekey: string, rqdata: string | undefined, url: string, signal: AbortSignal): Promise<NativeCaptchaResponse> {
+    let task = parseVoidSolver(await requestVoidSolver("/createtask", apiKey, signal, {
+        site_url: url,
+        site_key: sitekey,
         ...(proxy ? { proxy } : {}),
-        ...(rqdata ? { rqdata } : {})
+        ...(rqdata ? { rqdata } : {}),
+        pow_type: "hsw"
     }));
 
-    if (!task.taskId || !/^[a-zA-Z0-9_-]{1,256}$/.test(task.taskId)) {
-        await requestVoidSolver("/balance", apiKey, signal);
-        return { success: false, error: "VoidSolver returned an invalid task ID." };
+    if (task.status === "success" && task.token && task.taskId) {
+        return { success: true, token: task.token, task: getVoidSolverTaskResult(task, task.taskId) };
     }
-    const { taskId } = task;
+
+    const taskId = task.taskId?.trim();
+    if (!taskId || taskId.length > 256 || /[\r\n]/.test(taskId)) return { success: false, error: task.error };
 
     do {
         await sleep(2000, undefined, { signal });
         task = parseVoidSolver(await requestVoidSolver(
-            `/solve-advance/task/${encodeURIComponent(taskId)}`,
+            `/gettaskresult?taskid=${encodeURIComponent(taskId)}`,
             apiKey,
             signal
         ));
     } while (task.status === "solving");
 
     if (task.status !== "success" || !task.token) {
-        return { success: false, error: task.error };
+        return { success: false, error: task.error, task: getVoidSolverTaskResult(task, taskId) };
     }
 
-    return { success: true, token: task.token };
+    return { success: true, token: task.token, task: getVoidSolverTaskResult(task, taskId) };
 }
 
 export async function solveCaptcha(
@@ -292,7 +326,7 @@ export async function solveCaptcha(
 
     try {
         if (provider === "nocaptchaai") return await solveWithNoCaptchaAI(key, sitekey, rqdata, url, userAgent, controller.signal);
-        if (provider === "voidsolver") return await solveWithVoidSolver(key, proxy, sitekey, rqdata, url, userAgent, controller.signal);
+        if (provider === "voidsolver") return await solveWithVoidSolver(key, proxy, sitekey, rqdata, url, controller.signal);
         return await solveWithNoneCap(key, sitekey, rqdata, url, userAgent, controller.signal);
     } catch (error) {
         return {

@@ -25,21 +25,21 @@ import {
 } from "@webpack/common";
 
 const SelectedChannelStore = findStoreLazy("SelectedChannelStore");
-const PermissionStore = findStoreLazy("PermissionStore");
 const logger = new Logger("StaffDetector");
 const currentChannelStaff = new Set<string>();
 const emptyIdSet = new Set<string>();
 const idSetCache = new Map<string, Set<string>>();
 let currentVoiceChannelId: string | null = null;
+const SOUND_BASE_URL = "https://raw.githubusercontent.com/ImHisako/Illegalcord/main/src/userplugins/StaffDetector/sounds";
 
 const DEFAULT_SOUND_URLS = {
-    join: "https://github.com/zFrxncesck1/zFrxncesck1/raw/refs/heads/main/host/sounds/join.wav",
-    leave: "https://github.com/zFrxncesck1/zFrxncesck1/raw/refs/heads/main/host/sounds/leave.wav",
+    join: `${SOUND_BASE_URL}/among-us-role-reveal-sound-effect.mp3`,
+    leave: `${SOUND_BASE_URL}/leave.wav`,
 };
 
 const CUSTOM_DEFAULT_URLS = {
-    join: "https://github.com/zFrxncesck1/zFrxncesck1/raw/refs/heads/main/host/sounds/trollface-smile.mp3",
-    leave: "https://github.com/zFrxncesck1/zFrxncesck1/raw/refs/heads/main/host/sounds/death-note-light-yagami-is-sus.mp3",
+    join: `${SOUND_BASE_URL}/trollface-smile.mp3`,
+    leave: `${SOUND_BASE_URL}/death-note-light-yagami-is-sus.mp3`,
 };
 
 type AudioDataKey = "customJoinSoundData" | "customLeaveSoundData";
@@ -214,7 +214,7 @@ const settings = definePluginSettings({
     useCustomSounds: {
         type: OptionType.BOOLEAN,
         default: false,
-        description: "OFF - built-in WAV. ON - use uploaded file or URL below (uploaded file takes priority over URL).",
+        description: "OFF - built-in sounds. ON - use an uploaded file or direct audio URL below (uploaded file takes priority).",
     },
 
     customJoinSoundData: {
@@ -353,54 +353,59 @@ function parseIdSet(raw: string): Set<string> {
     return ids;
 }
 
-function isUserExplicitlyIncluded(userId: string): boolean {
-    const includedUsers = parseIdSet(settings.store.userIncludeIds);
-    return includedUsers.size > 0 && includedUsers.has(userId);
-}
-
-function isServerAllowedForUser(guildId: string, userId: string): boolean {
-    if (isUserExplicitlyIncluded(userId)) return true;
-    const mode = settings.store.serverFilterMode;
-    if (mode === "none") return true;
-    if (mode === "include") {
-        const includedServers = parseIdSet(settings.store.serverIncludeIds);
-        return includedServers.size === 0 || includedServers.has(guildId);
-    }
-    if (mode === "exclude") {
-        const excludedServers = parseIdSet(settings.store.serverExcludeIds);
-        return excludedServers.size === 0 || !excludedServers.has(guildId);
-    }
-    return true;
-}
-
-function shouldFlag(userId: string, guildId: string): boolean {
+function shouldFlag(userId: string, guildId: string, staffRoleIds: Set<string>): boolean {
     const excludedUsers = parseIdSet(settings.store.userExcludeIds);
     if (excludedUsers.size > 0 && excludedUsers.has(userId)) return false;
-    if (isUserExplicitlyIncluded(userId)) return true;
+
     const includedUsers = parseIdSet(settings.store.userIncludeIds);
-    if (includedUsers.size > 0 && !includedUsers.has(userId)) return false;
-    return isUserStaff(userId, guildId);
+    if (includedUsers.size > 0) return includedUsers.has(userId);
+
+    const mode = settings.store.serverFilterMode;
+    if (mode === "include") {
+        const includedServers = parseIdSet(settings.store.serverIncludeIds);
+        if (includedServers.size > 0 && !includedServers.has(guildId)) return false;
+    } else if (mode === "exclude") {
+        const excludedServers = parseIdSet(settings.store.serverExcludeIds);
+        if (excludedServers.has(guildId)) return false;
+    }
+
+    return isUserStaff(userId, guildId, staffRoleIds);
 }
 
-function isUserStaff(userId: string, guildId: string): boolean {
+function getStaffPermissionMask(): bigint {
+    let permissions = 0n;
+    for (let i = 0; i < permChecks.length; i++) {
+        const [key, permission] = permChecks[i];
+        if (settings.store[key]) permissions |= PermissionsBits[permission];
+    }
+    return permissions;
+}
+
+function getStaffRoleIds(guildId: string): Set<string> {
+    const staffPermissions = getStaffPermissionMask();
+    const staffRoleIds = new Set<string>();
+    if (staffPermissions === 0n) return staffRoleIds;
+
+    const roles = GuildRoleStore.getSortedRoles(guildId);
+    for (let i = 0; i < roles.length; i++) {
+        const role = roles[i];
+        if (!role?.id) continue;
+
+        const permissions = BigInt(role.permissions);
+        if ((permissions & PermissionsBits.ADMINISTRATOR) !== 0n || (permissions & staffPermissions) !== 0n) {
+            staffRoleIds.add(role.id);
+        }
+    }
+
+    return staffRoleIds;
+}
+
+function isUserStaff(userId: string, guildId: string, staffRoleIds: Set<string>): boolean {
     const guild = GuildStore.getGuild(guildId);
     if (!guild) return false;
 
     if (guild.ownerId === userId) return true;
-
-    try {
-        const computed: bigint | undefined = PermissionStore.getGuildPermissionsForUser?.(userId, guildId);
-        if (computed !== undefined && computed !== null) {
-            for (let i = 0; i < permChecks.length; i++) {
-                const [key, permName] = permChecks[i];
-                const perm = PermissionsBits[permName];
-                if (settings.store[key] && (BigInt(computed) & perm) !== 0n) return true;
-            }
-            return false;
-        }
-    } catch (e) {
-        if (settings.store.enableLogs) logger.warn("StaffDetector: PermissionStore error, using GuildRoleStore:", e);
-    }
+    if (staffRoleIds.has(guildId)) return true;
 
     const member = GuildMemberStore.getMember(guildId, userId);
     if (!member?.roles?.length) {
@@ -408,28 +413,8 @@ function isUserStaff(userId: string, guildId: string): boolean {
         return false;
     }
 
-    const sortedRoles = GuildRoleStore.getSortedRoles(guildId);
-    if (!sortedRoles || sortedRoles.length === 0) {
-        if (settings.store.enableLogs) logger.info(`StaffDetector: GuildRoleStore empty for ${guildId}`);
-        return false;
-    }
-
-    const userRoleIds = new Set(member.roles);
-
-    for (let i = 0; i < permChecks.length; i++) {
-        const [key, permName] = permChecks[i];
-        if (!settings.store[key]) continue;
-
-        const perm = PermissionsBits[permName];
-        for (let j = 0; j < sortedRoles.length; j++) {
-            const role = sortedRoles[j];
-            if (!role || !role.id || !userRoleIds.has(role.id)) continue;
-
-            const rolePerms = BigInt(role.permissions);
-            if ((rolePerms & PermissionsBits.ADMINISTRATOR) !== 0n) return true;
-            if ((rolePerms & perm) !== 0n) return true;
-        }
-    }
+    for (let i = 0; i < member.roles.length; i++)
+        if (staffRoleIds.has(member.roles[i])) return true;
 
     return false;
 }
@@ -635,11 +620,11 @@ function scanChannelStaff(channelId: string, isInit: boolean): void {
     if (isInit) {
         currentChannelStaff.clear();
         const staffFound: string[] = [];
+        const staffRoleIds = getStaffRoleIds(channel.guild_id);
         for (let i = 0; i < userIds.length; i++) {
             const uid = userIds[i];
             if (uid === myUserId) continue;
-            if (!isServerAllowedForUser(channel.guild_id, uid)) continue;
-            if (shouldFlag(uid, channel.guild_id)) {
+            if (shouldFlag(uid, channel.guild_id, staffRoleIds)) {
                 currentChannelStaff.add(uid);
                 staffFound.push(uid);
             }
@@ -691,43 +676,48 @@ export default definePlugin({
         },
 
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: Array<{ userId: string; channelId?: string; oldChannelId?: string; guildId?: string; }>; }) {
-            const currentChannelId: string | null = SelectedChannelStore.getVoiceChannelId?.() ?? null;
-            if (!currentChannelId) return;
-
-            const channel = ChannelStore.getChannel(currentChannelId);
-            if (!channel?.guild_id) return;
+            const channelId = currentVoiceChannelId;
+            if (!channelId) return;
+            const relevantState = voiceStates.find(state => (state.channelId === channelId && state.oldChannelId !== channelId)
+                || (state.oldChannelId === channelId && state.channelId !== channelId));
+            if (!relevantState) return;
+            const guildId = relevantState.guildId ?? ChannelStore.getChannel(channelId)?.guild_id;
+            if (!guildId) return;
 
             const myUserId = UserStore.getCurrentUser()?.id;
             if (!myUserId) return;
 
+            let context: string | undefined;
+            let staffRoleIds: Set<string> | undefined;
             for (let i = 0; i < voiceStates.length; i++) {
-                const { userId, channelId, oldChannelId } = voiceStates[i];
+                const { userId, channelId: nextChannelId, oldChannelId } = voiceStates[i];
                 if (userId === myUserId) continue;
-                if (!isServerAllowedForUser(channel.guild_id, userId)) continue;
-
-                const entered = channelId === currentChannelId && oldChannelId !== currentChannelId;
+                const entered = nextChannelId === channelId && oldChannelId !== channelId;
+                const left = oldChannelId === channelId && nextChannelId !== channelId;
+                if (!entered && !left) continue;
 
                 if (entered) {
-                    if (!shouldFlag(userId, channel.guild_id)) continue;
+                    if (currentChannelStaff.has(userId)) continue;
+                    staffRoleIds ??= getStaffRoleIds(guildId);
+                    if (!shouldFlag(userId, guildId, staffRoleIds)) continue;
                     currentChannelStaff.add(userId);
                     const name = getUsername(userId);
-                    const ctx = getChannelContext(currentChannelId);
-                    if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" joined - ${ctx}`);
+                    context ??= getChannelContext(channelId);
+                    if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" joined - ${context}`);
                     playStaffSound(true);
-                    notify("🚨 StaffDetector:", `"${name}" joined - ${ctx}`, getAvatarUrl(userId));
+                    notify("🚨 StaffDetector:", `"${name}" joined - ${context}`, getAvatarUrl(userId));
                     continue;
                 }
 
-                const left = oldChannelId === currentChannelId && channelId !== currentChannelId;
-                if (left && currentChannelStaff.has(userId)) {
+                if (currentChannelStaff.has(userId)) {
                     currentChannelStaff.delete(userId);
                     const name = getUsername(userId);
-                    const ctx = getChannelContext(currentChannelId);
+                    context ??= getChannelContext(channelId);
                     const remaining = currentChannelStaff.size;
                     const suffix = remaining > 0 ? ` - ${remaining} staff remaining` : " - No staff remaining";
-                    if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" left - ${ctx} (${remaining} remaining)`);
+                    if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" left - ${context} (${remaining} remaining)`);
                     playStaffSound(false);
-                    notify("✅ StaffDetector:", `"${name}" left - ${ctx}${suffix}`, getAvatarUrl(userId));
+                    notify("✅ StaffDetector:", `"${name}" left - ${context}${suffix}`, getAvatarUrl(userId));
                 }
             }
         },
@@ -736,5 +726,6 @@ export default definePlugin({
     stop() {
         currentChannelStaff.clear();
         currentVoiceChannelId = null;
+        idSetCache.clear();
     },
 });
