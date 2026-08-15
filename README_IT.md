@@ -2,17 +2,18 @@
 
 🌐 **Lingue / Languages:** [Italiano](README_IT.md) | [English](README.md)
 
-Illegalcord è un fork di [Equicord](https://github.com/Equicord) & [Vencord](https://github.com/Vendicated/Vencord), con oltre 300+ plugin.
-Questo è un client open-source creato per chi crede nella totale libertà di sviluppo.
-Ho creato questo client per uso personale, ma poco a poco altre persone hanno iniziato ad apprezzare le mie idee e funzionalità, e così è diventato sempre più popolare.
-Questo client Discord mira a offrire comunicazioni più private grazie al plugin "SecurecordOpossum"
-e consente di aggirare i limiti di upload utilizzando servizi esterni come anon.li.
-Se stai cercando un client Discord progettato per offrire maggiore privacy in ciò che puoi fare, sei nel posto giusto.
-Questo client include anche un plugin per configurare l’audio stereo su Discord e offre una qualità audio migliore rispetto a Lightcord, senza costi nascosti o software closed-source. Siamo completamente open source.
+Illegalcord è un fork open source di [Equicord](https://github.com/Equicord) e [Vencord](https://github.com/Vendicated/Vencord), con più di 300 plugin. È progettato per chi dà valore alla completa libertà di sviluppo, alla trasparenza, alla privacy e alla personalizzazione.
 
-Telegram x News: https://t.me/Illegalcord
+Nato inizialmente come progetto personale, Illegalcord ha guadagnato popolarità nel tempo, man mano che sempre più persone ne hanno scoperto e apprezzato le idee e le funzionalità. Il client mira a offrire comunicazioni più private attraverso il plugin SecurecordOpossum e consente di superare i limiti di caricamento di Discord utilizzando servizi esterni come [anon.li](https://anon.li/).
 
-Sito Illegalcord : https://illegalcord.mintlify.site/
+Se cerchi un client Discord che offra maggiore privacy e più libertà di utilizzo, Illegalcord potrebbe essere la scelta giusta per te. Include inoltre il supporto all'audio stereo e offre una qualità audio migliore rispetto a Lightcord, senza costi nascosti né componenti closed source. Il progetto è completamente open source.
+
+> [!WARNING]
+> Illegalcord viene talvolta etichettato come malware semplicemente perché non applica gli stessi limiti imposti da altri client modificati. Non affidarti a giudizi privi di verifiche: il progetto è completamente open source, quindi puoi leggere e controllare personalmente il codice. Se, dopo averlo esaminato, lo ritieni sicuro e adatto alle tue esigenze, sei libero di installarlo e usarlo.
+
+Telegram e notizie: https://t.me/Illegalcord
+
+Sito di Illegalcord: https://illegalcord.mintlify.site/
 
 ### Plugin Inclusi
 
@@ -151,9 +152,9 @@ Nota: Il file zip dell'estensione Firefox richiede Firefox per sviluppatori
 
 ## Dichiarazione di Non Responsabilità
 
-Discord è un marchio di Discord Inc., e menzionato esclusivamente a scopo descrittivo.
-Menzionarlo non implica alcuna affiliazione o approvazione da parte di Discord Inc.
-Vencord non è connesso a Equicord & Illegalcord e come tali.
+Discord è un marchio di Discord Inc. ed è menzionato esclusivamente a scopo descrittivo.
+La sua menzione non implica alcuna affiliazione o approvazione da parte di Discord Inc.
+Vencord non è affiliato con Equicord o Illegalcord.
 
 ## Ringraziamenti speciali
 
