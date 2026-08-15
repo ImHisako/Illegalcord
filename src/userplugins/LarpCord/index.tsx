@@ -21,6 +21,11 @@ import { AuthenticationStore, Constants, FluxDispatcher, IconUtils, Menu, Modal,
 const ICON_SETTING_KEYS: "showIcon"[] = ["showIcon"];
 
 const settings = definePluginSettings({
+    hideFromToolbox: {
+        type: OptionType.BOOLEAN,
+        description: "Hide this plugin from Equicord Toolbox.",
+        default: true
+    },
     showIcon: {
         type: OptionType.BOOLEAN,
         description: "Show the LarpCord icon in the header bar.",
@@ -1758,8 +1763,12 @@ export default definePlugin({
         } catch { return null; }
     },
 
-    toolboxActions: {
-        [t("Open LarpCord")]: openLarpCord,
+    get toolboxActions() {
+        if (settings.store.hideFromToolbox) return {};
+
+        return {
+            [t("Open LarpCord")]: openLarpCord,
+        };
     },
 
     _origExtractTimestamp: null as any,

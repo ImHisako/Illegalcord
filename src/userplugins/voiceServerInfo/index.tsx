@@ -23,6 +23,11 @@ const REQUEST_TIMEOUT_MS = 12_000;
 const activeRequests = new Set<AbortController>();
 
 const settings = definePluginSettings({
+    hideFromToolbox: {
+        type: OptionType.BOOLEAN,
+        description: "Hide this plugin from Equicord Toolbox.",
+        default: true
+    },
     notifyOnConnect: {
         type: OptionType.BOOLEAN,
         description: "Show the voice relay address and location after connecting.",
@@ -232,8 +237,12 @@ export default definePlugin({
         }
     },
 
-    toolboxActions: {
-        "Open Voice Server Info": openVoiceServerModal
+    get toolboxActions() {
+        if (settings.store.hideFromToolbox) return {};
+
+        return {
+            "Open Voice Server Info": openVoiceServerModal
+        };
     },
 
     start() {

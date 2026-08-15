@@ -93,6 +93,11 @@ function notifyImageChange() {
 }
 
 const settings = definePluginSettings({
+    hideFromToolbox: {
+        type: OptionType.BOOLEAN,
+        description: "Hide this plugin from Equicord Toolbox.",
+        default: true
+    },
     replaceEnabled: {
         type: OptionType.BOOLEAN,
         description: "Use custom preview instead of screen capture",
@@ -2198,8 +2203,12 @@ export default definePlugin({
         }
     ],
 
-    toolboxActions: {
-        "Select stream preview": openImagePicker
+    get toolboxActions() {
+        if (settings.store.hideFromToolbox) return {};
+
+        return {
+            "Select stream preview": openImagePicker
+        };
     },
 
     // Кнопка в панели аккаунта

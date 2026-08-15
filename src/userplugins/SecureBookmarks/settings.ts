@@ -10,6 +10,11 @@ import { OptionType } from "@utils/types";
 export const PASSWORD_KEYS: Array<"usePassword" | "password"> = ["usePassword", "password"];
 
 export const settings = definePluginSettings({
+    hideFromToolbox: {
+        type: OptionType.BOOLEAN,
+        description: "Hide this plugin from Equicord Toolbox.",
+        default: true
+    },
     usePassword: {
         type: OptionType.BOOLEAN,
         description: "Encrypt new bookmarks and require password access for encrypted bookmarks.",

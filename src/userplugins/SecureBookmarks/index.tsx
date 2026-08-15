@@ -63,6 +63,8 @@ export default definePlugin({
     },
 
     toolboxActions() {
+        if (settings.store.hideFromToolbox) return null;
+
         return renderSecureBookmarksToolboxMenu();
     },
 

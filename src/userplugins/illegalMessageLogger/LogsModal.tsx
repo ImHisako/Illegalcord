@@ -6,9 +6,10 @@
 
 import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
+import { AttachmentIcon, LogsIcon } from "@components/Icons";
 import { copyWithToast, openUserProfile } from "@utils/discord";
 import type { RenderModalProps } from "@vencord/discord-types";
-import { Alerts, ChannelStore, GuildStore, Modal, NavigationRouter, openModal, ScrollerThin, showToast, TextInput, Toasts, useEffect, useState } from "@webpack/common";
+import { Alerts, ChannelStore, GuildStore, MaskedLink, Modal, NavigationRouter, openModal, Parser, ScrollerThin, showToast, TextInput, Toasts, useEffect, useState } from "@webpack/common";
 
 import { getLogPage, getLogStats, setLogProtected, setLogsProtected } from "./db";
 import { clearAllLogs, deleteLog, deleteManyLogs } from "./engine";
@@ -59,17 +60,22 @@ function LogEntry({ record, onDelete, onProtect }: LogEntryProps) {
     return (
         <article className={cl("entry", { protected: record.protected })}>
             <div className={cl("entry-header")}>
-                <div>
-                    <strong>{authorName}</strong>
-                    <span className={cl("meta")}>{location}</span>
+                <div className={cl("identity")}>
+                    <strong className={cl("author")}>{authorName}</strong>
+                    <span className={cl("location")} title={location}>{location}</span>
                 </div>
                 <span className={cl("status", STATUS_CLASSES[status])}>{STATUS_LABELS[status]}</span>
             </div>
-            <div className={cl("content")}>{message.content || "No text content."}</div>
+            <div className={cl("content")}>
+                {message.content ? Parser.parse(message.content) : <span className={cl("muted")}>No text content.</span>}
+            </div>
             {message.attachments.length > 0 && (
                 <div className={cl("attachments")}>
                     {message.attachments.map(attachment => (
-                        <span key={attachment.id}>{attachment.filename}</span>
+                        <MaskedLink key={attachment.id} href={attachment.url}>
+                            <AttachmentIcon width={14} height={14} />
+                            {attachment.filename}
+                        </MaskedLink>
                     ))}
                 </div>
             )}
@@ -79,14 +85,18 @@ function LogEntry({ record, onDelete, onProtect }: LogEntryProps) {
                     {message.editHistory.map(edit => (
                         <div key={`${edit.timestamp}:${edit.content}`} className={cl("history-entry")}>
                             <time>{new Date(edit.timestamp).toLocaleString()}</time>
-                            <div>{edit.content || "No text content."}</div>
+                            <div>{edit.content ? Parser.parse(edit.content) : "No text content."}</div>
                         </div>
                     ))}
                 </details>
             )}
             <div className={cl("entry-footer")}>
-                <time>{new Date(message.timestamp).toLocaleString()}</time>
-                <span>{message.attachments.length} attachment{message.attachments.length === 1 ? "" : "s"}</span>
+                <div className={cl("entry-meta")}>
+                    <time>{new Date(message.timestamp).toLocaleString()}</time>
+                    {message.attachments.length > 0 && (
+                        <span>{message.attachments.length} attachment{message.attachments.length === 1 ? "" : "s"}</span>
+                    )}
+                </div>
                 <div className={cl("actions")}>
                     <Button
                         size="xs"
@@ -95,17 +105,18 @@ function LogEntry({ record, onDelete, onProtect }: LogEntryProps) {
                     >
                         {record.protected ? "Protected" : "Protect"}
                     </Button>
-                    <Button size="xs" variant="secondary" onClick={() => copyWithToast(message.content)}>Copy</Button>
-                    <Button size="xs" variant="secondary" onClick={() => copyWithToast(JSON.stringify(message, null, 2))}>Raw</Button>
-                    <Button size="xs" variant="secondary" onClick={() => openUserProfile(message.author.id)}>Profile</Button>
+                    <Button size="xs" variant="secondary" title="Copy message text" onClick={() => copyWithToast(message.content)}>Copy</Button>
+                    <Button size="xs" variant="secondary" title="Copy raw message data" onClick={() => copyWithToast(JSON.stringify(message, null, 2))}>Raw</Button>
+                    <Button size="xs" variant="secondary" title="Open author profile" onClick={() => openUserProfile(message.author.id)}>Profile</Button>
                     <Button
                         size="xs"
                         variant="secondary"
+                        title="Jump to message"
                         onClick={() => NavigationRouter.transitionTo(`/channels/${guild?.id ?? "@me"}/${message.channel_id}/${message.id}`)}
                     >
                         Open
                     </Button>
-                    <Button size="xs" variant="dangerSecondary" onClick={() => onDelete(message.id)}>Delete</Button>
+                    <Button size="xs" variant="dangerSecondary" title="Delete this log" onClick={() => onDelete(message.id)}>Delete</Button>
                 </div>
             </div>
         </article>
@@ -248,43 +259,66 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
         <Modal
             {...modalProps}
             size="lg"
-            title={`Illegal Message Logger · ${total} ${STATUS_LABELS[status].toLowerCase()}`}
+            title="Illegal Message Logger"
             actions={[
-                { text: newest ? "Oldest first" : "Newest first", variant: "secondary", onClick: () => setNewest(value => !value) },
                 { text: "Clear visible", variant: "critical-secondary", disabled: records.length === 0, onClick: confirmClearVisible },
                 { text: "Clear unprotected", variant: "critical-primary", onClick: confirmClearAll }
             ]}
         >
             <div className={cl("root")}>
                 <div className={cl("toolbar")}>
+                    <div className={cl("overview")}>
+                        <div>
+                            <strong>{total.toLocaleString()} matching log{total === 1 ? "" : "s"}</strong>
+                            <span>{records.length === total ? "All results loaded" : `Showing ${records.length.toLocaleString()} loaded results`}</span>
+                        </div>
+                        <Button
+                            className={cl("sort")}
+                            size="small"
+                            variant="secondary"
+                            onClick={() => setNewest(value => !value)}
+                        >
+                            {newest ? "Newest first" : "Oldest first"}
+                        </Button>
+                    </div>
                     {stats && (
                         <div className={cl("stats")}>
-                            <span><strong>{stats.total}</strong> total</span>
-                            <span><strong>{stats.deleted}</strong> deleted</span>
-                            <span><strong>{stats.edited}</strong> edited</span>
-                            <span><strong>{stats.ghostPinged}</strong> ghost pings</span>
-                            <span><strong>{stats.protected}</strong> protected</span>
-                            <span><strong>{formatBytes(stats.estimatedBytes)}</strong> estimated</span>
+                            <span><strong>{stats.total.toLocaleString()}</strong> Total</span>
+                            <span><strong>{stats.deleted.toLocaleString()}</strong> Deleted</span>
+                            <span><strong>{stats.edited.toLocaleString()}</strong> Edited</span>
+                            <span><strong>{stats.ghostPinged.toLocaleString()}</strong> Ghost pings</span>
+                            <span><strong>{stats.protected.toLocaleString()}</strong> Protected</span>
+                            <span><strong>{formatBytes(stats.estimatedBytes)}</strong> Storage</span>
                         </div>
                     )}
-                    <div className={cl("tabs")}>
-                        {STATUS_OPTIONS.map(option => (
-                            <Button
-                                key={option}
-                                size="small"
-                                variant={status === option ? "primary" : "secondary"}
-                                onClick={() => setStatus(option)}
-                            >
-                                {STATUS_LABELS[option]}
-                            </Button>
-                        ))}
+                    <TextInput
+                        aria-label="Search message logs"
+                        value={query}
+                        onChange={setQuery}
+                        placeholder="Search content, author, channel, server, or ID"
+                    />
+                    <div className={cl("filters")}>
+                        <span className={cl("section-label")}>Filter</span>
+                        <div className={cl("tabs")}>
+                            {STATUS_OPTIONS.map(option => (
+                                <Button
+                                    key={option}
+                                    size="small"
+                                    variant={status === option ? "primary" : "secondary"}
+                                    aria-pressed={status === option}
+                                    onClick={() => setStatus(option)}
+                                >
+                                    {STATUS_LABELS[option]}
+                                </Button>
+                            ))}
+                        </div>
                     </div>
-                    <TextInput value={query} onChange={setQuery} placeholder="Search content, author, channel, server, or ID" />
                     <details className={cl("search-help")}>
                         <summary>Advanced search syntax</summary>
-                        <span>from:, channel:, guild:, id:, before:, after:, has:attachment, has:embed, has:link, has:edit, is:protected, is:deleted, is:edited, is:ghost. Prefix a term with - to exclude it.</span>
+                        <span><code>from:</code>, <code>channel:</code>, <code>guild:</code>, <code>id:</code>, <code>before:</code>, <code>after:</code>, <code>has:attachment</code>, <code>has:embed</code>, <code>has:link</code>, <code>has:edit</code>, <code>is:protected</code>, <code>is:deleted</code>, <code>is:edited</code>, <code>is:ghost</code>. Prefix a term with <code>-</code> to exclude it.</span>
                     </details>
                     <div className={cl("backup-actions")}>
+                        <span className={cl("section-label")}>Manage data</span>
                         <Button size="small" variant="secondary" onClick={exportBackup}>Export backup</Button>
                         <Button size="small" variant="secondary" disabled={records.length === 0} onClick={() => exportLogRecords(records, "illegal-message-logger-visible")}>Export visible</Button>
                         <Button size="small" variant="secondary" onClick={importBackup}>Import backup</Button>
@@ -294,8 +328,14 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
                 </div>
                 <ScrollerThin fade className={cl("scroller")}>
                     {records.map(record => <LogEntry key={record.message_id} record={record} onDelete={removeLog} onProtect={protectLog} />)}
-                    {!pending && records.length === 0 && <div className={cl("empty")}>No matching logs.</div>}
-                    {pending && <div className={cl("empty")}>Loading logs…</div>}
+                    {!pending && records.length === 0 && (
+                        <div className={cl("empty")}>
+                            <LogsIcon width={36} height={36} />
+                            <strong>No matching logs</strong>
+                            <span>Try another filter or search query.</span>
+                        </div>
+                    )}
+                    {pending && <div className={cl("empty")}><span>Loading logs…</span></div>}
                     {!pending && hasMore && (
                         <Button className={cl("load-more")} variant="secondary" onClick={loadMore}>Load more</Button>
                     )}

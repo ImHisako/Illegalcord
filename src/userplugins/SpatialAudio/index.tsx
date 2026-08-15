@@ -7,10 +7,11 @@
 import "./style.css";
 
 import { isPluginEnabled } from "@api/PluginManager";
+import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { classes } from "@utils/misc";
 import { openModal } from "@utils/modal";
-import definePlugin from "@utils/types";
+import definePlugin, { OptionType } from "@utils/types";
 import { FluxDispatcher, React, showToast, Toasts, UserStore, useStateFromStores, VoiceStateStore } from "@webpack/common";
 
 import { SpatialModal } from "./SpatialModal";
@@ -24,6 +25,14 @@ import {
     StreamData,
     teardownAudio,
 } from "./state";
+
+const settings = definePluginSettings({
+    hideFromToolbox: {
+        type: OptionType.BOOLEAN,
+        description: "Hide this plugin from Equicord Toolbox.",
+        default: true
+    }
+});
 
 function openSpatialAudio() {
     const userId = UserStore.getCurrentUser()?.id;
@@ -41,6 +50,7 @@ export default definePlugin({
     name: "SpatialAudio",
     description: "Positions voice participants on a 2D canvas and spatializes their audio with HRTF.",
     authors: [{ name: "onewhobridges", id: 0n }],
+    settings,
 
     patches: [
         {
@@ -69,8 +79,12 @@ export default definePlugin({
         }
     ],
 
-    toolboxActions: {
-        "Open Spatial Audio": openSpatialAudio
+    get toolboxActions() {
+        if (settings.store.hideFromToolbox) return {};
+
+        return {
+            "Open Spatial Audio": openSpatialAudio
+        };
     },
 
     async start() {

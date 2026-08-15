@@ -167,8 +167,12 @@ export default definePlugin({
         }
     ],
 
-    toolboxActions: {
-        "Illegal Message Logger": openLogs
+    get toolboxActions() {
+        if (settings.store.hideFromToolbox) return {};
+
+        return {
+            "Illegal Message Logger": openLogs
+        };
     },
 
     processMessageFetch,

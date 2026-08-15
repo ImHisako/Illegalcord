@@ -514,6 +514,11 @@ function StereoInstallerPage() {
 }
 
 const settings = definePluginSettings({
+    hideFromToolbox: {
+        type: OptionType.BOOLEAN,
+        description: "Hide this plugin from Equicord Toolbox.",
+        default: true
+    },
     installer: {
         type: OptionType.COMPONENT,
         component: ErrorBoundary.wrap(StereoInstallerPanel, { noop: true }),
@@ -528,8 +533,12 @@ export default definePlugin({
     reporterTestable: ReporterTestable.None,
     settings,
     settingsAboutComponent: ErrorBoundary.wrap(StereoWarning, { noop: true }),
-    toolboxActions: {
-        "Open StereoInstaller": () => SettingsRouter.openUserSettings(`${SETTINGS_ENTRY_KEY}_panel`),
+    get toolboxActions() {
+        if (settings.store.hideFromToolbox) return {};
+
+        return {
+            "Open StereoInstaller": () => SettingsRouter.openUserSettings(`${SETTINGS_ENTRY_KEY}_panel`),
+        };
     },
 
     start() {

@@ -26,6 +26,11 @@ let pendingOpen = false;
 let pendingForceOpen = false;
 
 const settings = definePluginSettings({
+    hideFromToolbox: {
+        type: OptionType.BOOLEAN,
+        description: "Hide this plugin from Equicord Toolbox.",
+        default: true
+    },
     showStartupModal: {
         type: OptionType.BOOLEAN,
         description: "Show the Illegalcord announcements popup on startup.",
@@ -159,8 +164,12 @@ export default definePlugin({
     enabledByDefault: true,
     settings,
     settingsAboutComponent: SafeIllegalcordAnnouncementSettings,
-    toolboxActions: {
-        "Open Illegalcord popup": () => openIllegalcordAnnouncementModal(true)
+    get toolboxActions() {
+        if (settings.store.hideFromToolbox) return {};
+
+        return {
+            "Open Illegalcord popup": () => openIllegalcordAnnouncementModal(true)
+        };
     },
     flux: {
         POST_CONNECTION_OPEN() {

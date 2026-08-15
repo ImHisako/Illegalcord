@@ -6,14 +6,23 @@
 
 import "./style.css";
 
+import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
-import definePlugin from "@utils/types";
+import definePlugin, { OptionType } from "@utils/types";
 
 import { hasSeenTutorial, resetTutorialSeen } from "./storage";
 import { closeTutorial, openTutorial } from "./TutorialModal";
 import TutorialSettings from "./TutorialSettings";
 
 let tutorialTimeout: number | undefined;
+
+const settings = definePluginSettings({
+    hideFromToolbox: {
+        type: OptionType.BOOLEAN,
+        description: "Hide this plugin from Equicord Toolbox.",
+        default: true
+    }
+});
 
 const SafeTutorialSettings = ErrorBoundary.wrap(TutorialSettings, { noop: true });
 
@@ -29,10 +38,15 @@ export default definePlugin({
     authors: [{ name: "irritably", id: 928787166916640838n }],
     required: true,
     enabledByDefault: true,
+    settings,
     settingsAboutComponent: SafeTutorialSettings,
-    toolboxActions: {
-        "Open Illegalcord tutorial": openTutorial,
-        "Show Illegalcord tutorial next startup": resetTutorialSeen
+    get toolboxActions() {
+        if (settings.store.hideFromToolbox) return {};
+
+        return {
+            "Open Illegalcord tutorial": openTutorial,
+            "Show Illegalcord tutorial next startup": resetTutorialSeen
+        };
     },
 
     start() {

@@ -8,6 +8,11 @@ import { definePluginSettings } from "@api/Settings";
 import { OptionType } from "@utils/types";
 
 export const settings = definePluginSettings({
+    hideFromToolbox: {
+        type: OptionType.BOOLEAN,
+        description: "Hide this plugin from Equicord Toolbox.",
+        default: true
+    },
     showHeaderButton: {
         type: OptionType.BOOLEAN,
         description: "Show a message log button in the channel header.",

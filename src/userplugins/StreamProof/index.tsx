@@ -316,6 +316,11 @@ function handleMessageClick(message: Message, _channel: Channel, event: MouseEve
 }
 
 const settings = definePluginSettings({
+    hideFromToolbox: {
+        type: OptionType.BOOLEAN,
+        description: "Hide this plugin from Equicord Toolbox.",
+        default: true
+    },
     autoStreamProof: {
         type: OptionType.BOOLEAN,
         description: "Automatically enable StreamProof when you start sharing your screen.",
@@ -545,6 +550,7 @@ export default definePlugin({
 
     toolboxActions() {
         useStreamProofUpdates();
+        if (settings.store.hideFromToolbox) return null;
 
         return (
             <Menu.MenuCheckboxItem

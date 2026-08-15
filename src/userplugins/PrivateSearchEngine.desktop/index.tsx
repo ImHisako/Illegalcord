@@ -15,6 +15,11 @@ const Native = VencordNative?.pluginHelpers?.PrivateSearchBrowser as PluginNativ
 const SEARCH_ENGINE_SETTING_KEYS: Array<"searchEngine"> = ["searchEngine"];
 
 const settings = definePluginSettings({
+    hideFromToolbox: {
+        type: OptionType.BOOLEAN,
+        description: "Hide this plugin from Equicord Toolbox.",
+        default: true
+    },
     searchEngine: {
         type: OptionType.SELECT,
         description: "Search engine used by the private browser window.",
@@ -135,8 +140,12 @@ export default definePlugin({
         render: () => <SafeStartpageBrowserButton />,
         priority: 8
     },
-    toolboxActions: {
-        "Open Private Search": openSearchBrowser,
-        "Open BrowserLeaks Test": openBrowserLeaksTest
+    get toolboxActions() {
+        if (settings.store.hideFromToolbox) return {};
+
+        return {
+            "Open Private Search": openSearchBrowser,
+            "Open BrowserLeaks Test": openBrowserLeaksTest
+        };
     }
 });
