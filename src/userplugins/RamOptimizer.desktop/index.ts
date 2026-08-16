@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { sendBotMessage } from "@api/Commands";
+import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
 import { definePluginSettings, migratePluginSetting } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType, type PluginNative } from "@utils/types";
@@ -180,6 +180,7 @@ export default definePlugin({
         {
             name: "optimize-ram",
             description: "Release unused Discord memory.",
+            inputType: ApplicationCommandInputType.BUILT_IN,
             async execute(_, ctx) {
                 if (hasRealtimeActivity()) {
                     sendBotMessage(ctx.channel.id, { content: "Memory cleanup was skipped because a call or stream is active." });
@@ -199,6 +200,7 @@ export default definePlugin({
         {
             name: "ram-status",
             description: "Show memory used by Discord's Electron processes.",
+            inputType: ApplicationCommandInputType.BUILT_IN,
             async execute(_, ctx) {
                 sendBotMessage(ctx.channel.id, { content: formatSnapshot(await Native.getMemorySnapshot()) });
             }
