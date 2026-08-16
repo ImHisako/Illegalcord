@@ -840,6 +840,18 @@ function buildRows(showDisabled: boolean, showApiPlugins: boolean, sortBy: SortB
     return sorted;
 }
 
+export function getMemoryRecommendations(limit: number) {
+    if (!pluginStarted) return [];
+
+    return buildRows(false, false, "memory")
+        .filter(row => row.name !== PLUGIN_NAME && getHeapGrowth(row) > 0)
+        .slice(0, limit)
+        .map(row => ({
+            name: row.name,
+            heapGrowthBytes: getHeapGrowth(row)
+        }));
+}
+
 function getMemory() {
     return (performance as PerformanceWithMemory).memory;
 }
