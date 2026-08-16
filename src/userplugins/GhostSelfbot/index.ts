@@ -12,7 +12,7 @@ import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import type { CommandArgument, CommandContext } from "@vencord/discord-types";
 import { findByPropsLazy } from "@webpack";
 
-import { GhostSelfbotLegalWarning } from "../legalWarnings";
+import { GhostSelfbotLegalWarning } from "../_legalWarnings";
 
 const logger = new Logger("GhostSelfbot");
 

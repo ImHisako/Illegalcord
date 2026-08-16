@@ -8,7 +8,7 @@ import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { filters, find } from "@webpack";
 
-import { SafetyBypassLegalWarning } from "../legalWarnings";
+import { SafetyBypassLegalWarning } from "../_legalWarnings";
 
 const logger = new Logger("NSFWGateBypass");
 let intervalId: ReturnType<typeof setInterval> | undefined;

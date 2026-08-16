@@ -9,7 +9,7 @@ import { Notice } from "@components/Notice";
 import { OptionType } from "@utils/types";
 import { Button, showToast, Toasts } from "@webpack/common";
 
-import { SniperLegalWarning } from "../legalWarnings";
+import { SniperLegalWarning } from "../_legalWarnings";
 import { sendTestWebhook } from "./webhook";
 
 function getToastErrorMessage(error: unknown) {

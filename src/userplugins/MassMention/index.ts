@@ -23,7 +23,7 @@ import { sendMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
 import { GuildMemberStore, UserStore } from "@webpack/common";
 
-import { AutomationLegalWarning } from "../legalWarnings";
+import { AutomationLegalWarning } from "../_legalWarnings";
 
 const settings = definePluginSettings({
     delayBetweenMessages: {

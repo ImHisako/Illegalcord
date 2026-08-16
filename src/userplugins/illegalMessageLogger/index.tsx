@@ -18,7 +18,7 @@ import definePlugin from "@utils/types";
 import type { Message } from "@vencord/discord-types";
 import { Alerts, Menu, showToast, Toasts } from "@webpack/common";
 
-import { MessageLoggerLegalWarning } from "../legalWarnings";
+import { MessageLoggerLegalWarning } from "../_legalWarnings";
 import { getChannelLogsAfter } from "./db";
 import { clearAllLogs, handleMessageCreate, handleMessageDelete, handleMessageDeleteBulk, handleMessageUpdate, runMaintenanceNow, startEngine, stopEngine } from "./engine";
 import { openLogs } from "./LogsModal";

@@ -7,7 +7,7 @@
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType } from "@utils/types";
 
-import { AutomationLegalWarning } from "../legalWarnings";
+import { AutomationLegalWarning } from "../_legalWarnings";
 
 const TEXT_STYLES = {
     fraktur: {

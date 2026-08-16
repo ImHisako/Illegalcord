@@ -16,7 +16,7 @@ import type { Activity, Channel, Guild, GuildMember, Message, OnlineStatus, Role
 import { ActivityType } from "@vencord/discord-types/enums";
 import { ChannelStore, FluxDispatcher, GuildStore, Menu, PresenceStore, RelationshipStore, SettingsRouter, UserStore, VoiceStateStore } from "@webpack/common";
 
-import { MonitoringLegalWarning } from "../legalWarnings";
+import { MonitoringLegalWarning } from "../_legalWarnings";
 import { recordEvent, trimEvents } from "./store";
 import type { MessageSnapshot, SurveillanceEvent, SurveillanceEventType, SurveillanceScope, VoiceParticipant, VoiceState, VoiceStateFlag } from "./types";
 
