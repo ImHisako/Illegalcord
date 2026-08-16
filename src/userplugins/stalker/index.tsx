@@ -12,6 +12,7 @@ import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import type { Message, User } from "@vencord/discord-types";
 import { ChannelStore, GuildStore, Menu } from "@webpack/common";
 
+import { MonitoringLegalWarning } from "../legalWarnings";
 import * as activity from "./activity";
 import * as status from "./status";
 import * as voice from "./voice";
@@ -334,4 +335,5 @@ export default definePlugin({
     },
 
     settings,
+    settingsAboutComponent: MonitoringLegalWarning,
 });

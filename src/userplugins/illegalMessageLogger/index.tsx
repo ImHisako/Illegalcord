@@ -18,6 +18,7 @@ import definePlugin from "@utils/types";
 import type { Message } from "@vencord/discord-types";
 import { Alerts, Menu, showToast, Toasts } from "@webpack/common";
 
+import { MessageLoggerLegalWarning } from "../legalWarnings";
 import { getChannelLogsAfter } from "./db";
 import { clearAllLogs, handleMessageCreate, handleMessageDelete, handleMessageDeleteBulk, handleMessageUpdate, runMaintenanceNow, startEngine, stopEngine } from "./engine";
 import { openLogs } from "./LogsModal";
@@ -57,6 +58,7 @@ const messageContextMenu: NavContextMenuPatchCallback = (children, { message }: 
 function SettingsActions() {
     return (
         <div>
+            <MessageLoggerLegalWarning />
             <p>MessageLoggerEnhanced must remain disabled while IllegalMessageLogger is enabled.</p>
             <div className={cl("actions")}>
                 <Button onClick={() => openLogs()}>Open logs</Button>

@@ -23,6 +23,8 @@ import { sendMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
 import { GuildMemberStore, UserStore } from "@webpack/common";
 
+import { AutomationLegalWarning } from "../legalWarnings";
+
 const settings = definePluginSettings({
     delayBetweenMessages: {
         type: OptionType.NUMBER,
@@ -44,6 +46,7 @@ export default definePlugin({
     authors: [{ name: "irritably", id: 928787166916640838n }],
     tags: ["Utility", "Chat"],
     settings,
+    settingsAboutComponent: AutomationLegalWarning,
     dependencies: ["CommandsAPI"],
 
     commands: [

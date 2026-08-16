@@ -16,6 +16,7 @@ import type { Activity, Channel, Guild, GuildMember, Message, OnlineStatus, Role
 import { ActivityType } from "@vencord/discord-types/enums";
 import { ChannelStore, FluxDispatcher, GuildStore, Menu, PresenceStore, RelationshipStore, SettingsRouter, UserStore, VoiceStateStore } from "@webpack/common";
 
+import { MonitoringLegalWarning } from "../legalWarnings";
 import { recordEvent, trimEvents } from "./store";
 import type { MessageSnapshot, SurveillanceEvent, SurveillanceEventType, SurveillanceScope, VoiceParticipant, VoiceState, VoiceStateFlag } from "./types";
 
@@ -1166,6 +1167,7 @@ export default definePlugin({
     authors: [{ name: "irritably", id: 928787166916640838n }],
     enabledByDefault: false,
     settings,
+    settingsAboutComponent: MonitoringLegalWarning,
     contextMenus: {
         "user-context": patchUserContext,
     },

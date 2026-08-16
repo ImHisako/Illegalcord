@@ -166,6 +166,9 @@ export const settings = definePluginSettings({
 function OSINTToolkitSettingsAbout() {
     return (
         <Notice.Warning className={Margins.bottom8}>
+            <strong>Lawful and authorized OSINT use only.</strong>
+            <p>You are responsible for having a specific lawful purpose and any required legal basis, consent, or notice before searching for another person. Do not use this plugin for stalking, doxxing, harassment, credential attacks, unlawful profiling, investigations involving minors, or decisions based only on unverified results.</p>
+            <p>Queries can send identifiers, search terms, images, your IP address, and request metadata to independent services including CordCat, Breach.vip, and GeoSeeer. Review each provider&apos;s terms and privacy notice before use. Illegalcord does not control their data, retention, accuracy, or legal compliance. Nothing in this notice excludes liability that cannot be excluded under applicable law.</p>
             <p>Commands: /domain, /iplookup, /myip, /usersearch, /breachvip, /cordcat, /cordcatuser, /cordcatinvite, /cordcatguild and /cordcatstatus.</p>
             <p>Get a CordCat API key from <MaskedLink href="https://dis.cord.cat/dashboard">the CordCat dashboard</MaskedLink> and see <MaskedLink href="https://dis.cord.cat/docs#intro">the API documentation</MaskedLink>. The status command works without a key.</p>
             <p>Right click a message to copy author identifiers, open username searches and browse OSINT resource lists.</p>

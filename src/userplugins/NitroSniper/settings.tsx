@@ -9,6 +9,7 @@ import { Notice } from "@components/Notice";
 import { OptionType } from "@utils/types";
 import { Button, showToast, Toasts } from "@webpack/common";
 
+import { SniperLegalWarning } from "../legalWarnings";
 import { sendTestWebhook } from "./webhook";
 
 function getToastErrorMessage(error: unknown) {
@@ -41,9 +42,12 @@ function TestWebhookButton() {
 
 export function CaptchaWarning() {
     return (
-        <Notice.Warning>
-            Automatic CAPTCHA solving sends the site key, request data, Discord page URL, and your user agent to the selected third-party service and may spend credits. If solving fails, NitroSniper opens Discord&apos;s CAPTCHA modal. NoCaptchaAI does not currently document hCaptcha token tasks, so its compatible task mode may stop working if the provider rejects it.
-        </Notice.Warning>
+        <>
+            <SniperLegalWarning />
+            <Notice.Warning>
+                Automatic CAPTCHA solving sends the site key, request data, Discord page URL, and your user agent to the selected third-party service and may spend credits. If solving fails, NitroSniper opens Discord&apos;s CAPTCHA modal. NoCaptchaAI does not currently document hCaptcha token tasks, so its compatible task mode may stop working if the provider rejects it.
+            </Notice.Warning>
+        </>
     );
 }
 

@@ -12,6 +12,8 @@ import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import type { CommandArgument, CommandContext } from "@vencord/discord-types";
 import { findByPropsLazy } from "@webpack";
 
+import { GhostSelfbotLegalWarning } from "../legalWarnings";
+
 const logger = new Logger("GhostSelfbot");
 
 const Native = VencordNative.pluginHelpers.GhostSelfbot as PluginNative<typeof import("./native")>;
@@ -172,6 +174,7 @@ export default definePlugin({
     tags: ["Utility", "Customisation"],
     enabledByDefault: false,
     settings,
+    settingsAboutComponent: GhostSelfbotLegalWarning,
 
     commands: [
         {

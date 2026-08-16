@@ -7,6 +7,8 @@
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType } from "@utils/types";
 
+import { AutomationLegalWarning } from "../legalWarnings";
+
 const TEXT_STYLES = {
     fraktur: {
         a: "𝔞", b: "𝔟", c: "𝔠", d: "𝔡", e: "𝔢", f: "𝔣", g: "𝔤", h: "𝔥", i: "𝔦", j: "𝔧", k: "𝔨", l: "𝔩", m: "𝔪", n: "𝔫", o: "𝔬", p: "𝔭", q: "𝔮", r: "𝔯", s: "𝔰", t: "𝔱", u: "𝔲", v: "𝔳", w: "𝔴", x: "𝔵", y: "𝔶", z: "𝔷",
@@ -146,6 +148,7 @@ export default definePlugin({
     tags: ["Chat", "Fun", "Utility"],
     enabledByDefault: false,
     settings,
+    settingsAboutComponent: AutomationLegalWarning,
 
     onBeforeMessageSend(_channelId, messageObj) {
         if (!messageObj.content) return;

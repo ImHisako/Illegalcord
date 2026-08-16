@@ -23,7 +23,7 @@ I plugin inclusi possono essere trovati [qui](https://equicord.org/plugins).
 <details>
 <summary>Clicca per vedere i plugin aggiunti a Illegalcord</summary>
 
-- **Surveillance** il nuovo miglior plugin di Illegalcord che ti permette di poter fare Osint / fare SORVEGLIANZA DI MASSA su Persone e server discord.
+- **Surveillance**: Dashboard PoC sperimentale per analizzare eventi Discord già visibili al client dell'utente. Destinata esclusivamente a ricerca, formazione e test autorizzati.
 - **Kamidere Mutual Scanner**
 - **kamidere PresenceLab**
 - **Kamidere SendTrail**
@@ -156,6 +156,46 @@ Discord è un marchio di Discord Inc. ed è menzionato esclusivamente a scopo de
 La sua menzione non implica alcuna affiliazione o approvazione da parte di Discord Inc.
 Vencord non è affiliato con Equicord o Illegalcord.
 
+### Stato Legale, PoC dell'Intero Progetto e Uso Responsabile
+
+> [!IMPORTANT]
+> **Illegalcord nel suo complesso, inclusi tutti i plugin integrati e non soltanto OSINTToolkit, Surveillance e Stalker, è pubblicato come proof of concept (PoC) sperimentale.** Le finalità previste sono ricerca, formazione, interoperabilità, privacy, personalizzazione e test di sicurezza autorizzati. La qualifica di PoC descrive lo scopo previsto del progetto: non costituisce un'esenzione legale e non rende lecito ogni possibile utilizzo.
+
+Illegalcord non viene presentato come malware né come software destinato a facilitare reati. Il nome del progetto e la presenza di funzionalità avanzate o dual use non determinano, da soli, lo stato legale del software. Nessun manutentore può tuttavia garantire che il client, ogni plugin o ogni utilizzo siano leciti in qualsiasi giurisdizione. La liceità dipende dalla funzione utilizzata, dalla condotta dell'utente, dall'autorizzazione o dal consenso, dai dati coinvolti, dalla legge applicabile e dalle regole della piattaforma. Questa sezione contiene informazioni generali e non costituisce consulenza legale.
+
+Illegalcord deve essere utilizzato esclusivamente con account, sistemi, server, comunicazioni e dati propri o ai quali si è esplicitamente autorizzati ad accedere e che si è autorizzati ad analizzare. Il fatto che un'informazione sia pubblicamente accessibile non elimina automaticamente gli obblighi in materia di privacy e protezione dei dati. È vietato utilizzare Illegalcord per accessi o intercettazioni non autorizzati, acquisizione o condivisione di credenziali o token, elusione dei controlli di sicurezza o di età, spam, molestie, doxxing, atti persecutori, profilazione o raccolta di dati non autorizzata, frode, violazione del diritto d'autore o qualsiasi altra attività illegale o abusiva.
+
+#### Privacy, archiviazione locale e servizi di terze parti
+
+Illegalcord è un software client, ma non è corretto presumere che ogni operazione rimanga esclusivamente all'interno di Discord o che non venga trattato alcun dato personale. In base ai plugin e alle impostazioni attivati, il client può leggere dati già disponibili al client Discord, salvare localmente impostazioni, identificativi, log e anteprime facoltative dei messaggi oppure trasmettere a servizi indipendenti identificativi, termini di ricerca, file, metadati delle richieste, contenuti destinati a webhook o altri dati scelti dall'utente. Prima di attivare plugin che trattano o trasmettono dati è necessario consultare la [Privacy Policy del progetto](PRIVACY_POLICY.md).
+
+**OSINTToolkit interagisce con servizi indipendenti di terze parti, inclusi CordCat e Breach.vip.** Le richieste possono comunicare l'identificativo Discord cercato o altri termini di ricerca e metadati tecnici come l'indirizzo IP dell'utente. CordCat dichiara di conservare informazioni sulle ricerche e sulle richieste secondo la propria informativa e di poter interrogare un aggregatore privato di dati provenienti da violazioni. Altri plugin facoltativi possono contattare servizi di caricamento, webhook, servizi CAPTCHA, database di contenuti o altre API. Tali fornitori applicano termini, informative, misure di sicurezza e periodi di conservazione propri; Illegalcord non controlla il loro trattamento e non può cancellare i dati da essi detenuti.
+
+Prima di trasmettere dati personali a qualunque servizio, l'utente deve individuare una finalità lecita e specifica, determinare una base giuridica adeguata, informare gli interessati quando richiesto, ridurre al minimo i dati inviati, stabilire un periodo di conservazione proporzionato, proteggere i file locali e rispettare i diritti di accesso, opposizione, rettifica e cancellazione. Non devono essere trasmessi dati di minori, categorie particolari di dati, credenziali, comunicazioni private o informazioni provenienti da violazioni salvo che il trattamento sia strettamente necessario, consentito dalla legge e adeguatamente protetto. La disponibilità pubblica, l'etichetta OSINT o l'informativa di un servizio terzo non dimostrano da sole la liceità del riutilizzo. Non devono essere adottate decisioni che incidano significativamente su una persona basandosi esclusivamente su risultati OSINT o provenienti da violazioni non verificati. Prima dell'uso è necessario consultare la [Privacy Policy di CordCat](https://cord.cat/privacy/), i [Termini di CordCat](https://cord.cat/terms/) e le informative di ogni altro servizio. Illegalcord non certifica la loro conformità al GDPR né l'accuratezza, la liceità, l'attualità o la provenienza dei dati forniti.
+
+#### Plugin sensibili e limiti di utilizzo penalmente rilevanti
+
+Alcune funzioni integrate sono particolarmente sensibili, inclusi OSINTToolkit, Surveillance, Stalker, GhostSelfbot, MassMention, AutoModBypass, NsfwGateBypass, i logger di messaggi, gli strumenti relativi ai token, gli sniper, le automazioni degli account e plugin analoghi. Tra i casi collegati al token rientrano **GhostSelfbot** (può leggere facoltativamente il token dell'account Discord corrente e scriverlo nei file di configurazione e dei token di Ghost affinché il selfbot esterno avviato possa autenticarsi), **ClanSwitcher** (legge temporaneamente in memoria il token Discord corrente per autorizzare richieste dirette alle API Discord che cambiano il clan attivo), **BoosterCount/showBoostCounts** (legge temporaneamente il token per richiedere direttamente a Discord i dati sui booster di un server) e **NoDevtoolsWarning** (non recupera né trasmette direttamente il token, ma disattiva la protezione della console con cui Discord lo nasconde, aumentando il rischio di esposizione accidentale tramite gli strumenti per sviluppatori). Fanno parte del PoC sperimentale dell'intero progetto, ma questa qualifica non ne autorizza l'impiego contro altre persone o in violazione delle regole della piattaforma. Devono rimanere disattivati se l'utente non ne comprende il funzionamento o non dispone dell'autorizzazione e della base giuridica necessarie.
+
+- Il monitoraggio e la registrazione devono essere utilizzati soltanto sul proprio account o in un contesto di moderazione, ricerca o sicurezza espressamente autorizzato. Devono essere raccolti solo gli eventi necessari, evitando le anteprime dei messaggi salvo necessità, limitando gli accessi, definendo una conservazione breve e cancellando in modo sicuro i log esportati quando non servono più. È vietato usarli per seguire, intimidire, profilare, esporre o molestare una persona.
+- È vietato ottenere, importare, utilizzare, esportare, pubblicare o trasmettere token, password, sessioni, chiavi API o credenziali di webhook appartenenti ad altri. Anche il proprio token Discord è un segreto ad alto rischio: non deve essere condiviso e non deve essere attivata una funzione che lo scrive su file senza accettarne consapevolmente i rischi di sicurezza e per l'account.
+- Selfbot e automazioni non devono essere utilizzati per spam, menzioni massive, scraping, elusione dei limiti, acquisizione sleale di benefici, impersonificazione o aggiramento di moderazione, sicurezza, età, accessi o controlli sui contenuti. L'autorizzazione ai test deve provenire dal titolare dell'account o del sistema interessato e non prevale sulle regole di Discord.
+- I dati restituiti da servizi OSINT o relativi a violazioni non devono essere considerati fatti verificati né utilizzati per stalking, attacchi alle credenziali, discriminazione, accuse pubbliche o decisioni riguardanti lavoro, accesso, reputazione, sicurezza o diritti.
+
+In questa sezione, “token” non indica sempre il token dell'account Discord. FileUpload utilizza credenziali dei servizi di caricamento configurati dall'utente, come Zipline o Nest; Anon.li Drop utilizza una chiave API di Anon.li; YMusicSync utilizza un token OAuth di Yandex Music; plugin come NitroSniper, ReviewDB, Decor, SongSpotlight, Streaks, ThemeLibrary o TriviaAI possono utilizzare token API, OAuth o di sessione specifici dei rispettivi servizi. Queste credenziali non consentono di accedere all'account Discord, salvo che un servizio o un plugin utilizzi espressamente il token dell'account Discord, ma devono comunque essere protette e possono essere trasmesse al fornitore indicato per l'autenticazione. L'elenco descrive le integrazioni presenti al momento della redazione e deve essere verificato nuovamente quando i plugin cambiano.
+
+La responsabilità penale dipende dalla condotta concreta, dall'intento, dall'autorizzazione e dalle circostanze; il semplice nome o la presenza di una funzione dual use non costituiscono automaticamente un reato. Tuttavia, l'introduzione abusiva in un sistema protetto o la permanenza contro la volontà del titolare può rientrare nell'articolo 615-ter del Codice penale; il procacciamento, la detenzione, la produzione o la diffusione illeciti di credenziali finalizzati a un uso illecito possono rientrare nell'articolo 615-quater; l'intercettazione, l'impedimento o l'interruzione fraudolenti di comunicazioni informatiche possono rientrare nell'articolo 617-quater; minacce o molestie reiterate che producono gli eventi previsti dalla legge possono rientrare nell'articolo 612-bis. L'uso del proprio account o la ricezione di eventi normalmente destinati al proprio client non equivalgono automaticamente a tali reati, ma possono comunque violare contratti, normativa privacy o altre regole. Soltanto le autorità e i giudici competenti possono stabilire se un caso concreto integri una fattispecie di reato. Il testo consolidato vigente è disponibile su [Normattiva](https://www.normattiva.it/eli/id/1930/10/26/030U1398/CONSOLIDATED).
+
+Tra le fonti ufficiali rilevanti rientrano:
+
+- La [licenza GNU GPL-3.0-or-later](LICENSE), che disciplina copia, modifica e distribuzione del progetto, ma non autorizza condotte illecite.
+- Il [Regolamento generale sulla protezione dei dati dell'UE](https://eur-lex.europa.eu/eli/reg/2016/679/oj), in particolare gli articoli 4, 5, 6, 12-14, 25 e 32 relativi a dati personali, liceità, trasparenza, minimizzazione, protezione dei dati fin dalla progettazione e sicurezza.
+- La [guida del Garante per la protezione dei dati personali sui principi fondamentali del trattamento](https://www.garanteprivacy.it/home/principi-fondamentali-del-trattamento).
+- Il [Codice penale italiano su Normattiva](https://www.normattiva.it/eli/id/1930/10/26/030U1398/CONSOLIDATED), inclusi, quando applicabili alla condotta concreta, gli articoli 612-bis, 615-ter, 615-quater e 617-quater in materia di atti persecutori, accesso abusivo a sistemi informatici, codici di accesso e intercettazione illecita di comunicazioni informatiche.
+- I [Termini di Servizio di Discord](https://discord.com/terms), la [Policy sulla manipolazione della piattaforma](https://discord.com/safety/platform-manipulation-policy-explainer-oct-2023) e la [policy ufficiale sui self-bot](https://support.discord.com/hc/en-us/articles/115002192352-Automated-User-Accounts-Self-Bots).
+
+Discord vieta le modifiche al client e l'automazione di normali account utente al di fuori della propria API per bot. Questa violazione contrattuale o delle regole della piattaforma è distinta da una valutazione penalistica, ma può comunque causare la sospensione o la chiusura dell'account. I manutentori e i contributori non approvano alcun uso illegale e non possono assumersi responsabilità per l'uso improprio da parte di terzi.
+
 ## Ringraziamenti speciali
 
 Siamo orgogliosi di collaborare con [Nightcord](https://nightcord.st/).
@@ -163,17 +203,17 @@ Le loro idee, le loro scelte di progettazione e parti del loro codice sono state
 Questa collaborazione è stata ben più di un semplice nome: ha rappresentato un contributo concreto alla direzione e alla qualità di questo client.
 
 > [!WARNING]
-> **Illegalcord non è un client illegale.** La parola **"Illegal"** fa parte solo del nome del progetto e non significa che il software sia illegale di per sé.
+> **Il nome Illegalcord non rende il client illegale di per sé.** La parola **"Illegal"** fa parte solo del nome del progetto e non determina lo stato legale del software.
 > Il nome richiama l'idea di un client Discord senza le limitazioni e le regole tipicamente imposte da altri client mod, in modo simile alla filosofia di personalizzazione di Equicord e Vencord.
 > Tuttavia, l'uso di client modificati può comunque violare i Termini di Servizio di Discord, quindi va fatto con consapevolezza.
-> Se una qualsiasi funzione di questo client viene usata per scopi illegali, il proprietario e i contributori del progetto non si assumono alcuna responsabilità per tale utilizzo improprio.
+> Gli utilizzi illeciti non rientrano nelle finalità previste dal progetto. La responsabilità è determinata dalla legge applicabile e non può essere esclusa semplicemente tramite questo disclaimer.
 
 <details>
 <summary>Usare Illegalcord viola i termini di servizio di Discord</summary>
 
 Le modifiche al client sono contro i Termini di Servizio di Discord.
 
-Tuttavia, Discord è piuttosto indifferente nei loro confronti e non ci sono casi noti di utenti bannati per l'uso di mod client! Quindi dovresti stare generalmente bene se non usi plugin che implementano comportamenti abusivi. Ma non preoccuparti, tutti i plugin integrati sono sicuri da usare!
+Discord vieta espressamente le modifiche al client e i self-bot. Nella pratica, l'applicazione di sanzioni per il normale utilizzo non abusivo di client modificati è generalmente considerata poco frequente, quindi la maggior parte degli utenti ritiene basso il rischio di ban. Il rischio non è tuttavia pari a zero e il progetto non può garantire che un account non subisca conseguenze. I plugin che automatizzano account, generano spam, aggirano misure di sicurezza o consentono comportamenti abusivi comportano un rischio sensibilmente maggiore.
 
 Indipendentemente da ciò, se il tuo account è essenziale per te e la sua disabilitazione sarebbe un disastro, probabilmente dovresti evitare di usare mod client (non solo Equicord), giusto per essere al sicuro.
 
