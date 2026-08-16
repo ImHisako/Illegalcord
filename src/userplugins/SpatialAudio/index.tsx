@@ -79,7 +79,7 @@ export default definePlugin({
         }
     ],
 
-    get toolboxActions() {
+    get toolboxActions(): Record<string, () => void> {
         if (settings.store.hideFromToolbox) return {};
 
         return {

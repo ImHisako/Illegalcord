@@ -164,7 +164,7 @@ export default definePlugin({
     enabledByDefault: true,
     settings,
     settingsAboutComponent: SafeIllegalcordAnnouncementSettings,
-    get toolboxActions() {
+    get toolboxActions(): Record<string, () => void> {
         if (settings.store.hideFromToolbox) return {};
 
         return {

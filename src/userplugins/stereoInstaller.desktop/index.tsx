@@ -533,7 +533,7 @@ export default definePlugin({
     reporterTestable: ReporterTestable.None,
     settings,
     settingsAboutComponent: ErrorBoundary.wrap(StereoWarning, { noop: true }),
-    get toolboxActions() {
+    get toolboxActions(): Record<string, () => void> {
         if (settings.store.hideFromToolbox) return {};
 
         return {

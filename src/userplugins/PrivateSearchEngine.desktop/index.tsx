@@ -140,7 +140,7 @@ export default definePlugin({
         render: () => <SafeStartpageBrowserButton />,
         priority: 8
     },
-    get toolboxActions() {
+    get toolboxActions(): Record<string, () => void> {
         if (settings.store.hideFromToolbox) return {};
 
         return {

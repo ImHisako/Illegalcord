@@ -40,7 +40,7 @@ export default definePlugin({
     enabledByDefault: true,
     settings,
     settingsAboutComponent: SafeTutorialSettings,
-    get toolboxActions() {
+    get toolboxActions(): Record<string, () => void> {
         if (settings.store.hideFromToolbox) return {};
 
         return {
