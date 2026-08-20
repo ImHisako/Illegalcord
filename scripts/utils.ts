@@ -20,7 +20,7 @@ import { Dirent, readdirSync, readFileSync, writeFileSync } from "fs";
 import { access, readFile } from "fs/promises";
 import { join, sep } from "path";
 import { normalize as posixNormalize, sep as posixSep } from "path/posix";
-import { BigIntLiteral, createSourceFile, Identifier, isArrayLiteralExpression, isCallExpression, isExportAssignment, isIdentifier, isObjectLiteralExpression, isPropertyAccessExpression, isPropertyAssignment, isSatisfiesExpression, isStringLiteral, isVariableStatement, NamedDeclaration, NodeArray, ObjectLiteralExpression, PropertyAssignment, ScriptTarget, StringLiteral, SyntaxKind } from "typescript";
+import { BigIntLiteral, type CallExpression, createSourceFile, Identifier, isArrayLiteralExpression, isCallExpression, isExportAssignment, isIdentifier, isObjectLiteralExpression, isPropertyAccessExpression, isPropertyAssignment, isSatisfiesExpression, isStringLiteral, isVariableStatement, NamedDeclaration, NodeArray, ObjectLiteralExpression, PropertyAssignment, ScriptTarget, StringLiteral, SyntaxKind } from "typescript";
 
 import { getPluginTarget } from "./utils.mjs";
 
@@ -139,12 +139,28 @@ export async function parseFile(fileName: string) {
     };
 
     for (const node of file.getChildAt(0).getChildren()) {
-        if (!isExportAssignment(node) || !isCallExpression(node.expression)) continue;
+        if (!isExportAssignment(node)) continue;
 
-        const call = node.expression;
+        let call: CallExpression | undefined;
+        if (isCallExpression(node.expression)) {
+            call = node.expression;
+        } else if (isIdentifier(node.expression)) {
+            const exportName = node.expression.text;
+            for (const child of file.getChildAt(0).getChildren()) {
+                if (!isVariableStatement(child)) continue;
+                const declaration = child.declarationList.declarations.find(item => getName(item) === exportName);
+                if (declaration?.initializer && isCallExpression(declaration.initializer)) {
+                    call = declaration.initializer;
+                    break;
+                }
+            }
+        }
+
+        if (!call) continue;
+
         if (!isIdentifier(call.expression) || call.expression.text !== "definePlugin") continue;
 
-        const pluginObj = node.expression.arguments[0];
+        const pluginObj = call.arguments[0];
         if (!isObjectLiteralExpression(pluginObj)) throw fail("no object literal passed to definePlugin");
 
         const data = {
@@ -249,7 +265,8 @@ export async function parseFile(fileName: string) {
             .join(posixSep)
             .replace(/\/index\.([jt]sx?)$/, "")
             .replace(/^src\/plugins\//, "")
-            .replace(/^src\/equicordplugins\//, "");
+            .replace(/^src\/equicordplugins\//, "")
+            .replace(/^src\/illegalcordplugins\//, "");
 
         return [data] as const;
     }

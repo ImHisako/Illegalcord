@@ -102,6 +102,7 @@ const enum SearchStatus {
     FAVORITES,
     ENABLED,
     DISABLED,
+    ILLEGALCORD,
     EQUICORD,
     VENCORD,
     NEW,
@@ -223,6 +224,9 @@ export default function PluginSettings() {
                 break;
             case SearchStatus.ENABLED:
                 if (!isPluginEnabled(plugin.name)) return false;
+                break;
+            case SearchStatus.ILLEGALCORD:
+                if (!PluginMeta[plugin.name].folderName.startsWith("src/illegalcordplugins/")) return false;
                 break;
             case SearchStatus.EQUICORD:
                 if (!PluginMeta[plugin.name].folderName.startsWith("src/equicordplugins/")) return false;
@@ -429,10 +433,11 @@ export default function PluginSettings() {
                             { label: "Show Favorites", value: SearchStatus.FAVORITES },
                             { label: "Show Enabled", value: SearchStatus.ENABLED },
                             { label: "Show Disabled", value: SearchStatus.DISABLED },
+                            { label: "Show Illegalcord", value: SearchStatus.ILLEGALCORD },
                             { label: "Show Equicord", value: SearchStatus.EQUICORD },
                             { label: "Show Vencord", value: SearchStatus.VENCORD },
                             { label: "Show New", value: SearchStatus.NEW },
-                            hasUserPlugins && { label: "Show Illegalcord", value: SearchStatus.USER_PLUGINS },
+                            hasUserPlugins && { label: "Show User Plugins", value: SearchStatus.USER_PLUGINS },
                             { label: "Show API Plugins", value: SearchStatus.API_PLUGINS },
                         ].filter(isTruthy)}
                         serialize={String}

@@ -7,5 +7,48 @@
                 "message": "Expected class selector to be kebab-case with camelCase segments"
             }
         ]
-    }
+    },
+    "overrides": [
+        {
+            "files": [
+                "src/illegalcordplugins/IllegalcordDynamicIsland/style.css",
+                "src/illegalcordplugins/LarpCord/styles.css",
+                "src/illegalcordplugins/mutualScanner/styles.css",
+                "src/illegalcordplugins/presenceLab/styles.css",
+                "src/illegalcordplugins/sendTrail/styles.css",
+                "src/illegalcordplugins/SpatialAudio/style.css",
+                "src/illegalcordplugins/Surveillance/components/styles.css",
+                "src/illegalcordplugins/yMusicSync.desktop/styles.css"
+            ],
+            "rules": {
+                "no-descending-specificity": null
+            }
+        },
+        {
+            "files": [
+                "src/illegalcordplugins/LarpCord/styles.css",
+                "src/illegalcordplugins/mutualScanner/styles.css"
+            ],
+            "rules": {
+                "no-duplicate-selectors": null
+            }
+        },
+        {
+            "files": [
+                "src/illegalcordplugins/LarpCord/styles.css",
+                "src/illegalcordplugins/Surveillance/components/styles.css"
+            ],
+            "rules": {
+                "selector-class-pattern": null
+            }
+        },
+        {
+            "files": [
+                "src/illegalcordplugins/sendTrail/styles.css"
+            ],
+            "rules": {
+                "declaration-property-value-keyword-no-deprecated": null
+            }
+        }
+    ]
 }

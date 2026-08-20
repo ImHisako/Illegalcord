@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, sep } from "node:path";
 
 const ROOT = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
@@ -9,9 +9,10 @@ const VALID_MODIFIERS = new Set(["raw", "hash"]);
 const MARKER_RE = /#\{intl::([\w$+/]*)(?:::(\w+))?\}/g;
 const HASH_RE = /["'`]\s*\.([A-Za-z][A-Za-z0-9+/]{5})\b/g;
 
-const tracked = execFileSync("git", ["ls-files", "src"], { cwd: ROOT, encoding: "utf8" })
+const tracked = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "src"], { cwd: ROOT, encoding: "utf8" })
     .split("\n")
     .filter(p => /\.(ts|tsx|js|jsx|mjs)$/.test(p))
+    .filter(p => existsSync(join(ROOT, p)))
     .map(p => p.replace(/\//g, sep));
 
 let errors = 0;

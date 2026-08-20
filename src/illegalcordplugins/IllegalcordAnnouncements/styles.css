@@ -1,0 +1,78 @@
+.vc-illegalcord-announcements-modal {
+    overflow: hidden;
+}
+
+.vc-illegalcord-announcements-header {
+    align-items: flex-start;
+    gap: 16px;
+    padding-bottom: 12px;
+}
+
+.vc-illegalcord-announcements-header-content {
+    min-width: 0;
+    flex: 1;
+}
+
+.vc-illegalcord-announcements-title {
+    margin: 0 0 6px;
+}
+
+.vc-illegalcord-announcements-description {
+    margin: 0;
+}
+
+.vc-illegalcord-announcements-content {
+    padding-top: 4px;
+}
+
+.vc-illegalcord-announcements-actions {
+    display: grid;
+    gap: 12px;
+}
+
+.vc-illegalcord-announcements-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm, 8px);
+    background: var(--background-secondary);
+}
+
+.vc-illegalcord-announcements-action p {
+    margin: 4px 0 0;
+}
+
+.vc-illegalcord-announcements-action-button {
+    flex-shrink: 0;
+    gap: 8px;
+}
+
+.vc-illegalcord-announcements-footer {
+    width: 100%;
+}
+
+.vc-illegalcord-announcements-settings {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.vc-illegalcord-announcements-settings p {
+    margin: 0;
+}
+
+@media (width <= 520px) {
+    .vc-illegalcord-announcements-action,
+    .vc-illegalcord-announcements-settings {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .vc-illegalcord-announcements-action-button {
+        width: 100%;
+    }
+}

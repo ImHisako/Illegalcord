@@ -1336,6 +1336,90 @@ export const EquicordDevs = Object.freeze({
         name: "irritably",
         id: 928787166916640838n,
     },
+    appleflyer: {
+        name: "appleflyer",
+        id: 1209096766075703368n
+    },
+    Aurick: {
+        name: "Aurick",
+        id: 1348025017233047634n
+    },
+    Block: {
+        name: "Block",
+        id: 1449096170646536233n
+    },
+    Dadian1: {
+        name: "Dadian1",
+        id: 131825869302792192n
+    },
+    Death: {
+        name: "Death",
+        id: 1003477997728313405n
+    },
+    diram1x: {
+        name: "diram1x",
+        id: 710580442180485120n
+    },
+    gandhistyle: {
+        name: "gandhistyle",
+        id: 0n
+    },
+    onewhobridges: {
+        name: "onewhobridges",
+        id: 0n
+    },
+    tomfront: {
+        name: "tomfront",
+        id: 175656408459640832n
+    },
+    unclide: {
+        name: "unclide",
+        id: 395504896817758210n
+    },
+    vejcowski: {
+        name: "vejcowski",
+        id: 1375544683908042862n
+    },
+    zFrxncesck1: {
+        name: "zFrxncesck1",
+        id: 456195985404592149n
+    },
+    q1: {
+        name: ".q1",
+        id: 1263457746829705310n
+    },
+    Jelly: {
+        name: "Jelly",
+        id: 1147940825330876538n
+    },
+    Raf: {
+        name: "Raf",
+        id: 121253596753952768n
+    },
+    Sami: {
+        name: "Sami",
+        id: 1403404140461297816n
+    },
+    TopQ: {
+        name: "TopQ",
+        id: 523800559791374356n
+    },
+    dxrx99: {
+        name: "dxrx99",
+        id: 1463629522359423152n
+    },
+    luxed: {
+        name: "luxed",
+        id: 763399787747082250n
+    },
+    omawAlt: {
+        name: "omaw",
+        id: 1474576133088481351n
+    },
+    zastix: {
+        name: "zastix",
+        id: 253302259696271360n
+    },
     yash: {
         name: "yash",
         id: 889150838658977874n
