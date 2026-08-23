@@ -32,7 +32,11 @@ const settings = definePluginSettings({
     apiKey: {
         type: OptionType.STRING,
         description: "Anon.li API key used for Drop uploads.",
-        default: ""
+        default: "",
+        componentProps: {
+            type: "password",
+            autoComplete: "off"
+        }
     },
     expiryDays: {
         type: OptionType.SELECT,
@@ -47,7 +51,12 @@ const settings = definePluginSettings({
     maxDownloads: {
         type: OptionType.NUMBER,
         description: "Maximum downloads for a drop. Use 0 for no custom limit.",
-        default: 0
+        default: 0,
+        isValid(value: number) {
+            return Number.isInteger(value) && value >= 0 && value <= 1_000_000
+                ? true
+                : "Maximum downloads must be a whole number between 0 and 1,000,000.";
+        }
     },
     sendAfterUpload: {
         type: OptionType.BOOLEAN,
@@ -99,6 +108,11 @@ function AnonLiSettingsAbout() {
 
 const SafeAnonLiSettingsAbout = ErrorBoundary.wrap(AnonLiSettingsAbout, { noop: true });
 
+const activeUploadIds = new Set<string>();
+let lifecycleGeneration = 0;
+let nextUploadTaskId = 0;
+let uploadTaskId: number | undefined;
+
 async function uploadAnonLiDrop() {
     const apiKey = settings.store.apiKey.trim();
     if (!apiKey) {
@@ -120,30 +134,75 @@ async function uploadAnonLiDrop() {
     const file = await chooseFile("*/*");
     if (!file) return;
 
+    if (uploadTaskId !== undefined) {
+        showToast("An Anon.li upload is already in progress.", Toasts.Type.FAILURE);
+        return;
+    }
+
+    const generation = lifecycleGeneration;
+    const taskId = ++nextUploadTaskId;
+    uploadTaskId = taskId;
+
     showToast(`Uploading ${file.name} to Anon.li.`, Toasts.Type.MESSAGE);
 
-    const result = await Native.uploadDrop(
-        apiKey,
-        file.name,
-        file.type || "application/octet-stream",
-        await file.arrayBuffer(),
-        settings.store.expiryDays ?? 3,
-        settings.store.maxDownloads ?? 0
-    );
+    let uploadId: string | undefined;
 
-    if (!result.success) {
-        showToast(result.error, Toasts.Type.FAILURE);
-        return;
+    try {
+        const beginResult = await Native.beginUpload(
+            apiKey,
+            file.name,
+            file.type || "application/octet-stream",
+            file.size,
+            settings.store.expiryDays ?? 3,
+            settings.store.maxDownloads ?? 0
+        );
+
+        if (!beginResult.success) throw new Error(beginResult.error);
+
+        uploadId = beginResult.uploadId;
+        const { chunkCount, chunkSize } = beginResult;
+        activeUploadIds.add(uploadId);
+        if (generation !== lifecycleGeneration) throw new Error("Anon.li upload was cancelled.");
+
+        for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
+            const start = chunkIndex * chunkSize;
+            const chunk = await file.slice(start, Math.min(start + chunkSize, file.size)).arrayBuffer();
+            const chunkResult = await Native.uploadChunk(uploadId, chunkIndex, chunk);
+
+            if (!chunkResult.success) throw new Error(chunkResult.error);
+        }
+
+        const finishResult = await Native.finishUpload(uploadId);
+        if (!finishResult.success) throw new Error(finishResult.error);
+
+        activeUploadIds.delete(uploadId);
+
+        if (settings.store.copyAfterUpload) {
+            try {
+                await copyWithToast(finishResult.url, "Anon.li link copied.");
+            } catch {
+                showToast("Could not copy the Anon.li link.", Toasts.Type.FAILURE);
+            }
+        }
+
+        if (settings.store.sendAfterUpload) {
+            try {
+                await sendMessage(channel.id, { content: finishResult.url });
+                return;
+            } catch {
+                showToast("Could not send the Anon.li link. It was added to the message box instead.", Toasts.Type.FAILURE);
+            }
+        }
+
+        insertTextIntoChatInputBox(finishResult.url);
+    } catch (error) {
+        if (generation === lifecycleGeneration) {
+            showToast(error instanceof Error ? error.message : "Anon.li upload failed.", Toasts.Type.FAILURE);
+        }
+    } finally {
+        if (uploadId && activeUploadIds.delete(uploadId)) await Native.abortUpload(uploadId).catch(() => undefined);
+        if (uploadTaskId === taskId) uploadTaskId = undefined;
     }
-
-    if (settings.store.copyAfterUpload) await copyWithToast(result.url, "Anon.li link copied.");
-
-    if (settings.store.sendAfterUpload) {
-        await sendMessage(channel.id, { content: result.url });
-        return;
-    }
-
-    insertTextIntoChatInputBox(result.url);
 }
 
 const channelAttachContextMenuPatch: NavContextMenuPatchCallback = children => {
@@ -174,5 +233,12 @@ export default definePlugin({
 
     contextMenus: {
         "channel-attach": channelAttachContextMenuPatch
+    },
+
+    stop() {
+        lifecycleGeneration++;
+        uploadTaskId = undefined;
+        for (const uploadId of activeUploadIds) void Native?.abortUpload(uploadId).catch(() => undefined);
+        activeUploadIds.clear();
     }
 });

@@ -89,7 +89,24 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 
 Illegalcord has his personal badges btw
 
+<<<<<<< HEAD
 ## Installing Illegalcord
+=======
+- [X64 GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-darwin-x64.zip)
+- [ARM64 GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-darwin-arm64.zip)
+
+Linux
+
+- [GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-x11)
+- [CLI](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-Linux)
+- [AUR](https://aur.archlinux.org/packages?O=0&K=equicord)
+
+```shell
+bash -c "$(curl -sS https://raw.githubusercontent.com/Equicord/Equilotl/refs/heads/main/install.sh)"
+```
+
+## Installing Equicord Devbuild
+>>>>>>> upstream/main
 
 ### Dependencies
 
