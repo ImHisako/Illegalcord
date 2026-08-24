@@ -90,7 +90,7 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 Illegalcord has his personal badges btw
 
 ## Installing Illegalcord
-=======
+
 - [X64 GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-darwin-x64.zip)
 - [ARM64 GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-darwin-arm64.zip)
 
