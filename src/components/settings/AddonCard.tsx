@@ -33,6 +33,7 @@ const pluginCl = classNameFactory("vc-plugins-");
 
 interface NightcordPortPlugin extends Plugin {
     isNightcordPlugin(name: string): boolean;
+    getPluginSource(name: string): { badge: ReactNode; tooltip: string; } | null;
 }
 
 interface Props {
@@ -55,11 +56,13 @@ interface Props {
 export function AddonCard({ disabled, isNew, sourceBadge, tooltip, name, infoButton, footer, author, enabled, setEnabled, description, onMouseEnter, onMouseLeave }: Props) {
     const titleRef = useRef<HTMLDivElement>(null);
     const titleContainerRef = useRef<HTMLDivElement>(null);
-    const isNightcordPlugin = typeof name === "string" && (Plugins.NightcordPort as NightcordPortPlugin).isNightcordPlugin(name);
-    const resolvedSourceBadge = isNightcordPlugin
+    const nightcordPort = Plugins.NightcordPort as NightcordPortPlugin;
+    const isNightcordPlugin = typeof name === "string" && nightcordPort.isNightcordPlugin(name);
+    const customPluginSource = typeof name === "string" ? nightcordPort.getPluginSource(name) : null;
+    const resolvedSourceBadge = customPluginSource?.badge ?? (isNightcordPlugin
         ? <img src="https://nightcord.st/image.png" alt="Nightcord" className={pluginCl("source")} />
-        : sourceBadge;
-    const resolvedTooltip = isNightcordPlugin ? "Nightcord Plugin" : tooltip;
+        : sourceBadge);
+    const resolvedTooltip = customPluginSource?.tooltip ?? (isNightcordPlugin ? "Nightcord Plugin" : tooltip);
 
     return (
         <div

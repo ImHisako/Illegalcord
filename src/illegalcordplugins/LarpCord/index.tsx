@@ -12,6 +12,8 @@ import { DataStore } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
 import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
+import { Margins } from "@components/margins";
+import { Notice } from "@components/Notice";
 import { EquicordDevs } from "@utils/constants";
 import { fetchUserProfile } from "@utils/discord";
 import { parseUrl } from "@utils/misc";
@@ -2038,6 +2040,13 @@ export default definePlugin({
     },
 
     settingsAboutComponent() {
-        return <Button onClick={openLarpCord}>Open LarpCord</Button>;
+        return (
+            <>
+                <Notice.Warning className={Margins.bottom8}>
+                    This plugin and various parts of its code were created by Nightcord and Testcord.
+                </Notice.Warning>
+                <Button onClick={openLarpCord}>Open LarpCord</Button>
+            </>
+        );
     },
 });
