@@ -27,18 +27,18 @@ function isValidProxyValue(value: unknown, allowEmpty: boolean): value is string
         && !/[\r\n\0@]/.test(value);
 }
 
-function getChromeUserAgent(spoofWindows: boolean): string {
+function getChromeUserAgent(spoofWindows: boolean, preserveElectronMarker: boolean): string {
     const chromeVersion = process.versions.chrome?.split(".")[0] ?? "120";
     const platform = spoofWindows || process.platform === "win32"
         ? "Windows NT 10.0; Win64; x64"
         : process.platform === "darwin"
             ? "Macintosh; Intel Mac OS X 10_15_7"
             : "X11; Linux x86_64";
-    return `Mozilla/5.0 (${platform}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVersion}.0.0.0 Safari/537.36`;
+    return `Mozilla/5.0 (${platform}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVersion}.0.0.0 Safari/537.36${preserveElectronMarker ? " Electron/0.0.0" : ""}`;
 }
 
-function hideElectronTokens(userAgent: string): string {
-    return userAgent.replace(/\s(?:Electron|Discord)\/[\w.-]+/gi, "");
+function hideElectronTokens(userAgent: string, preserveElectronMarker: boolean): string {
+    return `${userAgent.replace(/\s(?:Electron|Discord)\/[\w.-]+/gi, "")}${preserveElectronMarker ? " Electron/0.0.0" : ""}`;
 }
 
 function isDiscordUrl(url: string): boolean {
@@ -74,6 +74,7 @@ export async function configure(
     hideElectronUserAgent: boolean,
     spoofChrome: boolean,
     spoofWindows: boolean,
+    preserveElectronMarker: boolean,
     proxy: boolean,
     proxyRules: string,
     proxyBypassRules: string,
@@ -84,6 +85,7 @@ export async function configure(
         typeof hideElectronUserAgent !== "boolean"
         || typeof spoofChrome !== "boolean"
         || typeof spoofWindows !== "boolean"
+        || typeof preserveElectronMarker !== "boolean"
         || typeof proxy !== "boolean"
         || typeof allowCamera !== "boolean"
         || typeof allowMicrophone !== "boolean"
@@ -116,7 +118,7 @@ export async function configure(
 
     try {
         if (spoofChrome || hideElectronUserAgent) {
-            event.sender.setUserAgent(spoofChrome ? getChromeUserAgent(spoofWindows) : hideElectronTokens(state.userAgent));
+            event.sender.setUserAgent(spoofChrome ? getChromeUserAgent(spoofWindows, preserveElectronMarker) : hideElectronTokens(state.userAgent, preserveElectronMarker));
             state.userAgentApplied = true;
         }
 

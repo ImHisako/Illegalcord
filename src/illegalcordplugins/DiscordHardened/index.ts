@@ -134,6 +134,13 @@ export const settings = definePluginSettings({
         restartNeeded: true,
         hidden() { return !this.store.spoofChrome; },
     },
+    questifyCompatibility: {
+        type: OptionType.BOOLEAN,
+        description: "Keep desktop Quests working by sending a versionless Electron marker when Questify is enabled.",
+        default: true,
+        restartNeeded: true,
+        hidden: () => !isPluginEnabled("Questify"),
+    },
     goofCordFirewall: {
         type: OptionType.BOOLEAN,
         description: "Enable GoofCord's additional tracker and telemetry firewall rules.",
@@ -348,6 +355,7 @@ async function configureNative(currentLifecycleId: number): Promise<void> {
                 settings.store.hideElectronUserAgent,
                 settings.store.spoofChrome,
                 settings.store.spoofWindows,
+                settings.store.questifyCompatibility && isPluginEnabled("Questify"),
                 settings.store.proxy,
                 settings.store.proxyRules,
                 settings.store.proxyBypassRules,
