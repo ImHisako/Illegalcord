@@ -5,7 +5,7 @@
  */
 
 import { isPluginEnabled } from "@api/PluginManager";
-import { definePluginSettings, migrateOldSettingToNewPlugin, migratePluginSettings, PlainSettings, SettingsStore } from "@api/Settings";
+import { definePluginSettings, migrateOldSettingToNewPlugin, migratePluginSetting, migratePluginSettings, PlainSettings, SettingsStore } from "@api/Settings";
 import { ShieldIcon } from "@components/Icons";
 import SettingsPlugin from "@plugins/_core/settings";
 import { EquicordDevs } from "@utils/constants";
@@ -64,6 +64,7 @@ function refreshMicrophoneSettings(): void {
 
 migratePluginSettings("DiscordHardened", "WebCordHardened");
 migrateOldSettingToNewPlugin("WebRTCLeakPrevent", "icePolicy", "DiscordHardened", "webRtcIcePolicy");
+migratePluginSetting("DiscordHardened", "questifyCompatibility", "questCompatibility");
 
 const currentSettings = PlainSettings.plugins.DiscordHardened as Record<string, unknown> | undefined;
 if (currentSettings && currentSettings.migrationVersion !== 1) {
@@ -134,12 +135,11 @@ export const settings = definePluginSettings({
         restartNeeded: true,
         hidden() { return !this.store.spoofChrome; },
     },
-    questifyCompatibility: {
+    questCompatibility: {
         type: OptionType.BOOLEAN,
-        description: "Keep desktop Quests working by sending a versionless Electron marker when Questify is enabled.",
+        description: "Use Discord's original desktop request identity when claiming Quest rewards.",
         default: true,
         restartNeeded: true,
-        hidden: () => !isPluginEnabled("Questify"),
     },
     goofCordFirewall: {
         type: OptionType.BOOLEAN,
@@ -355,7 +355,7 @@ async function configureNative(currentLifecycleId: number): Promise<void> {
                 settings.store.hideElectronUserAgent,
                 settings.store.spoofChrome,
                 settings.store.spoofWindows,
-                settings.store.questifyCompatibility && isPluginEnabled("Questify"),
+                settings.store.questCompatibility,
                 settings.store.proxy,
                 settings.store.proxyRules,
                 settings.store.proxyBypassRules,

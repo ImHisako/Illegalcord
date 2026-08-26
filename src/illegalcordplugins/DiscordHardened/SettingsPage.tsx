@@ -50,7 +50,7 @@ const SETTINGS_GROUPS = [
             "hideElectronUserAgent",
             "spoofChrome",
             "spoofWindows",
-            "questifyCompatibility",
+            "questCompatibility",
             "reduceHardwareFingerprint",
             "stripThirdPartyReferrers",
             "disableWebGl",
