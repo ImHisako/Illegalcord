@@ -28,7 +28,7 @@ I plugin inclusi possono essere trovati [qui](https://equicord.org/plugins).
 - **kamidere PresenceLab**
 - **Kamidere SendTrail**
 - **FloeP2PService** | Basato sul servizio Floe.one, il miglior servizio di condivisione file P2P.
-- **DiscordHardened** Reale esperienza di privacy su discord
+- **DiscordHardened** Reale esperienza di privacy su discord.
 - **StereoInstaller** Più Metodi!
 - **FakeMuteAndDeafen**
 - **BetterMic**
