@@ -72,7 +72,6 @@ declare global {
         suppressLocalAudioPlayback?: boolean;
     }
 
-
     type CaptureController = {
         decreaseZoomLevel(): Promise<undefined>;
         forwardWheel(): Promise<undefined>;
