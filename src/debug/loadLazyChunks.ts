@@ -163,7 +163,6 @@ export async function loadLazyChunks() {
                 }
             }
 
-
             // Filter out resolved chunk search promises. If the array length is 0 that means all the pending searches and loadings are done
             // and our regex has finished scanning all modules. Once this happens, the artificial "natural" loading of chunks has been completed
             // and we can continue with the rest of the code.

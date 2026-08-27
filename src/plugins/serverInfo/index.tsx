@@ -57,6 +57,7 @@ export default definePlugin({
     dependencies: ["DynamicImageModalAPI"],
     searchTerms: ["guild", "info", "ServerProfile"],
     isModified: true,
+    settings,
     contextMenus: {
         "guild-context": makePatch(false),
         "guild-header-popout": makePatch(true)
