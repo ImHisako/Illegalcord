@@ -52,10 +52,10 @@ function isDiscordUrl(url: string): boolean {
     }
 }
 
-function isQuestClaimUrl(url: string): boolean {
+function isQuestUrl(url: string): boolean {
     if (!isDiscordUrl(url)) return false;
 
-    return /^\/api\/v\d+\/quests\/\d+\/claim-reward\/?$/.test(new URL(url).pathname);
+    return /^\/api\/v\d+\/quests\//.test(new URL(url).pathname);
 }
 
 function isMediaAllowed(state: AppliedState, mediaTypes: readonly ("audio" | "video" | "unknown")[]): boolean {
@@ -140,7 +140,7 @@ export async function configure(
                     "https://*.discordapp.com/api/*",
                 ]
             }, (details, callback) => {
-                if (details.method !== "POST" || !isQuestClaimUrl(details.url)) {
+                if (!isQuestUrl(details.url)) {
                     callback({});
                     return;
                 }

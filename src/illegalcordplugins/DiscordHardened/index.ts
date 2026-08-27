@@ -137,7 +137,7 @@ export const settings = definePluginSettings({
     },
     questCompatibility: {
         type: OptionType.BOOLEAN,
-        description: "Use Discord's original desktop request identity when claiming Quest rewards.",
+        description: "Use Discord's original desktop request identity for Quest requests.",
         default: true,
         restartNeeded: true,
     },
