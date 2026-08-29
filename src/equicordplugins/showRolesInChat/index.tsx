@@ -53,6 +53,7 @@ function makeToggleRoleItem(roleId: string) {
         <Menu.MenuItem
             id="toggle"
             icon={isExcluded ? EyeIcon : EyeSlashIcon}
+            leadingAccessory={{ type: "icon", icon: isExcluded ? EyeIcon : EyeSlashIcon }}
             label={isExcluded ? "Show Role in Chat" : "Hide Role in Chat"}
             action={() => toggleRole(roleId)}
         />

@@ -371,6 +371,12 @@ export const settings = definePluginSettings({
         description: "Whether to log edited messages",
         default: true,
     },
+    logDeletedAttachments: {
+        type: OptionType.BOOLEAN,
+        description: "Whether to log deleted attachments",
+        default: true,
+        restartNeeded: true,
+    },
     inlineEdits: {
         type: OptionType.BOOLEAN,
         description: "Whether to display edit history as part of message content",
@@ -379,7 +385,7 @@ export const settings = definePluginSettings({
     ignoreBots: {
         type: OptionType.BOOLEAN,
         description: "Whether to ignore messages by bots",
-        default: false,
+        default: true,
     },
     ignoreSelf: {
         type: OptionType.BOOLEAN,
@@ -795,6 +801,7 @@ export default definePlugin({
                 // just mark deleted attachments as deleted on MESSAGE_UPDATE
                 {
                     match: /attachments:(\i)\.attachments\?\?\[\],/,
+                    predicate: () => settings.store.logDeletedAttachments,
                     replace: "attachments: $self.handleUpdateAttachments($1),"
                 }
             ]
