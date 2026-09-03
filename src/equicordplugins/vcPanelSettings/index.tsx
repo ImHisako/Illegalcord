@@ -96,7 +96,8 @@ function OutputVolumeComponent() {
     useEffect(() => {
         const listener = () => setOutputVolume(configModule.getOutputVolume());
         FluxDispatcher.subscribe("AUDIO_SET_OUTPUT_VOLUME", listener);
-    });
+        return () => FluxDispatcher.unsubscribe("AUDIO_SET_OUTPUT_VOLUME", listener);
+    }, []);
 
     return (
         <>
@@ -117,7 +118,8 @@ function InputVolumeComponent() {
     useEffect(() => {
         const listener = () => setInputVolume(configModule.getInputVolume());
         FluxDispatcher.subscribe("AUDIO_SET_INPUT_VOLUME", listener);
-    });
+        return () => FluxDispatcher.unsubscribe("AUDIO_SET_INPUT_VOLUME", listener);
+    }, []);
 
     return (
         <>
@@ -138,7 +140,8 @@ function OutputDeviceComponent() {
     useEffect(() => {
         const listener = () => setOutputDevice(configModule.getOutputDeviceId());
         FluxDispatcher.subscribe("AUDIO_SET_OUTPUT_DEVICE", listener);
-    });
+        return () => FluxDispatcher.unsubscribe("AUDIO_SET_OUTPUT_DEVICE", listener);
+    }, []);
 
     return (
         <>
@@ -166,7 +169,8 @@ function InputDeviceComponent() {
     useEffect(() => {
         const listener = () => setInputDevice(configModule.getInputDeviceId());
         FluxDispatcher.subscribe("AUDIO_SET_INPUT_DEVICE", listener);
-    });
+        return () => FluxDispatcher.unsubscribe("AUDIO_SET_INPUT_DEVICE", listener);
+    }, []);
 
     return (
         <div style={{ marginTop: "10px" }}>
@@ -194,7 +198,8 @@ function VideoDeviceComponent() {
     useEffect(() => {
         const listener = () => setVideoDevice(configModule.getVideoDeviceId());
         FluxDispatcher.subscribe("MEDIA_ENGINE_SET_VIDEO_DEVICE", listener);
-    });
+        return () => FluxDispatcher.unsubscribe("MEDIA_ENGINE_SET_VIDEO_DEVICE", listener);
+    }, []);
 
     return (
         <div style={{ marginTop: "10px" }}>
