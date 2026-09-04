@@ -101,6 +101,8 @@ function createClaimRequest(message: Message): ClaimRequest | null {
 }
 
 function notifyClaim(result: WebhookResult, request: ClaimRequest, giftType: string | null, task?: VoidSolverTaskResult) {
+    if (request.source === "nighty") return;
+
     void sendClaimWebhook(
         settings.store.webhookUrl,
         result,

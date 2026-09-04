@@ -178,16 +178,13 @@ export default definePlugin({
         name: "share-config",
         description: "Prepare your Illegalcord configuration for sharing without sensitive data.",
         inputType: ApplicationCommandInputType.BUILT_IN,
-        async execute(_args, context) {
+        execute(_args, context) {
             try {
                 const data = createSharedConfig();
                 if (data.length > MAX_FILE_SIZE) throw new Error("The configuration is too large to share.");
 
-                await UploadHandler.promptToUpload(
-                    [new File([data], FILE_NAME, { type: "application/json" })],
-                    context.channel,
-                    DraftType.ChannelMessage
-                );
+                const file = new File([data], FILE_NAME, { type: "application/json" });
+                setTimeout(() => UploadHandler.promptToUpload([file], context.channel, DraftType.ChannelMessage), 10);
             } catch (error) {
                 logger.error("Failed to prepare shared configuration", error);
                 showToast(error instanceof Error ? error.message : "Failed to prepare the configuration.", Toasts.Type.FAILURE);

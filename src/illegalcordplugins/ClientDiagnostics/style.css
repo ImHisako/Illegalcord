@@ -19,7 +19,7 @@
 }
 
 .vc-client-diagnostics-tabs {
-    overflow-x: auto;
+    overflow: auto hidden;
     margin-bottom: 4px;
 }
 

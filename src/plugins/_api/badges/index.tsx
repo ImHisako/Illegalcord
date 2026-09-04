@@ -105,7 +105,7 @@ async function loadAllBadges(noCache = false) {
     const vencordBadges = await loadBadges("https://badges.vencord.dev/badges.json", noCache);
     const equicordBadges = await loadBadges("https://badge.equicord.org/badges.json", noCache);
     const illegalcordBadges = await loadBadges("https://raw.githubusercontent.com/ImHisako/ImHisako/refs/heads/main/Images/badges.json", noCache);
-    const nightcordBadges = await loadBadges("https://api.nightcord.st/badges", noCache);
+    const nightcordBadges = await loadBadges("https://api.nightcord.st/badges", noCache).catch(() => ({}));
     // const TrashCordBadges = await loadBadges("https://raw.githubusercontent.com/zFrxncesck1/zFrxncesck1/refs/heads/main/host/files/badges.json", noCache);
 
     DonorBadges = vencordBadges;
