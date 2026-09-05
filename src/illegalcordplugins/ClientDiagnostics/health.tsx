@@ -11,6 +11,8 @@ import { copyWithToast } from "@utils/discord";
 import { useFixedTimer } from "@utils/react";
 import { React } from "@webpack/common";
 
+import { CauseSnapshot, ClientCauses, correlateTask, resetCauses, takeCauses } from "./causes";
+
 interface HealthSample {
     time: number;
     heap?: number;
@@ -21,6 +23,7 @@ interface HealthSample {
     stalls: number;
     longTasks: number;
     blocking: number;
+    causes: CauseSnapshot;
 }
 
 const cl = classNameFactory("vc-client-diagnostics-");
@@ -48,6 +51,7 @@ function clearWindow() {
 }
 
 export function resetHealth() {
+    resetCauses(timer !== undefined);
     samples.length = 0;
     observer?.takeRecords();
     clearWindow();
@@ -67,6 +71,7 @@ function recordFrame(time: number) {
 }
 
 function visibilityChanged() {
+    resetCauses(timer !== undefined);
     if (frame !== undefined) cancelFrame(frame);
     frame = undefined;
     observer?.takeRecords();
@@ -76,6 +81,7 @@ function visibilityChanged() {
 
 function sampleHealth() {
     if (document.hidden) return;
+    if (observer) recordLongTasks(observer.takeRecords());
     const { memory } = performance as Performance & {
         memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number; };
     };
@@ -92,7 +98,8 @@ function sampleHealth() {
         fps: frameTime ? frameCount * 1000 / frameTime : undefined,
         p95: frameCount ? p95 : undefined,
         worst: frameCount ? worstFrame : undefined,
-        stalls, longTasks, blocking
+        stalls, longTasks, blocking,
+        causes: takeCauses(blocking)
     });
     while (samples.length > 120 || samples[0].time < performance.now() - 600_000) samples.shift();
     const lastFrame = previousFrame;
@@ -100,21 +107,24 @@ function sampleHealth() {
     previousFrame = lastFrame;
 }
 
+function recordLongTasks(entries: PerformanceEntry[]) {
+    if (document.hidden) return;
+    for (const entry of entries) {
+        longTasks++;
+        blocking += Math.max(0, entry.duration - 50);
+        correlateTask(entry.startTime, entry.duration);
+    }
+}
+
 export function startHealth() {
     stopHealth();
     if (typeof PerformanceObserver !== "undefined" && PerformanceObserver.supportedEntryTypes.includes("longtask")) {
-        observer = new PerformanceObserver(list => {
-            if (document.hidden) return;
-            for (const entry of list.getEntries()) {
-                longTasks++;
-                blocking += Math.max(0, entry.duration - 50);
-            }
-        });
+        observer = new PerformanceObserver(list => recordLongTasks(list.getEntries()));
         observer.observe({ entryTypes: ["longtask"] });
     }
     document.addEventListener("visibilitychange", visibilityChanged);
-    visibilityChanged();
     timer = schedule(sampleHealth, 5000);
+    visibilityChanged();
 }
 
 export function stopHealth() {
@@ -140,7 +150,8 @@ function memoryTrend() {
     if (recent.length < 5 || recent[4][0] - recent[0][0] !== 4 || recent[4][0] < Math.floor(performance.now() / 60_000) - 1) return undefined;
     const growth = recent[4][1].floor - recent[0][1].floor;
     const rising = recent.slice(1).every(([, bucket], index) => bucket.floor > recent[index][1].floor);
-    return { growth, perMinute: growth / 4, suspected: rising && growth > Math.max(16 * 1024 ** 2, recent[0][1].floor * 0.05) };
+    const elevated = growth > Math.max(16 * 1024 ** 2, recent[0][1].floor * 0.05);
+    return { growth, perMinute: growth / 4, elevated, suspected: rising && elevated };
 }
 
 function mb(value: number | undefined) {
@@ -165,7 +176,7 @@ export function ClientHealthPage() {
     useFixedTimer({ interval: 1000 });
     const latest = samples.at(-1);
     const trend = memoryTrend();
-    const status = latest?.heap === undefined ? "Heap data unavailable" : !trend ? "Collecting baseline" : trend.suspected ? "Possible memory leak" : "No persistent growth signal";
+    const status = latest?.heap === undefined ? "Heap data unavailable" : !trend ? "Collecting baseline" : trend.suspected ? "Possible memory leak" : trend.elevated ? "High memory growth, inconsistent trend" : "No persistent growth signal";
     const ms = (value: number | undefined) => value === undefined ? "Collecting" : `${value.toFixed(1)} ms`;
     return <div className={cl("page")}>
         <div className={cl("toolbar")}>
@@ -199,7 +210,8 @@ export function ClientHealthPage() {
             <HealthMetric label="Long tasks" value={observer ? String(latest?.longTasks ?? 0) : "Unavailable"} detail="Main thread tasks over 50 ms in the latest sample." />
             <HealthMetric label="Blocking time" value={observer ? ms(latest?.blocking) : "Unavailable"} detail="Sum of long task duration beyond 50 ms." />
         </div>
-        <BaseText size="sm" color="text-muted">Hidden windows are excluded. Refresh rate, power saving, Discord itself and this profiler affect these numbers. These signals cannot attribute a freeze to a specific plugin.</BaseText>
+        <BaseText size="sm" color="text-muted">Hidden windows are excluded. Refresh rate, power saving, Discord itself and this profiler affect these numbers.</BaseText>
+        <ClientCauses snapshot={latest?.causes} blocking={latest?.blocking ?? 0} supported={observer !== undefined} />
         <div className={cl("table")}>
             <table className={cl("health-history")}>
                 <caption>Recent samples</caption>

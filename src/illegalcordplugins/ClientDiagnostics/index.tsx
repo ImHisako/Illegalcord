@@ -24,6 +24,7 @@ import { useFixedTimer } from "@utils/react";
 import definePlugin, { OptionType, type Plugin, StartAt } from "@utils/types";
 import { React, SettingsRouter, TabBar, TextInput, useState } from "@webpack/common";
 
+import { recordHealthCallback } from "./causes";
 import { ClientHealthPage, resetHealth, startHealth, stopHealth } from "./health";
 
 type SortBy = "impact" | "cpu" | "memory" | "calls" | "resources";
@@ -106,7 +107,7 @@ interface ImpactAnalysisItem {
     snippets: SourceSnippet[];
 }
 
-const PLUGIN_NAME = "Client diagnostics";
+const PLUGIN_NAME = "ClientDiagnostics";
 const ENTRY_KEY = "illegalcord_client_diagnostics";
 const SETTINGS_KEYS: SettingKey[] = ["sortBy", "showDisabled", "showApiPlugins", "refreshMs"];
 const REFRESH_SETTING_KEYS: SettingKey[] = ["refreshMs"];
@@ -398,8 +399,10 @@ function runMeasured<T>(pluginName: string, surface: string, callback: () => T):
         failed = false;
         return result;
     } finally {
+        const end = performance.now();
         activeStack.pop();
-        recordCall(pluginName, surface, performance.now() - start, failed, beforeHeap, getHeapUsed());
+        if (activeStack.length === 0) recordHealthCallback(pluginName, surface, start, end);
+        recordCall(pluginName, surface, end - start, failed, beforeHeap, getHeapUsed());
     }
 }
 
