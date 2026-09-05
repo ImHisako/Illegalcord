@@ -24,7 +24,7 @@ export interface MemorySnapshot {
 }
 
 export type OptimizationResult =
-    | { status: "optimized"; snapshot: MemorySnapshot; aggressive: boolean; }
+    | { status: "optimized"; snapshot: MemorySnapshot; beforeMb: number; aggressive: boolean; }
     | { status: "belowThreshold"; snapshot: MemorySnapshot; }
     | { status: "debuggerBusy"; snapshot: MemorySnapshot; }
     | { status: "error"; error: string; };
@@ -82,7 +82,8 @@ export function configure(
 
         event.sender.setBackgroundThrottling(true);
         event.sender.setImageAnimationPolicy(imageAnimationPolicy);
-        event.sender.session.setSpellCheckerEnabled(!disableSpellChecker);
+        const previous = previousSettings.get(event.sender.id);
+        if (previous) event.sender.session.setSpellCheckerEnabled(disableSpellChecker ? false : previous.spellChecker);
         return true;
     } catch {
         return false;
@@ -147,8 +148,8 @@ export async function optimize(
         await chromeDebugger.sendCommand("Memory.simulatePressureNotification", {
             level: aggressive || systemMemoryLow ? "critical" : "moderate"
         });
-        if (aggressive) await chromeDebugger.sendCommand("Memory.forciblyPurgeJavaScriptMemory");
-        return { status: "optimized", snapshot, aggressive };
+        if (aggressive) await chromeDebugger.sendCommand("HeapProfiler.collectGarbage");
+        return { status: "optimized", snapshot: createMemorySnapshot(event), beforeMb: snapshot.totalMb, aggressive };
     } catch {
         return { status: "error", error: "Chromium could not release unused memory." };
     } finally {
