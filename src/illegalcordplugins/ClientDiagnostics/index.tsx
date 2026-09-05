@@ -24,8 +24,10 @@ import { useFixedTimer } from "@utils/react";
 import definePlugin, { OptionType, type Plugin, StartAt } from "@utils/types";
 import { React, SettingsRouter, TabBar, TextInput, useState } from "@webpack/common";
 
+import { ClientHealthPage, resetHealth, startHealth, stopHealth } from "./health";
+
 type SortBy = "impact" | "cpu" | "memory" | "calls" | "resources";
-type ClientDiagnosticsTab = "diagnostics" | "analysis" | "monitor" | "guide";
+type ClientDiagnosticsTab = "diagnostics" | "analysis" | "monitor" | "health" | "guide";
 type SettingKey = "sortBy" | "showDisabled" | "showApiPlugins" | "refreshMs";
 type ResourceKey = "intervals" | "pendingTimeouts" | "animationFrames" | "listeners";
 type AnyCallback = (this: unknown, ...args: never[]) => unknown;
@@ -737,6 +739,7 @@ function rebuildResourceCounters() {
 }
 
 function resetStats() {
+    resetHealth();
     stats.clear();
     lagNotificationTimes.clear();
     startedAt = Date.now();
@@ -1813,12 +1816,14 @@ function ClientDiagnosticsPage() {
                 <TabBar.Item id="diagnostics">Client Diagnostics</TabBar.Item>
                 <TabBar.Item id="analysis">Impact analysis</TabBar.Item>
                 <TabBar.Item id="monitor">Plugin monitor</TabBar.Item>
+                <TabBar.Item id="health">Client health</TabBar.Item>
                 <TabBar.Item id="guide">Guide</TabBar.Item>
             </TabBar>
 
             {tab === "diagnostics" && <DiagnosticsPage />}
             {tab === "analysis" && <ImpactAnalysisPage />}
             {tab === "monitor" && <PluginMonitorPage />}
+            {tab === "health" && <ClientHealthPage />}
             {tab === "guide" && <GuidePage />}
         </div>
     );
@@ -1828,7 +1833,7 @@ const DiagnosticsPageWrapped = ErrorBoundary.wrap(ClientDiagnosticsPage, { noop:
 
 export default definePlugin({
     name: "ClientDiagnostics",
-    description: "Profiles plugin callback time, heap deltas, and active resources to find laggy plugins.",
+    description: "Profiles plugins and monitors client memory growth, possible leaks, and responsiveness.",
     authors: [EquicordDevs.irritably],
     tags: ["Developers", "Utility"],
     searchTerms: ["lag", "cpu", "ram", "memory", "performance", "profiler"],
@@ -1840,6 +1845,7 @@ export default definePlugin({
     start() {
         try {
             startedAt = Date.now();
+            startHealth();
             installGlobalProbes();
             for (const plugin of Object.values(plugins)) instrumentPlugin(plugin);
             pluginStarted = true;
@@ -1858,6 +1864,7 @@ export default definePlugin({
     },
 
     stop() {
+        stopHealth();
         try {
             pluginStarted = false;
             syncLagNotifications();
