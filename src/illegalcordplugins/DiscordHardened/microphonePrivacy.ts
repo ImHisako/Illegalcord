@@ -81,10 +81,10 @@ function removeTrack(track: MediaStreamTrack): void {
     trackedMicrophones.delete(track);
 }
 
-function registerMicrophoneTrack(track: MediaStreamTrack, callOwned: boolean): void {
+function registerMicrophoneTrack(track: MediaStreamTrack, callOwned: boolean, desired = track.enabled): void {
     if (track.kind !== "audio" || trackedMicrophones.has(track)) return;
 
-    trackedMicrophones.set(track, { desired: track.enabled, callOwned });
+    trackedMicrophones.set(track, { desired, callOwned });
     const handleEnded = () => removeTrack(track);
     endedListeners.set(track, handleEnded);
     track.addEventListener("ended", handleEnded, { once: true });
@@ -233,7 +233,7 @@ export function startMicrophonePrivacy(newSettings: MicrophonePrivacySettings): 
             const clone = nativeClone.call(this);
             const sourceState = trackedMicrophones.get(this);
             if (sourceState) {
-                registerMicrophoneTrack(clone, sourceState.callOwned);
+                registerMicrophoneTrack(clone, sourceState.callOwned, sourceState.desired);
                 applyMicrophoneGate();
             }
             return clone;

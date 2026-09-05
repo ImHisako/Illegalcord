@@ -52,16 +52,6 @@ function validateProxyRules(value: string): true | string {
     return true;
 }
 
-function refreshCameraSettings(): void {
-    refreshCameraPrivacy();
-    refreshNativePrivacy();
-}
-
-function refreshMicrophoneSettings(): void {
-    refreshMicrophonePrivacy();
-    refreshNativePrivacy();
-}
-
 migratePluginSettings("DiscordHardened", "WebCordHardened");
 migrateOldSettingToNewPlugin("WebRTCLeakPrevent", "icePolicy", "DiscordHardened", "webRtcIcePolicy");
 migratePluginSetting("DiscordHardened", "questifyCompatibility", "questCompatibility");
@@ -183,13 +173,13 @@ export const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Allow web content to request camera access.",
         default: true,
-        onChange: refreshCameraSettings,
+        onChange: refreshCameraPrivacy,
     },
     allowMicrophone: {
         type: OptionType.BOOLEAN,
         description: "Allow web content to request microphone access.",
         default: true,
-        onChange: refreshMicrophoneSettings,
+        onChange: refreshMicrophonePrivacy,
     },
     privatePushToTalk: {
         type: OptionType.BOOLEAN,
@@ -358,9 +348,7 @@ async function configureNative(currentLifecycleId: number): Promise<void> {
                 settings.store.questCompatibility,
                 settings.store.proxy,
                 settings.store.proxyRules,
-                settings.store.proxyBypassRules,
-                settings.store.allowCamera,
-                settings.store.allowMicrophone
+                settings.store.proxyBypassRules
             );
             if (currentLifecycleId !== lifecycleId) {
                 if (configured) await Native.restore();
@@ -372,10 +360,6 @@ async function configureNative(currentLifecycleId: number): Promise<void> {
             logger.warn("Could not apply desktop privacy settings.", error);
         }
     });
-}
-
-function refreshNativePrivacy(): void {
-    if (isPluginEnabled("DiscordHardened")) void configureNative(lifecycleId);
 }
 
 export default definePlugin({

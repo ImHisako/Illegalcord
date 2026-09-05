@@ -13,9 +13,6 @@ interface AppliedState {
     userAgentApplied: boolean;
     questIdentityApplied: boolean;
     proxyApplied: boolean;
-    permissionHandlersApplied: boolean;
-    allowCamera: boolean;
-    allowMicrophone: boolean;
     destroyedListener: () => void;
 }
 
@@ -58,11 +55,6 @@ function isQuestUrl(url: string): boolean {
     return /^\/api\/v\d+\/quests\//.test(new URL(url).pathname);
 }
 
-function isMediaAllowed(state: AppliedState, mediaTypes: readonly ("audio" | "video" | "unknown")[]): boolean {
-    if (!mediaTypes.length || mediaTypes.includes("unknown")) return state.allowMicrophone && state.allowCamera;
-    return mediaTypes.every(type => type === "audio" ? state.allowMicrophone : state.allowCamera);
-}
-
 async function restoreState(state: AppliedState): Promise<boolean> {
     state.sender.removeListener("destroyed", state.destroyedListener);
     const senderAvailable = !state.sender.isDestroyed();
@@ -70,10 +62,6 @@ async function restoreState(state: AppliedState): Promise<boolean> {
     if (state.userAgentApplied && senderAvailable) state.sender.setUserAgent(state.userAgent);
     if (state.questIdentityApplied) state.session.webRequest.onBeforeSendHeaders(null);
     if (state.proxyApplied) await state.session.setProxy({ mode: "system" });
-    if (state.permissionHandlersApplied) {
-        state.session.setPermissionCheckHandler(null);
-        state.session.setPermissionRequestHandler(null);
-    }
     return senderAvailable;
 }
 
@@ -85,9 +73,7 @@ export async function configure(
     preserveQuestIdentity: boolean,
     proxy: boolean,
     proxyRules: string,
-    proxyBypassRules: string,
-    allowCamera: boolean,
-    allowMicrophone: boolean
+    proxyBypassRules: string
 ): Promise<boolean> {
     if (
         typeof hideElectronUserAgent !== "boolean"
@@ -95,15 +81,13 @@ export async function configure(
         || typeof spoofWindows !== "boolean"
         || typeof preserveQuestIdentity !== "boolean"
         || typeof proxy !== "boolean"
-        || typeof allowCamera !== "boolean"
-        || typeof allowMicrophone !== "boolean"
     ) return false;
     if (!isValidProxyValue(proxyRules, !proxy) || !isValidProxyValue(proxyBypassRules, true) || event.sender.isDestroyed()) return false;
 
     const existing = appliedStates.get(event.sender.id);
     if (existing) await restoreState(existing);
 
-    if (!hideElectronUserAgent && !spoofChrome && !proxy && allowCamera && allowMicrophone) {
+    if (!hideElectronUserAgent && !spoofChrome && !proxy) {
         appliedStates.delete(event.sender.id);
         return false;
     }
@@ -115,9 +99,6 @@ export async function configure(
         userAgentApplied: false,
         questIdentityApplied: false,
         proxyApplied: false,
-        permissionHandlersApplied: false,
-        allowCamera,
-        allowMicrophone,
         destroyedListener: () => {
             if (appliedStates.get(event.sender.id) !== state) return;
             appliedStates.delete(event.sender.id);
@@ -156,22 +137,6 @@ export async function configure(
         if (proxy) {
             await event.sender.session.setProxy({ proxyRules, proxyBypassRules });
             state.proxyApplied = true;
-        }
-
-        if (!allowCamera || !allowMicrophone) {
-            state.session.setPermissionCheckHandler((_webContents, permission, requestingOrigin, details) => {
-                if (!isDiscordUrl(details.requestingUrl ?? requestingOrigin)) return false;
-                return permission !== "media" || isMediaAllowed(state, [details.mediaType ?? "unknown"]);
-            });
-            state.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
-                if (!isDiscordUrl(details.requestingUrl || webContents.getURL())) {
-                    callback(false);
-                    return;
-                }
-
-                callback(permission !== "media" || isMediaAllowed(state, "mediaTypes" in details ? details.mediaTypes ?? [] : []));
-            });
-            state.permissionHandlersApplied = true;
         }
 
         appliedStates.set(event.sender.id, state);
