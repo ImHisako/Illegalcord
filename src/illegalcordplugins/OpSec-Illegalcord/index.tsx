@@ -22,7 +22,7 @@ interface ProtectedText {
 }
 
 const PROTECTED_PATTERN = /```[\s\S]*?```|`[^`\n]*`|https?:\/\/[^\s<]+|www\.[^\s<]+|<a?:\w+:\d+>|<[@#&]!?[0-9]+>|@everyone|@here/g;
-const PROTECTED_RESTORE_PATTERN = /__OPSEC_PROTECTED_(\d+)__/g;
+const PROTECTED_RESTORE_PATTERN = /\uE000(\d+)\uE001/g;
 const WORD_PATTERN = /[A-Za-z]{5,16}/g;
 const WORD_BOUNDARY = "A-Za-zÀ-ÿ0-9_";
 
@@ -422,7 +422,7 @@ function protectText(text: string): ProtectedText {
     return {
         text: text.replace(PROTECTED_PATTERN, (match: string) => {
             values.push(match);
-            return `__OPSEC_PROTECTED_${values.length - 1}__`;
+            return `\uE000${values.length - 1}\uE001`;
         }),
         values,
     };

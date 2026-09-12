@@ -682,7 +682,7 @@ export default definePlugin({
     patches: [{
         find: "#{intl::GUEST_NAME_SUFFIX})]",
         replacement: {
-            match: /(?<=children:\[)\i(?=,.{0,150}?#{intl::GUEST_NAME_SUFFIX})/,
+            match: /(?<=children:\[)\i(?:\?\?\i\.\i\.getName\(\i\))?(?=,.{0,150}?#{intl::GUEST_NAME_SUFFIX})/,
             replace: "$self.renderVoiceName(arguments[0],$&)"
         }
     }],
