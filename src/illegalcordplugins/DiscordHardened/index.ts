@@ -13,9 +13,12 @@ import { LazyComponent } from "@utils/lazyReact";
 import { Logger } from "@utils/Logger";
 import { removeFromArray } from "@utils/misc";
 import definePlugin, { OptionType, type PluginNative } from "@utils/types";
-import { SettingsRouter } from "@webpack/common";
+import type { Embed } from "@vencord/discord-types";
+import { SettingsRouter, showToast, Toasts } from "@webpack/common";
 
+import { BrowserSettings } from "./BrowserSettings";
 import { refreshCameraPrivacy, refreshMicrophonePrivacy, startMicrophonePrivacy, stopMicrophonePrivacy } from "./microphonePrivacy";
+import { DEFAULT_EMBED_DOMAINS, isAllowedEmbed, parseDomainList, validateDomainList } from "./policy";
 import { startHardening, stopHardening } from "./runtime";
 
 const logger = new Logger("DiscordHardened");
@@ -73,6 +76,73 @@ if (currentSettings && currentSettings.migrationVersion !== 1) {
 }
 
 export const settings = definePluginSettings({
+    blockUnknownEmbeds: {
+        type: OptionType.BOOLEAN,
+        description: "Hide embeds from domains outside your allowlist. Also restrict desktop embedded frames after restarting.",
+        default: true,
+        restartNeeded: true,
+    },
+    allowedEmbedDomains: {
+        type: OptionType.STRING,
+        description: "Trusted embed domains, one per line. Each entry also allows its subdomains. Restart to update desktop frame restrictions.",
+        default: DEFAULT_EMBED_DOMAINS,
+        multiline: true,
+        restartNeeded: true,
+        isValid: validateDomainList,
+    },
+    blockGifAutoplay: {
+        type: OptionType.BOOLEAN,
+        description: "Disable automatic GIF playback locally while keeping manual interaction available.",
+        default: true,
+        restartNeeded: true,
+    },
+    blockVideoAutoplay: {
+        type: OptionType.BOOLEAN,
+        description: "Disable automatic and hover playback in Discord's video component. Manual playback remains available.",
+        default: true,
+    },
+    blockThirdPartyScripts: {
+        type: OptionType.BOOLEAN,
+        description: "Block external script files from other origins in Discord desktop pages. Plugins that load libraries from external CDNs may stop working.",
+        default: false,
+        restartNeeded: true,
+        target: "DESKTOP",
+    },
+    externalBrowser: {
+        type: OptionType.STRING,
+        description: "The installed browser used to open web links.",
+        default: "system",
+        hidden: true,
+    },
+    browserSelection: {
+        type: OptionType.COMPONENT,
+        description: "Choose an installed browser for web links and inspect the current Electron protections.",
+        default: null,
+        component: BrowserSettings,
+        target: "DESKTOP",
+    },
+    minimumPrivilege: {
+        type: OptionType.BOOLEAN,
+        description: "Restrict plugin IPC to Discord main frames and enforce available Electron protections at startup. The main renderer sandbox remains limited by the Illegalcord loader.",
+        default: true,
+        restartNeeded: true,
+        target: "DESKTOP",
+    },
+    reduceGpuFingerprint: {
+        type: OptionType.BOOLEAN,
+        description: "Hide WebGL debug renderer details and WebGPU adapter identity while preserving graphics rendering.",
+        default: true,
+    },
+    reduceClientHints: {
+        type: OptionType.BOOLEAN,
+        description: "Withhold detailed operating system versions, CPU architecture and browser versions from JavaScript client hints. The operating system family remains visible.",
+        default: true,
+    },
+    blockHardwareAccess: {
+        type: OptionType.BOOLEAN,
+        description: "Block WebUSB, WebHID, serial port and Bluetooth device discovery and access.",
+        default: true,
+    },
     migrationVersion: {
         type: OptionType.NUMBER,
         description: "The current settings migration version.",
@@ -293,6 +363,20 @@ export const settings = definePluginSettings({
         description: "Block window requests that use unsafe external protocols.",
         default: true,
     },
+    restrictElectronNavigation: {
+        type: OptionType.BOOLEAN,
+        description: "Block navigation and redirects to external sites inside the Discord desktop window. Normal links can still open in your browser.",
+        default: true,
+        restartNeeded: true,
+        target: "DESKTOP",
+    },
+    blockElectronWebviews: {
+        type: OptionType.BOOLEAN,
+        description: "Prevent the Discord desktop window from creating Electron webviews. Plugins that embed websites using webviews may stop working.",
+        default: true,
+        restartNeeded: true,
+        target: "DESKTOP",
+    },
     logBlockedRequests: {
         type: OptionType.BOOLEAN,
         description: "Log requests blocked by this plugin without logging message or account data.",
@@ -348,7 +432,10 @@ async function configureNative(currentLifecycleId: number): Promise<void> {
                 settings.store.questCompatibility,
                 settings.store.proxy,
                 settings.store.proxyRules,
-                settings.store.proxyBypassRules
+                settings.store.proxyBypassRules,
+                settings.store.restrictElectronNavigation,
+                settings.store.blockElectronWebviews,
+                settings.store.minimumPrivilege
             );
             if (currentLifecycleId !== lifecycleId) {
                 if (configured) await Native.restore();
@@ -367,9 +454,57 @@ export default definePlugin({
     description: "Ports WebCord's compatible privacy and security controls to Illegalcord.",
     tags: ["Privacy", "Utility", "Voice"],
     authors: [EquicordDevs.irritably],
-    dependencies: ["WebRTCLeakPrevent"],
+    dependencies: ["WebRTCLeakPrevent", "UserSettingsAPI"],
     enabledByDefault: true,
     settings,
+    patches: [
+        {
+            find: "maxThumbnailWidth:80",
+            replacement: {
+                match: /(?<=render\(\)\{)(?=let\{embed:)/,
+                replace: "if($self.shouldBlockEmbed(this.props.embed))return null;",
+            },
+        },
+        {
+            find: 'displayName="Video"',
+            replacement: {
+                match: /(?<=\{\.\.\.)(\i)(?=,ref:\i,useReducedMotion:)/,
+                replace: "$self.videoProps($1)",
+            },
+        },
+        {
+            find: ".isPlatformEmbedded)window.open(",
+            replacement: {
+                match: /(?<=async function \i\(\i,\i\)\{)/,
+                replace: "if($self.openLink(arguments[0]))return;",
+            },
+        },
+        {
+            find: "trackAnnouncementMessageLinkClicked({",
+            replacement: {
+                match: /(?<=return void\(null==)(\i)(?=\|\|null!=\i&&\i\?\i\(\):)/,
+                replace: "$1||$self.useExternalBrowser()&&($1.preventDefault(),!0)",
+            },
+        },
+    ],
+    shouldBlockEmbed(embed: Embed) {
+        const { blockUnknownEmbeds, allowedEmbedDomains } = settings.store;
+        return blockUnknownEmbeds && !isAllowedEmbed(embed, parseDomainList(allowedEmbedDomains));
+    },
+    videoProps<T extends { autoPlay?: boolean; playOnHover?: boolean; srcObject?: MediaStream; }>(props: T): T {
+        return settings.store.blockVideoAutoplay && !props.srcObject ? { ...props, autoPlay: false, playOnHover: false } : props;
+    },
+    useExternalBrowser() {
+        return !IS_WEB && Boolean(Native) && settings.store.externalBrowser !== "system";
+    },
+    openLink(url: string): boolean {
+        if (!this.useExternalBrowser() || !/^https?:\/\//i.test(url)) return false;
+        if (!Native) return false;
+        void Native.openInBrowser(settings.store.externalBrowser, url).then(opened => {
+            if (!opened) showToast("Could not open the selected browser. Check DiscordHardened settings.", Toasts.Type.FAILURE);
+        }).catch(() => showToast("Could not open the selected browser.", Toasts.Type.FAILURE));
+        return true;
+    },
     toolboxActions: {
         "Open DiscordHardened": () => SettingsRouter.openUserSettings(`${SETTINGS_ENTRY_KEY}_panel`),
     },
@@ -387,7 +522,7 @@ export default definePlugin({
         }
 
         startMicrophonePrivacy(settings.store);
-        startHardening(settings.store);
+        startHardening(settings.store, url => this.openLink(url));
 
         await configureNative(currentLifecycleId);
     },

@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { NativeSettings } from "@main/settings";
+import { isDiscordAppUrl } from "@illegalcordplugins/DiscordHardened/nativeSecurity";
+import { addContentPolicy } from "@illegalcordplugins/DiscordHardened/policy";
+import { NativeSettings, RendererSettings } from "@main/settings";
 import { session } from "electron";
 
 type PolicyMap = Record<string, string[]>;
@@ -142,10 +144,13 @@ const patchCsp = (headers: PolicyMap) => {
 };
 
 export function initCsp() {
-    session.defaultSession.webRequest.onHeadersReceived(({ responseHeaders, resourceType }, cb) => {
+    session.defaultSession.webRequest.onHeadersReceived(({ responseHeaders, resourceType, url }, cb) => {
         if (responseHeaders) {
             if (resourceType === "mainFrame")
                 patchCsp(responseHeaders);
+
+            if (resourceType === "mainFrame" && isDiscordAppUrl(url))
+                addContentPolicy(responseHeaders, RendererSettings.store.plugins?.DiscordHardened);
 
             // Fix hosts that don't properly set the css content type, such as
             // raw.githubusercontent.com

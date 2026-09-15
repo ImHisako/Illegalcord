@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { restrictWebPreferences } from "@illegalcordplugins/DiscordHardened/nativeSecurity";
+import { addContentPolicy } from "@illegalcordplugins/DiscordHardened/policy";
+import { RendererSettings } from "@main/settings";
 import { app, BrowserWindow, nativeImage, session, shell } from "electron";
 import illegalcordIcon from "file://../../../browser/Illegalcord.png?base64";
 import { join } from "path";
@@ -188,7 +191,10 @@ function configureSession(partition: string, ses: Electron.Session) {
     configuredSessions.add(partition);
 
     ses.webRequest.onHeadersReceived((details, callback) => {
-        callback({ responseHeaders: removeBlockingHeaders(details.responseHeaders) });
+        const responseHeaders = removeBlockingHeaders(details.responseHeaders);
+        if (details.resourceType === "mainFrame" && isDiscordUrl(details.url))
+            addContentPolicy(responseHeaders, RendererSettings.store.plugins?.DiscordHardened);
+        callback({ responseHeaders });
     });
 
     ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
@@ -293,6 +299,17 @@ export async function openInstance(
         const ses = session.fromPartition(partition, { cache: !blockExternalTokenAccess });
         configureSession(partition, ses);
 
+        const webPreferences: Electron.WebPreferences = {
+            preload: join(__dirname, "preload.js"),
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: false,
+            backgroundThrottling: performanceMode,
+            session: ses,
+        };
+        const hardening = RendererSettings.store.plugins?.DiscordHardened;
+        if (hardening?.enabled && hardening.minimumPrivilege !== false) restrictWebPreferences(webPreferences);
+
         const win = new BrowserWindow({
             width: 1280,
             height: 800,
@@ -304,14 +321,7 @@ export async function openInstance(
             darkTheme: true,
             icon: mode === "detached" ? ILLEGALCORD_ICON : undefined,
             show: false,
-            webPreferences: {
-                preload: join(__dirname, "preload.js"),
-                contextIsolation: true,
-                nodeIntegration: false,
-                sandbox: false,
-                backgroundThrottling: performanceMode,
-                session: ses
-            }
+            webPreferences,
         });
 
         const cleanupWindowControls = registerWindowControls(win);

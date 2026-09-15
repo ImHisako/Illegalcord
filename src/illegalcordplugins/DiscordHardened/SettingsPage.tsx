@@ -27,6 +27,11 @@ interface SettingsGroup {
 const PLUGIN_SETTINGS_PATHS: Array<"plugins.DiscordHardened.*"> = ["plugins.DiscordHardened.*"];
 const SETTINGS_GROUPS = [
     {
+        title: "Embeds and autoplay",
+        description: "Unknown means outside your domain allowlist. Hidden embeds are not rendered, but Discord may already have fetched their metadata on its servers. Other plugins can render their own content separately.",
+        keys: ["blockUnknownEmbeds", "allowedEmbedDomains", "blockGifAutoplay", "blockVideoAutoplay", "blockThirdPartyScripts"],
+    },
+    {
         title: "Network protection",
         description: "Controls Discord telemetry, tracking endpoints, typing requests, and the additional GoofCord firewall.",
         keys: [
@@ -52,6 +57,9 @@ const SETTINGS_GROUPS = [
             "spoofWindows",
             "questCompatibility",
             "reduceHardwareFingerprint",
+            "reduceGpuFingerprint",
+            "reduceClientHints",
+            "blockHardwareAccess",
             "stripThirdPartyReferrers",
             "disableWebGl",
         ],
@@ -88,6 +96,11 @@ const SETTINGS_GROUPS = [
             "blockBatteryAccess",
             "blockUnsafeExternalProtocols",
         ],
+    },
+    {
+        title: "Electron security",
+        description: "Adds protection in the desktop main process after the plugin starts. Updating Discord is still required for Electron and Chromium security fixes.",
+        keys: ["minimumPrivilege", "restrictElectronNavigation", "blockElectronWebviews", "browserSelection"],
     },
     {
         title: "Desktop proxy",

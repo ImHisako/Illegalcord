@@ -18,8 +18,9 @@
 
 import "./updater";
 import "./ipcPlugins";
-import "./settings";
 
+import { launchBrowser } from "@illegalcordplugins/DiscordHardened/browsers";
+import { isTrustedSender } from "@illegalcordplugins/DiscordHardened/nativeSecurity";
 import { debounce } from "@shared/debounce";
 import { IpcEvents } from "@shared/IpcEvents";
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell, systemPreferences } from "electron";
@@ -30,6 +31,7 @@ import { release } from "os";
 import { join } from "path";
 
 import { registerCspIpcHandlers } from "./csp/manager";
+import { RendererSettings } from "./settings";
 import { getThemeInfo, stripBOM, UserThemeHeader } from "./themes";
 import { ALLOWED_PROTOCOLS, QUICK_CSS_PATH, SETTINGS_DIR, THEMES_DIR } from "./utils/constants";
 import { ensureSafePath } from "./utils/ensureSafePath";
@@ -71,7 +73,8 @@ function getThemeData(fileName: string) {
 
 ipcMain.handle(IpcEvents.OPEN_QUICKCSS, () => shell.openPath(QUICK_CSS_PATH));
 
-ipcMain.handle(IpcEvents.OPEN_EXTERNAL, (_, url) => {
+ipcMain.handle(IpcEvents.OPEN_EXTERNAL, async (event, url: unknown) => {
+    if (typeof url !== "string" || url.length > 8192) throw "Malformed URL";
     try {
         var { protocol } = new URL(url);
     } catch {
@@ -79,6 +82,15 @@ ipcMain.handle(IpcEvents.OPEN_EXTERNAL, (_, url) => {
     }
     if (!ALLOWED_PROTOCOLS.includes(protocol))
         throw "Disallowed protocol.";
+
+    const hardening = RendererSettings.store.plugins?.DiscordHardened;
+    const browser = hardening?.externalBrowser;
+    if (hardening?.enabled && typeof browser === "string" && browser !== "system" && ["http:", "https:"].includes(protocol)) {
+        if (!isTrustedSender(event)) throw "This page cannot open the selected browser.";
+        const opened = await launchBrowser(browser, url, () => isTrustedSender(event)).catch(() => false);
+        if (!opened) throw "Could not open the selected browser. Check DiscordHardened settings.";
+        return;
+    }
 
     shell.openExternal(url)
         .catch(err => console.error("[Vencord] Failed to open external link", url, err));

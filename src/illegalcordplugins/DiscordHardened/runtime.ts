@@ -5,6 +5,7 @@
  */
 
 import { isPluginEnabled } from "@api/PluginManager";
+import { getUserSetting } from "@api/UserSettings";
 import { Logger } from "@utils/Logger";
 import { escapeRegExp } from "@utils/text";
 
@@ -49,6 +50,10 @@ interface PrivacySettings {
     allowClipboardRead: boolean;
     blockGeolocation: boolean;
     reduceHardwareFingerprint: boolean;
+    reduceGpuFingerprint: boolean;
+    reduceClientHints: boolean;
+    blockHardwareAccess: boolean;
+    blockGifAutoplay: boolean;
     blockGamepadAccess: boolean;
     blockBatteryAccess: boolean;
     stripThirdPartyReferrers: boolean;
@@ -476,6 +481,18 @@ function patchHardwareFingerprint(settings: PrivacySettings): void {
         };
         patchValue(privacyNavigator, "getBattery", protectedGetBattery);
     }
+
+    for (const key of ["usb", "hid", "serial", "bluetooth"]) {
+        const api: unknown = Reflect.get(navigator, key);
+        if (typeof api !== "object" || api === null) continue;
+        for (const method of ["requestDevice", "getDevices", "requestPort", "getPorts", "getAvailability"]) {
+            const original: unknown = Reflect.get(api, method);
+            if (typeof original !== "function") continue;
+            patchValue(api, method, function (this: object, ...args: unknown[]) {
+                return settings.blockHardwareAccess ? denied("Hardware access") : Reflect.apply(original, this, args);
+            });
+        }
+    }
 }
 
 function patchFullscreen(settings: PrivacySettings): void {
@@ -505,7 +522,7 @@ function sanitizeAgent(value: string): string {
     return value.replace(/\s(?:Electron|Discord)\/[\w.-]+/gi, "");
 }
 
-function createChromeIdentity(originalUserAgent: string, spoofWindows: boolean) {
+function createChromeIdentity(originalUserAgent: string, spoofWindows: boolean, settings: PrivacySettings) {
     const chromeVersion = originalUserAgent.match(/Chrome\/([\d.]+)/)?.[1] ?? "120.0.0.0";
     const majorVersion = chromeVersion.split(".")[0];
     const windows = spoofWindows || /Windows/i.test(originalUserAgent);
@@ -539,6 +556,7 @@ function createChromeIdentity(originalUserAgent: string, spoofWindows: boolean) 
         ...base,
         async getHighEntropyValues(hints) {
             const values: Record<string, unknown> = { ...base };
+            if (settings.reduceClientHints) return values;
             for (const hint of hints) if (Object.hasOwn(highEntropy, hint)) values[hint] = highEntropy[hint];
             return values;
         },
@@ -556,7 +574,15 @@ function patchUserAgent(settings: PrivacySettings): void {
     const originalPlatform = navigator.platform;
     const userAgentNavigator = navigator as NavigatorWithUserAgentData;
     const originalUserAgentData = userAgentNavigator.userAgentData;
-    const chromeIdentity = createChromeIdentity(originalUserAgent, settings.spoofWindows);
+    const chromeIdentity = createChromeIdentity(originalUserAgent, settings.spoofWindows, settings);
+    if (originalUserAgentData) {
+        const originalGetHighEntropyValues = originalUserAgentData.getHighEntropyValues;
+        patchValue(originalUserAgentData, "getHighEntropyValues", function (this: UserAgentDataLike, hints: string[]) {
+            return settings.reduceClientHints
+                ? Promise.resolve({ brands: this.brands, mobile: this.mobile, platform: this.platform })
+                : originalGetHighEntropyValues.call(this, hints);
+        });
+    }
     const sanitizedUserAgent = sanitizeAgent(originalUserAgent);
     const sanitizedAppVersion = sanitizeAgent(originalAppVersion);
     patchGetter(Navigator.prototype, "userAgent", () => settings.spoofChrome ? chromeIdentity.userAgent : settings.hideElectronUserAgent ? sanitizedUserAgent : originalUserAgent);
@@ -577,6 +603,35 @@ function patchWebGl(settings: PrivacySettings): void {
         },
     });
     patchValue(HTMLCanvasElement.prototype, "getContext", protectedGetContext);
+
+    const prototypes = [
+        typeof WebGLRenderingContext === "undefined" ? null : WebGLRenderingContext.prototype,
+        typeof WebGL2RenderingContext === "undefined" ? null : WebGL2RenderingContext.prototype,
+    ];
+    for (const prototype of prototypes) {
+        if (!prototype) continue;
+        const { getExtension }: { getExtension(name: string): unknown; } = prototype;
+        const { getSupportedExtensions } = prototype;
+        patchValue(prototype, "getExtension", function (this: WebGLRenderingContext, name: string) {
+            return settings.reduceGpuFingerprint && name.toLowerCase() === "webgl_debug_renderer_info"
+                ? null : getExtension.call(this, name);
+        });
+        patchValue(prototype, "getSupportedExtensions", function (this: WebGLRenderingContext) {
+            const extensions = getSupportedExtensions.call(this);
+            return settings.reduceGpuFingerprint ? extensions?.filter(name => name !== "WEBGL_debug_renderer_info") ?? null : extensions;
+        });
+    }
+
+    const { GPUAdapterInfo } = window as Window & { GPUAdapterInfo?: { prototype: object; }; };
+    if (GPUAdapterInfo) {
+        for (const key of ["vendor", "architecture", "device", "description"]) {
+            const original = Object.getOwnPropertyDescriptor(GPUAdapterInfo.prototype, key)?.get;
+            if (!original) continue;
+            patchGetter(GPUAdapterInfo.prototype, key, function (this: object) {
+                return settings.reduceGpuFingerprint ? "" : original.call(this);
+            });
+        }
+    }
 }
 
 function isSafeWindowOpenUrl(urlLike: string | URL | undefined, settings: PrivacySettings): boolean {
@@ -588,7 +643,7 @@ function isSafeWindowOpenUrl(urlLike: string | URL | undefined, settings: Privac
     return SAFE_EXTERNAL_PROTOCOLS.has(url.protocol);
 }
 
-function patchWindowOpen(settings: PrivacySettings): void {
+function patchWindowOpen(settings: PrivacySettings, openLink: (url: string) => boolean): void {
     const originalWindowOpen = window.open;
     const protectedWindowOpen = function (this: Window, url?: string | URL, target?: string, features?: string): WindowProxy | null {
         if (settings.blockUnsafeExternalProtocols && !isSafeWindowOpenUrl(url, settings)) {
@@ -596,13 +651,31 @@ function patchWindowOpen(settings: PrivacySettings): void {
             return null;
         }
 
+        if (url) {
+            const parsed = getUrl(url, settings);
+            if (parsed && parsed.origin !== location.origin
+                && !(parsed.pathname === "/popout" && isDiscordHost(parsed.hostname))
+                && openLink(parsed.href)) return null;
+        }
+
         return originalWindowOpen.call(this, url, target, features);
     };
     patchValue(window, "open", protectedWindowOpen);
 }
 
-export function startHardening(settings: PrivacySettings): void {
+export function startHardening(settings: PrivacySettings, openLink: (url: string) => boolean): void {
     if (restorers.length) return;
+
+    const gifs = getUserSetting<boolean>("textAndImages", "gifAutoPlay");
+    if (gifs) {
+        const { getSetting } = gifs;
+        const { useSetting } = gifs;
+        patchValue(gifs, "getSetting", () => getSetting.call(gifs) && !settings.blockGifAutoplay);
+        patchValue(gifs, "useSetting", () => {
+            const enabled = useSetting.call(gifs);
+            return enabled && !settings.blockGifAutoplay;
+        });
+    }
 
     patchNetwork(settings);
     patchMedia(settings);
@@ -614,7 +687,7 @@ export function startHardening(settings: PrivacySettings): void {
     patchBackgroundSync(settings);
     patchUserAgent(settings);
     patchWebGl(settings);
-    patchWindowOpen(settings);
+    patchWindowOpen(settings, openLink);
 }
 
 export function stopHardening(): void {

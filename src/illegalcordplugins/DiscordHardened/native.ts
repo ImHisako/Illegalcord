@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import type { IpcMainInvokeEvent, Session, WebContents } from "electron";
+import type { Event, IpcMainInvokeEvent, Session, WebContents, WebPreferences } from "electron";
+
+import { launchBrowser, listInstalledBrowsers } from "./browsers";
+import { isDiscordAppUrl, isTrustedSender, restrictWebPreferences } from "./nativeSecurity";
 
 interface AppliedState {
     sender: WebContents;
@@ -13,6 +16,9 @@ interface AppliedState {
     userAgentApplied: boolean;
     questIdentityApplied: boolean;
     proxyApplied: boolean;
+    navigationListener: (event: Event, url: string) => void;
+    redirectListener: (event: Event, url: string, isInPlace: boolean, isMainFrame: boolean) => void;
+    webviewListener: (event: Event, preferences: WebPreferences, params: Record<string, string>) => void;
     destroyedListener: () => void;
 }
 
@@ -57,6 +63,9 @@ function isQuestUrl(url: string): boolean {
 
 async function restoreState(state: AppliedState): Promise<boolean> {
     state.sender.removeListener("destroyed", state.destroyedListener);
+    state.sender.removeListener("will-navigate", state.navigationListener);
+    state.sender.removeListener("will-redirect", state.redirectListener);
+    state.sender.removeListener("will-attach-webview", state.webviewListener);
     const senderAvailable = !state.sender.isDestroyed();
 
     if (state.userAgentApplied && senderAvailable) state.sender.setUserAgent(state.userAgent);
@@ -73,21 +82,32 @@ export async function configure(
     preserveQuestIdentity: boolean,
     proxy: boolean,
     proxyRules: string,
-    proxyBypassRules: string
+    proxyBypassRules: string,
+    restrictElectronNavigation: boolean,
+    blockElectronWebviews: boolean,
+    minimumPrivilege = true
 ): Promise<boolean> {
+    if (!isTrustedSender(event)) return false;
     if (
         typeof hideElectronUserAgent !== "boolean"
         || typeof spoofChrome !== "boolean"
         || typeof spoofWindows !== "boolean"
         || typeof preserveQuestIdentity !== "boolean"
         || typeof proxy !== "boolean"
+        || typeof restrictElectronNavigation !== "boolean"
+        || typeof blockElectronWebviews !== "boolean"
+        || typeof minimumPrivilege !== "boolean"
     ) return false;
-    if (!isValidProxyValue(proxyRules, !proxy) || !isValidProxyValue(proxyBypassRules, true) || event.sender.isDestroyed()) return false;
+    if (!isValidProxyValue(proxyRules, !proxy) || !isValidProxyValue(proxyBypassRules, true)) return false;
 
     const existing = appliedStates.get(event.sender.id);
-    if (existing) await restoreState(existing);
+    if (existing) {
+        const restored = await restoreState(existing).catch(() => false);
+        appliedStates.delete(event.sender.id);
+        if (!restored || !isTrustedSender(event)) return false;
+    }
 
-    if (!hideElectronUserAgent && !spoofChrome && !proxy) {
+    if (!hideElectronUserAgent && !spoofChrome && !proxy && !restrictElectronNavigation && !blockElectronWebviews && !minimumPrivilege) {
         appliedStates.delete(event.sender.id);
         return false;
     }
@@ -99,6 +119,25 @@ export async function configure(
         userAgentApplied: false,
         questIdentityApplied: false,
         proxyApplied: false,
+        navigationListener: (navigationEvent: Event, url: string) => {
+            if (restrictElectronNavigation && !isDiscordAppUrl(url)) navigationEvent.preventDefault();
+        },
+        redirectListener: (navigationEvent: Event, url: string, _isInPlace: boolean, isMainFrame: boolean) => {
+            if (restrictElectronNavigation && isMainFrame && !isDiscordAppUrl(url)) navigationEvent.preventDefault();
+        },
+        webviewListener: (webviewEvent: Event, preferences: WebPreferences, params: Record<string, string>) => {
+            if (blockElectronWebviews || minimumPrivilege && !isDiscordAppUrl(params.src)) {
+                webviewEvent.preventDefault();
+                return;
+            }
+            if (minimumPrivilege) {
+                restrictWebPreferences(preferences);
+                preferences.sandbox = true;
+                delete preferences.preload;
+                delete params.preload;
+                delete params.preloadURL;
+            }
+        },
         destroyedListener: () => {
             if (appliedStates.get(event.sender.id) !== state) return;
             appliedStates.delete(event.sender.id);
@@ -107,6 +146,10 @@ export async function configure(
     };
 
     try {
+        event.sender.on("will-navigate", state.navigationListener);
+        event.sender.on("will-redirect", state.redirectListener);
+        event.sender.on("will-attach-webview", state.webviewListener);
+
         if (spoofChrome || hideElectronUserAgent) {
             event.sender.setUserAgent(spoofChrome ? getChromeUserAgent(spoofWindows) : hideElectronTokens(state.userAgent));
             state.userAgentApplied = true;
@@ -137,6 +180,10 @@ export async function configure(
         if (proxy) {
             await event.sender.session.setProxy({ proxyRules, proxyBypassRules });
             state.proxyApplied = true;
+            if (!isTrustedSender(event)) {
+                await restoreState(state);
+                return false;
+            }
         }
 
         appliedStates.set(event.sender.id, state);
@@ -150,6 +197,7 @@ export async function configure(
 }
 
 export async function restore(event: IpcMainInvokeEvent): Promise<boolean> {
+    if (!isTrustedSender(event)) return false;
     const state = appliedStates.get(event.sender.id);
     if (!state) return false;
 
@@ -159,4 +207,28 @@ export async function restore(event: IpcMainInvokeEvent): Promise<boolean> {
     } catch {
         return false;
     }
+}
+
+export async function getInstalledBrowsers(event: IpcMainInvokeEvent) {
+    if (!isTrustedSender(event)) return [];
+    return listInstalledBrowsers();
+}
+
+export async function openInBrowser(event: IpcMainInvokeEvent, browserId: unknown, url: unknown): Promise<boolean> {
+    if (!isTrustedSender(event)) return false;
+    return launchBrowser(browserId, url, () => isTrustedSender(event)).catch(() => false);
+}
+
+export function getSecurityStatus(event: IpcMainInvokeEvent) {
+    if (!isTrustedSender(event)) return null;
+    const getPreferences: unknown = Reflect.get(event.sender, "getLastWebPreferences");
+    if (typeof getPreferences !== "function") return null;
+    const preferences: unknown = Reflect.apply(getPreferences, event.sender, []);
+    if (typeof preferences !== "object" || preferences === null) return null;
+    return {
+        nodeIntegration: "nodeIntegration" in preferences && typeof preferences.nodeIntegration === "boolean" ? preferences.nodeIntegration : null,
+        contextIsolation: "contextIsolation" in preferences && typeof preferences.contextIsolation === "boolean" ? preferences.contextIsolation : null,
+        sandbox: "sandbox" in preferences && typeof preferences.sandbox === "boolean" ? preferences.sandbox : null,
+        webSecurity: "webSecurity" in preferences && typeof preferences.webSecurity === "boolean" ? preferences.webSecurity : null,
+    };
 }

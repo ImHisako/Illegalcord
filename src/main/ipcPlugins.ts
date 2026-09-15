@@ -16,10 +16,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { isTrustedSender } from "@illegalcordplugins/DiscordHardened/nativeSecurity";
 import { IpcEvents } from "@shared/IpcEvents";
 import { ipcMain } from "electron";
 
 import PluginNatives from "~pluginNatives";
+
+import { RendererSettings } from "./settings";
 
 const PluginIpcMappings = {} as Record<string, Record<string, string>>;
 export type PluginIpcMappings = typeof PluginIpcMappings;
@@ -32,11 +35,21 @@ for (const [plugin, methods] of Object.entries(PluginNatives)) {
 
     for (const [methodName, method] of entries) {
         const key = `VencordPluginNative_${plugin}_${methodName}`;
-        ipcMain.handle(key, method);
+        ipcMain.handle(key, (event, ...args: unknown[]) => {
+            const hardening = RendererSettings.store.plugins?.DiscordHardened;
+            if (hardening?.enabled && hardening.minimumPrivilege !== false && !isTrustedSender(event))
+                return Promise.reject("This page cannot access plugin functions.");
+            return Reflect.apply(method, undefined, [event, ...args]);
+        });
         mappings[methodName] = key;
     }
 }
 
 ipcMain.on(IpcEvents.GET_PLUGIN_IPC_METHOD_MAP, e => {
+    const hardening = RendererSettings.store.plugins?.DiscordHardened;
+    if (hardening?.enabled && hardening.minimumPrivilege !== false && !isTrustedSender(e)) {
+        e.returnValue = {};
+        return;
+    }
     e.returnValue = PluginIpcMappings;
 });
