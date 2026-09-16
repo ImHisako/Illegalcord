@@ -230,6 +230,36 @@ test("Content restrictions preserve existing CSP and ignore invalid configuratio
     assert.ok(!invalid["Content-Security-Policy"][0].includes("script-src *"));
 });
 
+test("Quest compatibility allows hCaptcha through frame and script restrictions only when enabled", () => {
+    for (const questCompatibility of [undefined, true, false]) {
+        for (const blockUnknownEmbeds of [true, false]) {
+            const headers = { "Content-Security-Policy": ["default-src https:"] };
+            policy.addContentPolicy(headers, {
+                enabled: true,
+                questCompatibility,
+                blockUnknownEmbeds,
+                blockThirdPartyScripts: true,
+                allowedEmbedDomains: "youtube.com",
+            });
+            assert.equal(headers["Content-Security-Policy"][0], "default-src https:");
+            const directives = Object.fromEntries(headers["Content-Security-Policy"][1].split("; ").map(directive => {
+                const [name, ...sources] = directive.split(" ");
+                return [name, sources];
+            }));
+            assert.equal("frame-src" in directives, blockUnknownEmbeds);
+            for (const directive of ["frame-src", "script-src-elem"]) {
+                if (!(directive in directives)) continue;
+                for (const source of ["https://hcaptcha.com", "https://*.hcaptcha.com"]) {
+                    assert.equal(directives[directive].includes(source), questCompatibility !== false);
+                }
+                assert.ok(!directives[directive].includes("https:"));
+                assert.ok(!directives[directive].includes("*"));
+            }
+            assert.deepEqual(directives["object-src"], ["'none'"]);
+        }
+    }
+});
+
 test("Browser discovery only lists installed executables and launches a validated URL as one argument", async () => {
     const { win32: path } = await import("node:path");
     const existing = new Set(["C:/Program Files/Waterfox/waterfox.exe", "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe"].map(value => path.normalize(value)));

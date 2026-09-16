@@ -43,19 +43,21 @@ interface ContentSettings {
     allowedEmbedDomains?: string;
     blockThirdPartyScripts?: boolean;
     minimumPrivilege?: boolean;
+    questCompatibility?: boolean;
 }
 
 export function addContentPolicy(headers: Record<string, string[]>, settings: ContentSettings | undefined): void {
     if (!settings?.enabled) return;
     const directives: string[] = [];
+    const captchaSources = settings.questCompatibility !== false ? " https://hcaptcha.com https://*.hcaptcha.com" : "";
     if (settings.minimumPrivilege !== false) directives.push("object-src 'none'", "base-uri 'self'");
     if (settings.blockUnknownEmbeds !== false) {
         const configured = settings.allowedEmbedDomains ?? DEFAULT_EMBED_DOMAINS;
         const domains = parseDomainList(validateDomainList(configured) === true ? configured : DEFAULT_EMBED_DOMAINS);
         const origins = domains.flatMap(domain => [`https://${domain}`, `https://*.${domain}`]);
-        directives.push(`frame-src 'self' https://*.discordsays.com https://*.discordsez.com ${origins.join(" ")}`);
+        directives.push(`frame-src 'self' https://*.discordsays.com https://*.discordsez.com ${origins.join(" ")}${captchaSources}`);
     }
-    if (settings.blockThirdPartyScripts) directives.push("script-src-elem 'self' 'unsafe-inline' blob:");
+    if (settings.blockThirdPartyScripts) directives.push(`script-src-elem 'self' 'unsafe-inline' blob:${captchaSources}`);
     if (!directives.length) return;
     const key = Object.keys(headers).find(key => key.toLowerCase() === "content-security-policy") ?? "Content-Security-Policy";
     headers[key] = [...headers[key] ?? [], directives.join("; ")];

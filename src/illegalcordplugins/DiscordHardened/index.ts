@@ -197,7 +197,7 @@ export const settings = definePluginSettings({
     },
     questCompatibility: {
         type: OptionType.BOOLEAN,
-        description: "Use Discord's original desktop request identity for Quest requests.",
+        description: "Use Discord's original desktop request identity for Quest requests and allow hCaptcha frames and scripts.",
         default: true,
         restartNeeded: true,
     },
