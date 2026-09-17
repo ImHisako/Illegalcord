@@ -217,7 +217,7 @@ test("Embed allowlists reject spoofed domains and check original media origins",
 
 test("Content restrictions preserve existing CSP and ignore invalid configuration", () => {
     const headers = { "content-security-policy": ["default-src 'self'"] };
-    policy.addContentPolicy(headers, { enabled: true, allowedEmbedDomains: "youtube.com", blockThirdPartyScripts: true });
+    policy.addContentPolicy(headers, { enabled: true, blockUnknownEmbeds: true, allowedEmbedDomains: "youtube.com", blockThirdPartyScripts: true });
     assert.equal(headers["content-security-policy"][0], "default-src 'self'");
     assert.match(headers["content-security-policy"][1], /frame-src .*https:\/\/youtube\.com https:\/\/\*\.youtube\.com/);
     assert.match(headers["content-security-policy"][1], /script-src-elem 'self' 'unsafe-inline' blob:/);
@@ -226,13 +226,13 @@ test("Content restrictions preserve existing CSP and ignore invalid configuratio
     policy.addContentPolicy(disabled, { enabled: false });
     assert.deepEqual(disabled, {});
     const invalid = {};
-    policy.addContentPolicy(invalid, { enabled: true, allowedEmbedDomains: "example.com; script-src *" });
+    policy.addContentPolicy(invalid, { enabled: true, blockUnknownEmbeds: true, allowedEmbedDomains: "example.com; script-src *" });
     assert.ok(!invalid["Content-Security-Policy"][0].includes("script-src *"));
 });
 
 test("Quest compatibility allows hCaptcha through frame and script restrictions only when enabled", () => {
     for (const questCompatibility of [undefined, true, false]) {
-        for (const blockUnknownEmbeds of [true, false]) {
+        for (const blockUnknownEmbeds of [undefined, true, false]) {
             const headers = { "Content-Security-Policy": ["default-src https:"] };
             policy.addContentPolicy(headers, {
                 enabled: true,
@@ -246,7 +246,7 @@ test("Quest compatibility allows hCaptcha through frame and script restrictions 
                 const [name, ...sources] = directive.split(" ");
                 return [name, sources];
             }));
-            assert.equal("frame-src" in directives, blockUnknownEmbeds);
+            assert.equal("frame-src" in directives, blockUnknownEmbeds === true);
             for (const directive of ["frame-src", "script-src-elem"]) {
                 if (!(directive in directives)) continue;
                 for (const source of ["https://hcaptcha.com", "https://*.hcaptcha.com"]) {

@@ -60,7 +60,7 @@ migrateOldSettingToNewPlugin("WebRTCLeakPrevent", "icePolicy", "DiscordHardened"
 migratePluginSetting("DiscordHardened", "questifyCompatibility", "questCompatibility");
 
 const currentSettings = PlainSettings.plugins.DiscordHardened as Record<string, unknown> | undefined;
-if (currentSettings && currentSettings.migrationVersion !== 1) {
+if (currentSettings && !currentSettings.migrationVersion) {
     currentSettings.hideElectronUserAgent = false;
     currentSettings.spoofChrome = false;
 
@@ -75,11 +75,17 @@ if (currentSettings && currentSettings.migrationVersion !== 1) {
     SettingsStore.markAsChanged();
 }
 
+if (currentSettings && currentSettings.migrationVersion !== 2) {
+    currentSettings.blockUnknownEmbeds = false;
+    currentSettings.migrationVersion = 2;
+    SettingsStore.markAsChanged();
+}
+
 export const settings = definePluginSettings({
     blockUnknownEmbeds: {
         type: OptionType.BOOLEAN,
         description: "Hide embeds from domains outside your allowlist. Also restrict desktop embedded frames after restarting.",
-        default: true,
+        default: false,
         restartNeeded: true,
     },
     allowedEmbedDomains: {
@@ -146,7 +152,7 @@ export const settings = definePluginSettings({
     migrationVersion: {
         type: OptionType.NUMBER,
         description: "The current settings migration version.",
-        default: 1,
+        default: 2,
         hidden: true,
     },
     blockTelemetry: {

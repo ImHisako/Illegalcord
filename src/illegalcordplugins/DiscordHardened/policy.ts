@@ -51,7 +51,7 @@ export function addContentPolicy(headers: Record<string, string[]>, settings: Co
     const directives: string[] = [];
     const captchaSources = settings.questCompatibility !== false ? " https://hcaptcha.com https://*.hcaptcha.com" : "";
     if (settings.minimumPrivilege !== false) directives.push("object-src 'none'", "base-uri 'self'");
-    if (settings.blockUnknownEmbeds !== false) {
+    if (settings.blockUnknownEmbeds) {
         const configured = settings.allowedEmbedDomains ?? DEFAULT_EMBED_DOMAINS;
         const domains = parseDomainList(validateDomainList(configured) === true ? configured : DEFAULT_EMBED_DOMAINS);
         const origins = domains.flatMap(domain => [`https://${domain}`, `https://*.${domain}`]);
