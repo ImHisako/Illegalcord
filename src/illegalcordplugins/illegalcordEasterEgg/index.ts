@@ -40,19 +40,20 @@ export default definePlugin({
         find: "#{intl::LOADING_DID_YOU_KNOW}",
         replacement: [
             {
-                match: /_loadingText.{0,150}?(?=(\i)\[.{0,10}\.random)/,
-                replace: "$&$self.replaceQuotes($1),"
+                match: /(?<=_loadingText=\(function\(\)\{)/,
+                replace: "return $self.getQuote();"
             },
             {
-                match: /_eventLoadingText.{0,150}?(?=(\i)\[.{0,10}\.random)/,
-                replace: "$&$self.replaceQuotes($1),",
+                match: /(?<=_eventLoadingText=\(function\(\)\{)/,
+                replace: "return $self.getQuote();",
                 noWarn: true
             }
         ]
     }],
 
-    replaceQuotes(quotes: string[]) {
+    getQuote() {
         const additionalQuotes = settings.store.additionalQuotes.split("\n").map((quote: string) => quote.trim()).filter(Boolean);
-        quotes.splice(0, quotes.length, ...presetQuotes, ...additionalQuotes);
+        const quotes = [...presetQuotes, ...additionalQuotes];
+        return quotes[Math.floor(Math.random() * quotes.length)];
     }
 });
