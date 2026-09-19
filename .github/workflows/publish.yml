@@ -52,7 +52,7 @@ jobs:
 
             - name: Create Tag
               if: steps.check.outputs.release == 'true'
-              uses: butlerlogic/action-autotag@1.1.2
+              uses: thororen1234/action-autotag@v1.1.5
               env:
                   GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
               with:
@@ -60,18 +60,10 @@ jobs:
 
             - name: Setup PNPM
               if: steps.check.outputs.release == 'true'
-              uses: pnpm/action-setup@v6
-
-            - name: Use Node.js 24
-              if: steps.check.outputs.release == 'true'
-              uses: actions/setup-node@v6
+              uses: pnpm/setup@v2.1.0
               with:
-                  node-version: 24
-                  cache: "pnpm"
-
-            - name: Install dependencies
-              if: steps.check.outputs.release == 'true'
-              run: pnpm install --frozen-lockfile
+                  runtime: node@v24
+                  require-lockfile: true
 
             - name: Build web
               if: steps.check.outputs.release == 'true'

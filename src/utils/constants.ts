@@ -560,7 +560,7 @@ export const Devs = /* #__PURE__*/ Object.freeze({
     },
     nyx: {
         name: "verticalsync.",
-        id: 1207087393929171095n
+        id: 1280505961546649633n
     },
     nekohaxx: {
         name: "nekohaxx",
@@ -739,8 +739,8 @@ export const EquicordDevs = Object.freeze({
         id: 353229259482857475n
     },
     nyx: {
-        name: "verticalsync",
-        id: 1207087393929171095n
+        name: "verticalsync.",
+        id: 1280505961546649633n
     },
     Cortex: {
         name: "Cortex",
