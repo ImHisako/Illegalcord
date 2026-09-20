@@ -4,15 +4,17 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import "./style.css";
+
 import { Flex } from "@components/Flex";
 import { Heading } from "@components/Heading";
 import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
 import { Margins } from "@utils/margins";
-import { useFixedTimer } from "@utils/react";
+import { useFixedTimer, useForceUpdater } from "@utils/react";
 import { formatDuration } from "@utils/text";
 import type { PluginNative } from "@utils/types";
-import { Button, moment, React, Select, useEffect, useState } from "@webpack/common";
+import { Button, moment, React, ScrollerThin, Select, useEffect, useState } from "@webpack/common";
 
 import { settings } from "./index";
 import { getRuntimeProtections } from "./runtime";
@@ -31,6 +33,7 @@ export function SecurityPanel() {
     const [security, setSecurity] = useState<Awaited<ReturnType<NonNullable<typeof Native>["getSecurityStatus"]>>>(null);
     const [loading, setLoading] = useState(Boolean(Native));
     const [grantFailed, setGrantFailed] = useState(false);
+    const forceUpdate = useForceUpdater();
     useFixedTimer({ initialTime: 0 });
 
     useEffect(() => {
@@ -86,19 +89,28 @@ export function SecurityPanel() {
             <Select options={DURATION_OPTIONS} isSelected={(value: number) => value === minutes} select={setMinutes} serialize={(value: number) => String(value)} />
         </div>
         <Button className={Margins.top8} disabled={options[permission]} onClick={() => setGrantFailed(!grantTemporaryPermission(permission, minutes))}>Allow temporarily</Button>
-        {options[permission] ? <Paragraph>This capability is already allowed in your saved preferences. Disable it below to use temporary grants.</Paragraph> : null}
+        {options[permission] ? <Paragraph>This capability is already allowed in your saved preferences. Disable it in the Settings tab to use temporary grants.</Paragraph> : null}
         {grantFailed ? <Paragraph>The temporary permission could not be granted. Enable DiscordHardened first.</Paragraph> : null}
         {grants.length ? grants.map(grant => <Flex key={grant.permission} className={Margins.top8} alignItems="center" justifyContent="space-between">
             <Paragraph>{TEMPORARY_PERMISSIONS[grant.permission]}: {formatDuration(Math.max(0, grant.expiresAt - Date.now()))} remaining.</Paragraph>
             <Button onClick={() => revokeTemporaryPermission(grant.permission)}>Revoke</Button>
         </Flex>) : <Paragraph>No temporary permissions are active.</Paragraph>}
 
-        <Heading tag="h3" className={Margins.top20}>Local block log</Heading>
+        <Heading tag="h3" className={Margins.top20}>Log console</Heading>
         <Paragraph>Stores up to 100 recent entries in memory for this session. Only categories, times and counts are recorded. No domains, URLs, filenames, message text or account data. Consecutive blocks of the same category within ten seconds are grouped. Covers intercepted requests and browser API denials, not native Electron events.</Paragraph>
-        <Button onClick={clearBlockLog} disabled={!events.length}>Clear log</Button>
-        {!options.recordBlockedEvents ? <Paragraph>Recording is disabled. Enable it under Network protection.</Paragraph> : !events.length ? <Paragraph>No blocks recorded in this session.</Paragraph> : null}
-        {events.map(event => <Paragraph key={event.id}>
-            {moment(event.time).format("HH:mm:ss")} · {event.category} · {event.count} {event.count === 1 ? "block" : "blocks"}
-        </Paragraph>)}
+        <Flex className={Margins.bottom8} alignItems="center" justifyContent="space-between">
+            <Paragraph>{options.recordBlockedEvents ? "Recording enabled" : "Recording disabled"} · {events.length}/100 entries · Newest first</Paragraph>
+            <Button onClick={() => { clearBlockLog(); forceUpdate(); }} disabled={!events.length}>Clear log</Button>
+        </Flex>
+        <ScrollerThin className="vc-discord-hardened-console">
+            <div tabIndex={0} role="region" aria-label="DiscordHardened log console">
+                {!options.recordBlockedEvents ? <div>Recording is disabled. Enable it under Network protection in the Settings tab.</div> : !events.length ? <div>No blocks recorded in this session.</div> : null}
+                {events.map(event => <div className="vc-discord-hardened-console-entry" key={event.id}>
+                    <span className="vc-discord-hardened-console-time">[{moment(event.time).format("HH:mm:ss")}]</span>
+                    <span className="vc-discord-hardened-console-label">BLOCKED</span>
+                    <span>{event.category} · {event.count} {event.count === 1 ? "block" : "blocks"}</span>
+                </div>)}
+            </div>
+        </ScrollerThin>
     </section>;
 }

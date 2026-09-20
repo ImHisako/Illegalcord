@@ -12,7 +12,7 @@ import { Paragraph } from "@components/Paragraph";
 import { SettingsTab, wrapTab } from "@components/settings";
 import { OptionComponentMap } from "@components/settings/tabs/plugins/components";
 import { Margins } from "@utils/margins";
-import { React } from "@webpack/common";
+import { React, TabBar, useState } from "@webpack/common";
 
 import { settings } from "./index";
 import { SecurityPanel } from "./SecurityPanel";
@@ -139,6 +139,7 @@ function SettingRow({ settingKey, pluginSettings }: SettingRowProps) {
 
 function DiscordHardenedSettings() {
     const pluginSettings = useSettings(PLUGIN_SETTINGS_PATHS).plugins.DiscordHardened;
+    const [tab, setTab] = useState<"settings" | "security">("settings");
 
     return (
         <SettingsTab>
@@ -147,11 +148,14 @@ function DiscordHardenedSettings() {
                 Privacy and security controls adapted from WebCord and GoofCord for Illegalcord. Settings marked for restart take effect after Discord restarts.
             </Paragraph>
 
-            <ErrorBoundary noop>
-                <SecurityPanel />
-            </ErrorBoundary>
+            <TabBar type="top" look="brand" selectedItem={tab} onItemSelect={setTab} className={Margins.bottom20}>
+                <TabBar.Item id="settings">Settings</TabBar.Item>
+                <TabBar.Item id="security">Security and logs</TabBar.Item>
+            </TabBar>
 
-            {SETTINGS_GROUPS.map(group => (
+            {tab === "security" ? <ErrorBoundary noop>
+                <SecurityPanel />
+            </ErrorBoundary> : SETTINGS_GROUPS.map(group => (
                 <section key={group.title} className={Margins.bottom20}>
                     <Heading tag="h3">{group.title}</Heading>
                     <Paragraph className={Margins.bottom8}>{group.description}</Paragraph>
