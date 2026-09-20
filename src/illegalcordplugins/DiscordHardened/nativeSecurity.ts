@@ -9,7 +9,7 @@ import type { IpcMainInvokeEvent, WebPreferences } from "electron";
 export function isDiscordAppUrl(url: string): boolean {
     try {
         const parsed = new URL(url);
-        return !parsed.username && !parsed.password && [
+        return parsed.protocol === "https:" && !parsed.username && !parsed.password && [
             "https://discord.com", "https://ptb.discord.com", "https://canary.discord.com",
             "https://discordapp.com", "https://ptb.discordapp.com", "https://canary.discordapp.com",
         ].includes(parsed.origin);

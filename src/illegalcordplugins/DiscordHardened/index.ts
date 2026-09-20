@@ -16,10 +16,12 @@ import definePlugin, { OptionType, type PluginNative } from "@utils/types";
 import type { Embed } from "@vencord/discord-types";
 import { SettingsRouter, showToast, Toasts } from "@webpack/common";
 
+import { refreshAttachmentWarnings, startAttachmentWarnings, stopAttachmentWarnings } from "./AttachmentWarnings";
 import { BrowserSettings } from "./BrowserSettings";
 import { refreshCameraPrivacy, refreshMicrophonePrivacy, startMicrophonePrivacy, stopMicrophonePrivacy } from "./microphonePrivacy";
 import { DEFAULT_EMBED_DOMAINS, isAllowedEmbed, parseDomainList, validateDomainList } from "./policy";
 import { startHardening, stopHardening } from "./runtime";
+import { setBlockRecording, startPermissionSession, stopPermissionSession } from "./session";
 
 const logger = new Logger("DiscordHardened");
 const Native = VencordNative?.pluginHelpers?.DiscordHardened as PluginNative<typeof import("./native")> | undefined;
@@ -82,6 +84,12 @@ if (currentSettings && currentSettings.migrationVersion !== 2) {
 }
 
 export const settings = definePluginSettings({
+    warnSuspiciousAttachments: {
+        type: OptionType.BOOLEAN,
+        description: "Warn about executable attachments, deceptive double extensions and invisible filename characters. Checks names only and does not scan file contents.",
+        default: true,
+        onChange: refreshAttachmentWarnings,
+    },
     blockUnknownEmbeds: {
         type: OptionType.BOOLEAN,
         description: "Hide embeds from domains outside your allowlist. Also restrict desktop embedded frames after restarting.",
@@ -361,12 +369,17 @@ export const settings = definePluginSettings({
     },
     stripThirdPartyReferrers: {
         type: OptionType.BOOLEAN,
-        description: "Remove the Discord page address from third-party fetch requests.",
+        description: "Omit referrers from fetch requests and external windows. Restart Discord to also apply the desktop document policy to resource loads.",
+        default: true,
+    },
+    isolateExternalWindows: {
+        type: OptionType.BOOLEAN,
+        description: "Prevent external web pages opened with window.open from accessing the opener. Some login popups may require this to be disabled along with referrer protection.",
         default: true,
     },
     blockUnsafeExternalProtocols: {
         type: OptionType.BOOLEAN,
-        description: "Block window requests that use unsafe external protocols.",
+        description: "Block window requests that use unsafe protocols or URLs containing credentials.",
         default: true,
     },
     restrictElectronNavigation: {
@@ -387,6 +400,12 @@ export const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         description: "Log requests blocked by this plugin without logging message or account data.",
         default: false,
+    },
+    recordBlockedEvents: {
+        type: OptionType.BOOLEAN,
+        description: "Keep a bounded block log in memory with categories, times and counts only. Disabling recording clears the log.",
+        default: true,
+        onChange: setBlockRecording,
     },
     proxy: {
         type: OptionType.BOOLEAN,
@@ -460,7 +479,7 @@ export default definePlugin({
     description: "Ports WebCord's compatible privacy and security controls to Illegalcord.",
     tags: ["Privacy", "Utility", "Voice"],
     authors: [EquicordDevs.irritably],
-    dependencies: ["WebRTCLeakPrevent", "UserSettingsAPI"],
+    dependencies: ["WebRTCLeakPrevent", "UserSettingsAPI", "MessageAccessoriesAPI"],
     enabledByDefault: true,
     settings,
     patches: [
@@ -527,6 +546,12 @@ export default definePlugin({
             });
         }
 
+        setBlockRecording(settings.store.recordBlockedEvents);
+        startPermissionSession(() => {
+            refreshCameraPrivacy();
+            refreshMicrophonePrivacy();
+        });
+        startAttachmentWarnings();
         startMicrophonePrivacy(settings.store);
         startHardening(settings.store, url => this.openLink(url));
 
@@ -536,6 +561,8 @@ export default definePlugin({
     async stop() {
         lifecycleId++;
         removeFromArray(SettingsPlugin.customEntries, entry => entry.key === SETTINGS_ENTRY_KEY);
+        stopAttachmentWarnings();
+        stopPermissionSession();
         stopHardening();
         stopMicrophonePrivacy();
 

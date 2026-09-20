@@ -8,6 +8,8 @@ import { Logger } from "@utils/Logger";
 import { isObject } from "@utils/misc";
 import { FluxDispatcher, MediaEngineStore, SelectedChannelStore, VoiceActions } from "@webpack/common";
 
+import { isPermissionAllowed } from "./session";
+
 interface MicrophonePrivacySettings {
     allowCamera: boolean;
     allowMicrophone: boolean;
@@ -52,7 +54,7 @@ function getVoiceState(): { inCall: boolean; pushToTalk: boolean; selfMuted: boo
 
 function shouldLockMicrophone(): boolean {
     if (!settings) return false;
-    if (!settings.allowMicrophone) return true;
+    if (!isPermissionAllowed("allowMicrophone", settings.allowMicrophone)) return true;
 
     const voiceState = getVoiceState();
     if (!voiceState) return settings.blockMicrophoneOutsideCalls || settings.privatePushToTalk || settings.lockMicrophoneWhenMuted;
@@ -179,7 +181,7 @@ export function refreshMicrophonePrivacy(): void {
 
     ensurePttConnectionHooks();
 
-    if (!settings.allowMicrophone || settings.blockMicrophoneOutsideCalls && getVoiceState()?.inCall !== true) {
+    if (!isPermissionAllowed("allowMicrophone", settings.allowMicrophone) || settings.blockMicrophoneOutsideCalls && getVoiceState()?.inCall !== true) {
         FluxDispatcher.dispatch({ type: "MEDIA_ENGINE_SET_AUDIO_ENABLED", enabled: false });
     }
 
@@ -193,7 +195,7 @@ export function refreshMicrophonePrivacy(): void {
 }
 
 export function refreshCameraPrivacy(): void {
-    if (settings?.allowCamera === false && isObject(VoiceActions) && "setVideoEnabled" in VoiceActions && isCallable(VoiceActions.setVideoEnabled)) {
+    if (settings && !isPermissionAllowed("allowCamera", settings.allowCamera) && isObject(VoiceActions) && "setVideoEnabled" in VoiceActions && isCallable(VoiceActions.setVideoEnabled)) {
         Reflect.apply(VoiceActions.setVideoEnabled, VoiceActions, [false]);
     }
 }
@@ -260,15 +262,15 @@ export function startMicrophonePrivacy(newSettings: MicrophonePrivacySettings): 
         protectedDispatch = action => {
             let protectedAction = action;
             if (action.enabled === true) {
-                if (action.type === "MEDIA_ENGINE_SET_VIDEO_ENABLED" && settings?.allowCamera === false) {
+                if (action.type === "MEDIA_ENGINE_SET_VIDEO_ENABLED" && settings && !isPermissionAllowed("allowCamera", settings.allowCamera)) {
                     protectedAction = { ...action, enabled: false };
                 } else if (
                     action.type === "MEDIA_ENGINE_SET_AUDIO_ENABLED" && (
-                        settings?.allowMicrophone === false
+                        settings && !isPermissionAllowed("allowMicrophone", settings.allowMicrophone)
                         || settings?.blockMicrophoneOutsideCalls && getVoiceState()?.inCall !== true
                     )
                     || action.type === "AUDIO_SET_LOOPBACK" && (
-                        settings?.allowMicrophone === false
+                        settings && !isPermissionAllowed("allowMicrophone", settings.allowMicrophone)
                         || settings?.blockMicrophoneOutsideCalls && getVoiceState()?.inCall !== true
                     )
                 ) {
@@ -320,7 +322,7 @@ export function startMicrophonePrivacy(newSettings: MicrophonePrivacySettings): 
         const nativeSetVideoEnabled = VoiceActions.setVideoEnabled;
         originalSetVideoEnabled = nativeSetVideoEnabled;
         protectedSetVideoEnabled = function (this: unknown, ...args: unknown[]) {
-            if (args[0] === true && settings?.allowCamera === false) {
+            if (args[0] === true && settings && !isPermissionAllowed("allowCamera", settings.allowCamera)) {
                 return Reflect.apply(nativeSetVideoEnabled, this, [false, ...args.slice(1)]);
             }
 

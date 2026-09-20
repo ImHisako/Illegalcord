@@ -16,6 +16,8 @@ interface AppliedState {
     userAgentApplied: boolean;
     questIdentityApplied: boolean;
     proxyApplied: boolean;
+    restrictElectronNavigation: boolean;
+    blockElectronWebviews: boolean;
     navigationListener: (event: Event, url: string) => void;
     redirectListener: (event: Event, url: string, isInPlace: boolean, isMainFrame: boolean) => void;
     webviewListener: (event: Event, preferences: WebPreferences, params: Record<string, string>) => void;
@@ -119,6 +121,8 @@ export async function configure(
         userAgentApplied: false,
         questIdentityApplied: false,
         proxyApplied: false,
+        restrictElectronNavigation,
+        blockElectronWebviews,
         navigationListener: (navigationEvent: Event, url: string) => {
             if (restrictElectronNavigation && !isDiscordAppUrl(url)) navigationEvent.preventDefault();
         },
@@ -225,10 +229,13 @@ export function getSecurityStatus(event: IpcMainInvokeEvent) {
     if (typeof getPreferences !== "function") return null;
     const preferences: unknown = Reflect.apply(getPreferences, event.sender, []);
     if (typeof preferences !== "object" || preferences === null) return null;
+    const state = appliedStates.get(event.sender.id);
     return {
         nodeIntegration: "nodeIntegration" in preferences && typeof preferences.nodeIntegration === "boolean" ? preferences.nodeIntegration : null,
         contextIsolation: "contextIsolation" in preferences && typeof preferences.contextIsolation === "boolean" ? preferences.contextIsolation : null,
         sandbox: "sandbox" in preferences && typeof preferences.sandbox === "boolean" ? preferences.sandbox : null,
         webSecurity: "webSecurity" in preferences && typeof preferences.webSecurity === "boolean" ? preferences.webSecurity : null,
+        navigationRestricted: Boolean(state?.restrictElectronNavigation && event.sender.listeners("will-navigate").includes(state.navigationListener) && event.sender.listeners("will-redirect").includes(state.redirectListener)),
+        webviewsBlocked: Boolean(state?.blockElectronWebviews && event.sender.listeners("will-attach-webview").includes(state.webviewListener)),
     };
 }

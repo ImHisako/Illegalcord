@@ -8,6 +8,25 @@ import type { Embed } from "@vencord/discord-types";
 
 export const DEFAULT_EMBED_DOMAINS = "discord.com\ndiscordapp.com\ndiscordapp.net\nyoutube.com\nyoutu.be\nyoutube-nocookie.com\nytimg.com\ngooglevideo.com\ntenor.com\ngiphy.com";
 
+export function inspectAttachmentName(filename: string): { name: string; reasons: string[]; } | null {
+    const reasons: string[] = [];
+    const name = filename.replace(/[\p{Cc}\p{Cf}]/gu, character => `[U+${character.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0")}]`);
+    if (name !== filename) reasons.push("Contains invisible or directional characters that can disguise the name.");
+    const normalized = filename.normalize("NFKC").replace(/[\p{Cc}\p{Cf}]/gu, "").replace(/[.\s]+$/u, "");
+    const extension = normalized.split(".").at(-1)?.toLowerCase();
+    const executable = /\.(?:exe|scr|com|bat|cmd|ps1|vbs|vbe|js|jse|wsf|wsh|hta|msi|msp|lnk|url|reg|dll|cpl|jar|app|apk|dmg|pkg|sh|desktop|appimage)$/i.test(normalized);
+    if (executable) {
+        reasons.push(`Executable, installer, script or shortcut extension (.${extension}).`);
+        if (/\.(?:pdf|txt|docx?|xlsx?|pptx?|jpe?g|png|gif|webp|mp[34]|wav|zip|rar)\s*\.[^.]+$/i.test(normalized)) {
+            reasons.push("A double extension makes this file look like a document or media file.");
+        }
+    }
+    if (/\.(?:docm|xlsm|pptm|xlam|dotm)$/i.test(normalized)) reasons.push("This document format can contain macros.");
+    if (/[.\s]$/u.test(filename)) reasons.push("Trailing spaces or dots can disguise the file type.");
+    if (/[\\/]/.test(filename)) reasons.push("Contains path separators.");
+    return reasons.length ? { name: name.length > 180 ? `${name.slice(0, 140)}…${name.slice(-40)}` : name, reasons } : null;
+}
+
 export function parseDomainList(value: string): string[] {
     return value.split(/[\n,]/).map(domain => domain.trim().toLowerCase()).filter(Boolean);
 }
@@ -44,10 +63,17 @@ interface ContentSettings {
     blockThirdPartyScripts?: boolean;
     minimumPrivilege?: boolean;
     questCompatibility?: boolean;
+    stripThirdPartyReferrers?: boolean;
 }
 
 export function addContentPolicy(headers: Record<string, string[]>, settings: ContentSettings | undefined): void {
     if (!settings?.enabled) return;
+    if (settings.stripThirdPartyReferrers !== false) {
+        for (const key of Object.keys(headers)) {
+            if (key.toLowerCase() === "referrer-policy") delete headers[key];
+        }
+        headers["Referrer-Policy"] = ["no-referrer"];
+    }
     const directives: string[] = [];
     const captchaSources = settings.questCompatibility !== false ? " https://hcaptcha.com https://*.hcaptcha.com" : "";
     if (settings.minimumPrivilege !== false) directives.push("object-src 'none'", "base-uri 'self'");

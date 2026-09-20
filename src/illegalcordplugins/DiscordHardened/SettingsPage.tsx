@@ -15,6 +15,7 @@ import { Margins } from "@utils/margins";
 import { React } from "@webpack/common";
 
 import { settings } from "./index";
+import { SecurityPanel } from "./SecurityPanel";
 
 type SettingKey = keyof typeof settings.def;
 
@@ -29,7 +30,7 @@ const SETTINGS_GROUPS = [
     {
         title: "Embeds and autoplay",
         description: "Unknown means outside your domain allowlist. Hidden embeds are not rendered, but Discord may already have fetched their metadata on its servers. Other plugins can render their own content separately.",
-        keys: ["blockUnknownEmbeds", "allowedEmbedDomains", "blockGifAutoplay", "blockVideoAutoplay", "blockThirdPartyScripts"],
+        keys: ["warnSuspiciousAttachments", "blockUnknownEmbeds", "allowedEmbedDomains", "blockGifAutoplay", "blockVideoAutoplay", "blockThirdPartyScripts"],
     },
     {
         title: "Network protection",
@@ -46,6 +47,7 @@ const SETTINGS_GROUPS = [
             "firewallBlockedPatterns",
             "firewallAllowedPatterns",
             "logBlockedRequests",
+            "recordBlockedEvents",
         ],
     },
     {
@@ -95,6 +97,7 @@ const SETTINGS_GROUPS = [
             "blockGamepadAccess",
             "blockBatteryAccess",
             "blockUnsafeExternalProtocols",
+            "isolateExternalWindows",
         ],
     },
     {
@@ -143,6 +146,10 @@ function DiscordHardenedSettings() {
             <Paragraph className={Margins.bottom20}>
                 Privacy and security controls adapted from WebCord and GoofCord for Illegalcord. Settings marked for restart take effect after Discord restarts.
             </Paragraph>
+
+            <ErrorBoundary noop>
+                <SecurityPanel />
+            </ErrorBoundary>
 
             {SETTINGS_GROUPS.map(group => (
                 <section key={group.title} className={Margins.bottom20}>

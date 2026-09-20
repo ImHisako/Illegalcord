@@ -10,6 +10,7 @@ import { Logger } from "@utils/Logger";
 import { escapeRegExp } from "@utils/text";
 
 import { registerMicrophoneStream } from "./microphonePrivacy";
+import { type BlockCategory, isPermissionAllowed, recordBlock, registerTemporaryClone, registerTemporaryTracks } from "./session";
 
 const logger = new Logger("DiscordHardened");
 
@@ -58,6 +59,7 @@ interface PrivacySettings {
     blockBatteryAccess: boolean;
     stripThirdPartyReferrers: boolean;
     blockUnsafeExternalProtocols: boolean;
+    isolateExternalWindows: boolean;
     logBlockedRequests: boolean;
 }
 
@@ -99,7 +101,9 @@ interface FirewallRules {
 
 const blockedXhrs = new WeakSet<XMLHttpRequest>();
 const restorers: Array<() => void> = [];
+const protectedApis: Array<{ target: object; property: PropertyKey; check: () => boolean; }> = [];
 let firewallRules: FirewallRules | null = null;
+let activeSettings: PrivacySettings | undefined;
 
 function patchValue(target: object, property: PropertyKey, value: unknown): void {
     const descriptor = Object.getOwnPropertyDescriptor(target, property);
@@ -122,6 +126,7 @@ function patchValue(target: object, property: PropertyKey, value: unknown): void
         if (descriptor) Object.defineProperty(target, property, descriptor);
         else Reflect.deleteProperty(target, property);
     });
+    protectedApis.push({ target, property, check: () => Object.getOwnPropertyDescriptor(target, property)?.value === value });
 }
 
 function patchGetter(target: object, property: PropertyKey, getter: () => unknown): void {
@@ -144,6 +149,32 @@ function patchGetter(target: object, property: PropertyKey, getter: () => unknow
         if (descriptor) Object.defineProperty(target, property, descriptor);
         else Reflect.deleteProperty(target, property);
     });
+    protectedApis.push({ target, property, check: () => Object.getOwnPropertyDescriptor(target, property)?.get === getter });
+}
+
+export function getRuntimeProtections() {
+    const settings = activeSettings;
+    const checks: Array<{ name: string; enabled: boolean; target: object | undefined; properties: string[]; }> = [
+        { name: "Fetch request filtering", enabled: Boolean(settings && (settings.blockTelemetry || settings.blockSentry || settings.blockTracing || settings.blockTypingIndicator || settings.blockFingerprinting || settings.goofCordFirewall)), target: window, properties: ["fetch"] },
+        { name: "Fetch referrer protection", enabled: Boolean(settings?.stripThirdPartyReferrers), target: window, properties: ["fetch"] },
+        { name: "Unsafe window blocking", enabled: Boolean(settings?.blockUnsafeExternalProtocols), target: window, properties: ["open"] },
+        { name: "External window isolation", enabled: Boolean(settings && (settings.isolateExternalWindows || settings.stripThirdPartyReferrers)), target: window, properties: ["open"] },
+        { name: "Camera blocking", enabled: Boolean(settings && !isPermissionAllowed("allowCamera", settings.allowCamera)), target: navigator.mediaDevices, properties: ["getUserMedia"] },
+        { name: "Microphone blocking", enabled: Boolean(settings && !isPermissionAllowed("allowMicrophone", settings.allowMicrophone)), target: navigator.mediaDevices, properties: ["getUserMedia"] },
+        { name: "Screen capture blocking", enabled: Boolean(settings && !isPermissionAllowed("allowDisplayCapture", settings.allowDisplayCapture)), target: navigator.mediaDevices, properties: ["getDisplayMedia"] },
+        { name: "Clipboard reading protection", enabled: Boolean(settings && !isPermissionAllowed("allowClipboardRead", settings.allowClipboardRead)), target: navigator.clipboard, properties: ["read", "readText"] },
+        { name: "Media device discovery blocking", enabled: Boolean(settings && !isPermissionAllowed("allowDeviceEnumeration", settings.allowDeviceEnumeration)), target: navigator.mediaDevices, properties: ["enumerateDevices"] },
+        { name: "Speaker selection blocking", enabled: Boolean(settings && !isPermissionAllowed("allowSpeakerSelection", settings.allowSpeakerSelection)), target: navigator.mediaDevices, properties: ["selectAudioOutput"] },
+        { name: "Geolocation blocking", enabled: Boolean(settings?.blockGeolocation), target: navigator.geolocation, properties: ["getCurrentPosition", "watchPosition"] },
+        { name: "Notification permission blocking", enabled: Boolean(settings?.blockNotifications), target: typeof Notification === "undefined" ? undefined : Notification, properties: ["requestPermission", "permission"] },
+        { name: "Hardware fingerprint reduction", enabled: Boolean(settings?.reduceHardwareFingerprint), target: typeof Navigator === "undefined" ? undefined : Navigator.prototype, properties: ["hardwareConcurrency", "deviceMemory"] },
+        { name: "WebGL identity protection", enabled: Boolean(settings?.reduceGpuFingerprint), target: typeof WebGLRenderingContext === "undefined" ? undefined : WebGLRenderingContext.prototype, properties: ["getExtension", "getSupportedExtensions"] },
+    ];
+    return checks.map(({ name, enabled, target, properties }) => {
+        const available = target ? properties.filter(property => property in target) : [];
+        const installed = available.every(property => protectedApis.some(api => api.target === target && api.property === property && api.check()));
+        return { name, status: !available.length ? "Unavailable" : !settings || !enabled ? "Disabled" : installed ? "Active" : "Not applied" };
+    });
 }
 
 function matchesHost(hostname: string, root: string): boolean {
@@ -159,8 +190,8 @@ function getUrl(input: RequestInfo | URL | string, settings: PrivacySettings): U
 
     try {
         return new URL(rawUrl, location.href);
-    } catch (error) {
-        if (settings.logBlockedRequests) logger.warn("Could not parse a request URL.", error);
+    } catch {
+        if (settings.logBlockedRequests) logger.warn("Could not parse a request URL.");
         return null;
     }
 }
@@ -202,7 +233,7 @@ function isBlockedByGoofCord(url: URL, settings: PrivacySettings): boolean {
     return Boolean(rules.blocked?.test(url.href) && !rules.allowed?.test(url.href));
 }
 
-function getBlockedRequestKind(url: URL | null, settings: PrivacySettings): string | null {
+function getBlockedRequestKind(url: URL | null, settings: PrivacySettings): BlockCategory | null {
     if (!url) return null;
 
     const { pathname } = url;
@@ -233,11 +264,13 @@ function getBlockedRequestKind(url: URL | null, settings: PrivacySettings): stri
     return null;
 }
 
-function logBlocked(kind: string, url: URL, settings: PrivacySettings): void {
-    if (settings.logBlockedRequests) logger.info(`Blocked ${kind} request to ${url.hostname}.`);
+function logBlocked(kind: BlockCategory, settings: PrivacySettings): void {
+    recordBlock(kind);
+    if (settings.logBlockedRequests) logger.info(`Blocked ${kind} request.`);
 }
 
-function denied(permission: string): Promise<never> {
+function denied(permission: BlockCategory): Promise<never> {
+    recordBlock(permission);
     return Promise.reject(new DOMException(`${permission} is blocked by DiscordHardened.`, "NotAllowedError"));
 }
 
@@ -248,12 +281,12 @@ function patchNetwork(settings: PrivacySettings): void {
         const kind = getBlockedRequestKind(url, settings);
 
         if (kind && url) {
-            logBlocked(kind, url, settings);
+            logBlocked(kind, settings);
             return Promise.resolve(new Response(null, { status: 204 }));
         }
 
-        const requestInit = settings.stripThirdPartyReferrers && url?.origin !== location.origin
-            ? { ...init, referrerPolicy: "no-referrer" as const }
+        const requestInit = settings.stripThirdPartyReferrers
+            ? { ...init, referrer: "", referrerPolicy: "no-referrer" as const }
             : init;
         return originalFetch.call(window, input, requestInit);
     };
@@ -266,7 +299,7 @@ function patchNetwork(settings: PrivacySettings): void {
         const kind = getBlockedRequestKind(url, settings);
 
         if (kind && url) {
-            logBlocked(kind, url, settings);
+            logBlocked(kind, settings);
             blockedXhrs.add(this);
             originalOpen.call(this, "GET", "data:,", async, username, password);
             return;
@@ -295,7 +328,7 @@ function patchNetwork(settings: PrivacySettings): void {
             const kind = getBlockedRequestKind(url, settings);
 
             if (kind && url) {
-                logBlocked(kind, url, settings);
+                logBlocked(kind, settings);
                 return true;
             }
 
@@ -310,6 +343,27 @@ function hasMandatoryConstraints(constraint: boolean | MediaTrackConstraints | u
 }
 
 function patchMedia(settings: PrivacySettings): void {
+    if (typeof MediaStream !== "undefined") {
+        const originalClone = MediaStream.prototype.clone;
+        patchValue(MediaStream.prototype, "clone", function (this: MediaStream) {
+            const clone = originalClone.call(this);
+            const clonedTracks = clone.getTracks();
+            for (const track of this.getTracks()) {
+                for (const clonedTrack of clonedTracks) {
+                    if (track.kind === clonedTrack.kind) registerTemporaryClone(track, clonedTrack);
+                }
+            }
+            return clone;
+        });
+    }
+    if (typeof MediaStreamTrack !== "undefined") {
+        const originalClone = MediaStreamTrack.prototype.clone;
+        patchValue(MediaStreamTrack.prototype, "clone", function (this: MediaStreamTrack) {
+            const clone = originalClone.call(this);
+            registerTemporaryClone(this, clone);
+            return clone;
+        });
+    }
     const { mediaDevices } = navigator;
     if (!mediaDevices) return;
 
@@ -321,11 +375,17 @@ function patchMedia(settings: PrivacySettings): void {
                 hasMandatoryConstraints(constraints?.video)
             )) return denied("Legacy media capture");
 
-            if (constraints?.audio && !settings.allowMicrophone) return denied("Microphone access");
-            if (constraints?.video && !settings.allowCamera) return denied("Camera access");
+            if (constraints?.audio && !isPermissionAllowed("allowMicrophone", settings.allowMicrophone)) return denied("Microphone access");
+            if (constraints?.video && !isPermissionAllowed("allowCamera", settings.allowCamera)) return denied("Camera access");
 
             return originalGetUserMedia.call(this, constraints).then(stream => {
-                if (constraints?.audio) registerMicrophoneStream(stream);
+                if (stream.getAudioTracks().length && !isPermissionAllowed("allowMicrophone", settings.allowMicrophone) || stream.getVideoTracks().length && !isPermissionAllowed("allowCamera", settings.allowCamera)) {
+                    for (const track of stream.getTracks()) track.stop();
+                    return denied("Media capture");
+                }
+                registerTemporaryTracks("allowMicrophone", stream.getAudioTracks(), settings.allowMicrophone);
+                registerTemporaryTracks("allowCamera", stream.getVideoTracks(), settings.allowCamera);
+                if (stream.getAudioTracks().length) registerMicrophoneStream(stream);
                 return stream;
             });
         };
@@ -335,8 +395,15 @@ function patchMedia(settings: PrivacySettings): void {
     if (typeof mediaDevices.getDisplayMedia === "function") {
         const originalGetDisplayMedia = mediaDevices.getDisplayMedia;
         const protectedGetDisplayMedia: MediaDevices["getDisplayMedia"] = function (this: MediaDevices, options) {
-            if (!settings.allowDisplayCapture) return denied("Display capture");
-            return originalGetDisplayMedia.call(this, options);
+            if (!isPermissionAllowed("allowDisplayCapture", settings.allowDisplayCapture)) return denied("Display capture");
+            return originalGetDisplayMedia.call(this, options).then(stream => {
+                if (!isPermissionAllowed("allowDisplayCapture", settings.allowDisplayCapture)) {
+                    for (const track of stream.getTracks()) track.stop();
+                    return denied("Display capture");
+                }
+                registerTemporaryTracks("allowDisplayCapture", stream.getTracks(), settings.allowDisplayCapture);
+                return stream;
+            });
         };
         patchValue(mediaDevices, "getDisplayMedia", protectedGetDisplayMedia);
     }
@@ -344,8 +411,11 @@ function patchMedia(settings: PrivacySettings): void {
     if (typeof mediaDevices.enumerateDevices === "function") {
         const originalEnumerateDevices = mediaDevices.enumerateDevices;
         const protectedEnumerateDevices: MediaDevices["enumerateDevices"] = function (this: MediaDevices) {
-            if (!settings.allowDeviceEnumeration) return Promise.resolve([]);
-            return originalEnumerateDevices.call(this);
+            if (!isPermissionAllowed("allowDeviceEnumeration", settings.allowDeviceEnumeration)) {
+                recordBlock("Device enumeration");
+                return Promise.resolve([]);
+            }
+            return originalEnumerateDevices.call(this).then(devices => isPermissionAllowed("allowDeviceEnumeration", settings.allowDeviceEnumeration) ? devices : []);
         };
         patchValue(mediaDevices, "enumerateDevices", protectedEnumerateDevices);
     }
@@ -354,8 +424,8 @@ function patchMedia(settings: PrivacySettings): void {
     if (typeof outputDevices.selectAudioOutput === "function") {
         const originalSelectAudioOutput = outputDevices.selectAudioOutput;
         const protectedSelectAudioOutput: NonNullable<AudioOutputMediaDevices["selectAudioOutput"]> = function (this: AudioOutputMediaDevices, options) {
-            if (!settings.allowSpeakerSelection) return denied("Speaker selection");
-            return originalSelectAudioOutput.call(this, options);
+            if (!isPermissionAllowed("allowSpeakerSelection", settings.allowSpeakerSelection)) return denied("Speaker selection");
+            return originalSelectAudioOutput.call(this, options).then(device => isPermissionAllowed("allowSpeakerSelection", settings.allowSpeakerSelection) ? device : denied("Speaker selection"));
         };
         patchValue(outputDevices, "selectAudioOutput", protectedSelectAudioOutput);
     }
@@ -368,6 +438,7 @@ function patchNotifications(settings: PrivacySettings): void {
     const protectedRequestPermission: typeof Notification.requestPermission = callback => {
         if (!settings.blockNotifications) return originalRequestPermission.call(Notification, callback);
 
+        recordBlock("Notification permission");
         callback?.("denied");
         return Promise.resolve("denied");
     };
@@ -407,8 +478,8 @@ function patchClipboard(settings: PrivacySettings): void {
     if (typeof clipboard.read === "function") {
         const originalRead = clipboard.read;
         const protectedRead: Clipboard["read"] = function (this: Clipboard) {
-            if (!settings.allowClipboardRead) return denied("Clipboard read access");
-            return originalRead.call(this);
+            if (!isPermissionAllowed("allowClipboardRead", settings.allowClipboardRead)) return denied("Clipboard read access");
+            return originalRead.call(this).then(items => isPermissionAllowed("allowClipboardRead", settings.allowClipboardRead) ? items : denied("Clipboard read access"));
         };
         patchValue(clipboard, "read", protectedRead);
     }
@@ -416,8 +487,8 @@ function patchClipboard(settings: PrivacySettings): void {
     if (typeof clipboard.readText === "function") {
         const originalReadText = clipboard.readText;
         const protectedReadText: Clipboard["readText"] = function (this: Clipboard) {
-            if (!settings.allowClipboardRead) return denied("Clipboard read access");
-            return originalReadText.call(this);
+            if (!isPermissionAllowed("allowClipboardRead", settings.allowClipboardRead)) return denied("Clipboard read access");
+            return originalReadText.call(this).then(text => isPermissionAllowed("allowClipboardRead", settings.allowClipboardRead) ? text : denied("Clipboard read access"));
         };
         patchValue(clipboard, "readText", protectedReadText);
     }
@@ -437,6 +508,7 @@ function patchGeolocation(settings: PrivacySettings): void {
     const originalGetCurrentPosition = geolocation.getCurrentPosition;
     const protectedGetCurrentPosition: Geolocation["getCurrentPosition"] = function (this: Geolocation, success, error, options) {
         if (settings.blockGeolocation) {
+            recordBlock("Geolocation");
             error?.(permissionDenied);
             return;
         }
@@ -447,6 +519,7 @@ function patchGeolocation(settings: PrivacySettings): void {
     const originalWatchPosition = geolocation.watchPosition;
     const protectedWatchPosition: Geolocation["watchPosition"] = function (this: Geolocation, success, error, options) {
         if (settings.blockGeolocation) {
+            recordBlock("Geolocation");
             error?.(permissionDenied);
             return 0;
         }
@@ -639,14 +712,15 @@ function isSafeWindowOpenUrl(urlLike: string | URL | undefined, settings: Privac
 
     const url = getUrl(urlLike, settings);
     if (!url) return false;
-    if (url.href === "about:blank" || url.origin === location.origin) return true;
-    return SAFE_EXTERNAL_PROTOCOLS.has(url.protocol);
+    if (url.href === "about:blank") return true;
+    return !url.username && !url.password && SAFE_EXTERNAL_PROTOCOLS.has(url.protocol);
 }
 
 function patchWindowOpen(settings: PrivacySettings, openLink: (url: string) => boolean): void {
     const originalWindowOpen = window.open;
     const protectedWindowOpen = function (this: Window, url?: string | URL, target?: string, features?: string): WindowProxy | null {
         if (settings.blockUnsafeExternalProtocols && !isSafeWindowOpenUrl(url, settings)) {
+            recordBlock("Unsafe window request");
             if (settings.logBlockedRequests) logger.warn("Blocked a window request with an unsafe protocol.");
             return null;
         }
@@ -656,6 +730,13 @@ function patchWindowOpen(settings: PrivacySettings, openLink: (url: string) => b
             if (parsed && parsed.origin !== location.origin
                 && !(parsed.pathname === "/popout" && isDiscordHost(parsed.hostname))
                 && openLink(parsed.href)) return null;
+            if (parsed && parsed.origin !== location.origin && (parsed.protocol === "https:" || parsed.protocol === "http:")) {
+                if (settings.isolateExternalWindows || settings.stripThirdPartyReferrers) {
+                    const protectedFeatures = settings.stripThirdPartyReferrers ? /^\s*(?:noopener|noreferrer)(?:\s*=|\s*$)/i : /^\s*noopener(?:\s*=|\s*$)/i;
+                    features = (features ?? "").split(",").filter(feature => !protectedFeatures.test(feature)).join(",");
+                    features += settings.stripThirdPartyReferrers ? ",noopener,noreferrer" : ",noopener";
+                }
+            }
         }
 
         return originalWindowOpen.call(this, url, target, features);
@@ -665,6 +746,7 @@ function patchWindowOpen(settings: PrivacySettings, openLink: (url: string) => b
 
 export function startHardening(settings: PrivacySettings, openLink: (url: string) => boolean): void {
     if (restorers.length) return;
+    activeSettings = settings;
 
     const gifs = getUserSetting<boolean>("textAndImages", "gifAutoPlay");
     if (gifs) {
@@ -700,4 +782,6 @@ export function stopHardening(): void {
     }
 
     firewallRules = null;
+    protectedApis.length = 0;
+    activeSettings = undefined;
 }
