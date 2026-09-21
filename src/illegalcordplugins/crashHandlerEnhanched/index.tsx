@@ -186,7 +186,7 @@ const settings = definePluginSettings({
     },
     detectBlankScreen: {
         type: OptionType.BOOLEAN,
-        description: "Show the support popup when Discord renders an empty root or encounters an uncaught JavaScript error.",
+        description: "Show the support popup when Discord renders an empty root for at least 1.5 seconds.",
         default: true
     },
     promptForUpdates: {
@@ -918,7 +918,6 @@ function handleGlobalError(event: ErrorEvent) {
     if (isIgnorableGlobalError(error)) return;
 
     if (settings.store.captureGlobalErrors) logger.debug("Window error outside Discord crash boundary.", error);
-    if (settings.store.detectBlankScreen) reportScreenFailure(error);
 }
 
 function reportScreenFailure(error: unknown) {
@@ -937,7 +936,6 @@ function handleUnhandledRejection(event: PromiseRejectionEvent) {
     const error = normalizeGlobalError(event.reason, "Unhandled promise rejection.");
 
     if (settings.store.captureGlobalErrors) logger.debug("Unhandled rejection outside Discord crash boundary.", error);
-    if (settings.store.detectBlankScreen && detectSuspectedPlugin({ error })?.confidence === "high") reportScreenFailure(error);
 }
 
 function installGlobalListeners() {
