@@ -7,6 +7,7 @@
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
 import { ApplicationCommandInputType, ApplicationCommandOptionType, findOption, sendBotMessage } from "@api/Commands";
 import type { MessageObject } from "@api/MessageEvents";
+import { updateMessage } from "@api/MessageUpdater";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Paragraph } from "@components/Paragraph";
@@ -14,7 +15,7 @@ import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { IconComponent, OptionType } from "@utils/types";
 import { CommandContext, Message } from "@vencord/discord-types";
-import { MessageStore } from "@webpack/common";
+import { MessageStore, Parser, SelectedChannelStore } from "@webpack/common";
 
 interface IMessageCreate {
     type: "MESSAGE_CREATE";
@@ -33,9 +34,7 @@ interface DecryptCommandContext extends CommandContext {
 const logger = new Logger("SecurecordOpossum");
 const ENCRYPTED_PREFIX = "🔒ENCRYPTED:";
 const ENCRYPTED_SUFFIX = ":ENDLOCK";
-const ENCRYPTED_PREFIX_FIRST_CODE = ENCRYPTED_PREFIX.charCodeAt(0);
-const ENCRYPTED_SUFFIX_LAST_CODE = ENCRYPTED_SUFFIX.charCodeAt(ENCRYPTED_SUFFIX.length - 1);
-const MIN_ENCRYPTED_MESSAGE_LENGTH = ENCRYPTED_PREFIX.length + ENCRYPTED_SUFFIX.length + 1;
+const ENCRYPTED_MESSAGE_PATTERN = /^(?:🔒)?ENCRYPTED:[A-Za-z0-9+/]+={0,2}:ENDLOCK$/;
 const CHAT_BAR_SETTING_KEYS = ["pluginActivated", "encryptionEnabled", "autoLocked"] satisfies Array<"pluginActivated" | "encryptionEnabled" | "autoLocked">;
 const SECURITY_CONSTANTS = {
     DEFAULT_MIN_PASSWORD_LENGTH: 12,
@@ -416,15 +415,11 @@ function resetSecurityState(): void {
 }
 
 function isEncryptedMessage(content: string) {
-    return content.length >= MIN_ENCRYPTED_MESSAGE_LENGTH
-        && content.charCodeAt(0) === ENCRYPTED_PREFIX_FIRST_CODE
-        && content.charCodeAt(content.length - 1) === ENCRYPTED_SUFFIX_LAST_CODE
-        && content.startsWith(ENCRYPTED_PREFIX)
-        && content.endsWith(ENCRYPTED_SUFFIX);
+    return ENCRYPTED_MESSAGE_PATTERN.test(content.trim());
 }
 
 function getEncryptedPart(content: string) {
-    return content.slice(ENCRYPTED_PREFIX.length, -ENCRYPTED_SUFFIX.length);
+    return content.trim().replace(/^(?:🔒)?ENCRYPTED:/, "").slice(0, -ENCRYPTED_SUFFIX.length);
 }
 
 function logInfo(...args: unknown[]) {
@@ -467,7 +462,7 @@ function decryptOpossum(encrypted: string, password: string): string {
     }
     const decryptedMessage = getCipher(password).decrypt(encrypted);
     resetSecurityState();
-    return decryptedMessage;
+    return decryptedMessage.replace(/\u2060/g, "");
 }
 
 function clearAutoLockTimer() {
@@ -495,12 +490,13 @@ function scheduleAutoLock(channelId?: string) {
     }, settings.store.autoLockTimeout * SECURITY_CONSTANTS.MILLISECONDS_PER_MINUTE);
 }
 
-function formatDecryptedMessage(message: Message | undefined, decryptedMessage: string) {
-    if (!message || !settings.store.showAuthorInDecryptedMessages) {
-        return `🔐 **Decrypted message**: ${decryptedMessage}`;
-    }
+function refreshMessages() {
+    const channelId = SelectedChannelStore.getChannelId();
+    if (!channelId) return;
 
-    return `🔐 **Decrypted message from ${message.author.username}**: ${decryptedMessage}`;
+    MessageStore.getMessages(channelId).forEach(message => {
+        if (isEncryptedMessage(message.content)) updateMessage(channelId, message.id);
+    });
 }
 
 // SVG icons for the button
@@ -596,6 +592,7 @@ const settings = definePluginSettings({
         onChange(newValue: boolean) {
             if (!newValue) settings.store.encryptionEnabled = false;
             scheduleAutoLock();
+            refreshMessages();
         }
     },
     encryptionPassword: {
@@ -612,6 +609,7 @@ const settings = definePluginSettings({
 
             resetCipher();
             resetSecurityState();
+            refreshMessages();
         }
     },
     encryptionEnabled: {
@@ -632,7 +630,14 @@ const settings = definePluginSettings({
     autoDecrypt: {
         type: OptionType.BOOLEAN,
         description: "Show decrypted Securecord Opossum messages automatically.",
-        default: true
+        default: true,
+        onChange: refreshMessages
+    },
+    useClyde: {
+        type: OptionType.BOOLEAN,
+        description: "Show decrypted text through Clyde instead of replacing the original message locally.",
+        default: false,
+        onChange: refreshMessages
     },
     strictPasswordPolicy: {
         type: OptionType.BOOLEAN,
@@ -696,7 +701,8 @@ const settings = definePluginSettings({
     showAuthorInDecryptedMessages: {
         type: OptionType.BOOLEAN,
         description: "Include the sender name in decrypted Clyde messages.",
-        default: true
+        default: true,
+        hidden: true
     },
     showDecryptErrors: {
         type: OptionType.BOOLEAN,
@@ -741,6 +747,25 @@ export default definePlugin({
     tags: ["Privacy", "Chat"],
     authors: [EquicordDevs.irritably],
     settings,
+    patches: [{
+        find: "inQuote:",
+        replacement: {
+            match: /(?<=\bcontent:)[^,{}]{1,150}(?=[,}])/,
+            replace: "$self.decryptInline($&)"
+        }
+    }],
+
+    decryptInline(content: string) {
+        const { pluginActivated, autoDecrypt, useClyde, encryptionPassword } = settings.store;
+        if (!pluginActivated || !autoDecrypt || useClyde || !encryptionPassword || !isEncryptedMessage(content) || isRateLimited()) return content;
+
+        try {
+            return getCipher(encryptionPassword).decrypt(getEncryptedPart(content)).replace(/\u2060/g, "");
+        } catch {
+            logInfo("Could not decrypt message for local display.");
+            return content;
+        }
+    },
     settingsAboutComponent() {
         return (
             <>
@@ -884,9 +909,11 @@ export default definePlugin({
                 const decryptedMessage = decryptOpossum(encryptedPart, password);
 
                 // Show decrypted message as bot message (Clyde)
-                sendBotMessage(channelId, {
-                    content: formatDecryptedMessage(message, decryptedMessage)
-                });
+                if (store.useClyde) {
+                    sendBotMessage(channelId, { content: decryptedMessage });
+                } else {
+                    updateMessage(channelId, message.id);
+                }
 
                 scheduleAutoLock(channelId);
                 logInfo("Sent decrypted message.");
@@ -975,9 +1002,13 @@ export default definePlugin({
                     const decryptedMessage = decryptOpossum(encryptedPart, password);
 
                     // Send as Clyde bot message
-                    sendBotMessage(ctx.channel.id, {
-                        content: formatDecryptedMessage(replyMessage, decryptedMessage)
-                    });
+                    if (settings.store.useClyde || !replyMessage) {
+                        sendBotMessage(ctx.channel.id, { content: decryptedMessage });
+                    } else {
+                        updateMessage(ctx.channel.id, replyMessage.id, {
+                            customRenderedContent: { content: Parser.parse(decryptedMessage) }
+                        });
+                    }
                     scheduleAutoLock(ctx.channel.id);
                 } catch (error) {
                     const errorMessage = getErrorMessage(error);
