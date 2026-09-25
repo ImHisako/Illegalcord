@@ -39,18 +39,18 @@ const ETAG_FILE = join(FILE_DIR, "etag.txt");
 function getFilename() {
     switch (process.platform) {
         case "win32":
-            return "EquilotlCli.exe";
+            return "IllegalotlCli.exe";
         case "darwin":
             switch (process.arch) {
                 case "x64":
-                    return "EquilotlCli-x64";
+                    return "IllegalotlCli-x64";
                 case "arm64":
-                    return "EquilotlCli-arm64";
+                    return "IllegalotlCli-arm64";
                 default:
-                    return "EquilotlCli-universal";
+                    return "IllegalotlCli-universal";
             }
         case "linux":
-            return "EquilotlCli-linux";
+            return "IllegalotlCli-linux";
         default:
             throw new Error("Unsupported platform: " + process.platform);
     }
