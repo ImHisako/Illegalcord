@@ -76,7 +76,7 @@ jobs:
                   ".git/*"
 
             - name: Publish extension
-              if: steps.check.outputs.release == 'true' && vars.ACT == 'false'
+              if: steps.check.outputs.release == 'true' && vars.ACT == 'false' && vars.PUBLISH_BROWSER_EXTENSION == 'true'
               run:
                   pnpx @equicord/publish-browser-extension@latest
                   --chrome-zip dist/extension-chrome.zip

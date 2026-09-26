@@ -11,6 +11,15 @@
     min-width: 0;
 }
 
+.vc-client-diagnostics-tabs,
+.vc-client-diagnostics-table,
+.vc-client-diagnostics-monitor-results,
+.vc-client-diagnostics-surface-list,
+.vc-client-diagnostics-snippet-code {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thin-thumb, var(--interactive-muted)) var(--scrollbar-thin-track, transparent);
+}
+
 .vc-client-diagnostics-health-history {
     width: 100%;
     border-collapse: collapse;

@@ -16,7 +16,7 @@
 .vc-illegal-ml-toolbar {
     display: grid;
     flex: none;
-    max-height: 60%;
+    max-height: 55%;
     overflow-y: auto;
     gap: 12px;
     padding: 14px 18px;
@@ -88,7 +88,7 @@
 .vc-illegal-ml-stats strong {
     overflow: hidden;
     color: var(--header-primary);
-    font-size: 16px;
+    font-size: 14px;
     line-height: 20px;
     text-overflow: ellipsis;
 }
@@ -131,6 +131,8 @@
     border-radius: 10px;
     background: var(--background-secondary);
     box-shadow: inset 3px 0 var(--status-danger);
+    content-visibility: auto;
+    contain-intrinsic-size: auto 240px;
 }
 
 .vc-illegal-ml-entry.vc-illegal-ml-edited {
@@ -306,8 +308,31 @@
     font-size: 16px;
 }
 
-.vc-illegal-ml-load-more {
-    width: 100%;
+.vc-illegal-ml-pagination {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 18px;
+    border-top: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    background: var(--background-secondary);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.vc-illegal-ml-count {
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: inherit;
+    background: color-mix(in srgb, currentcolor 12%, transparent);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+.vc-illegal-ml-tabs > button {
+    gap: 8px;
 }
 
 .vc-illegal-ml-view-actions,
@@ -337,6 +362,15 @@
 .vc-illegal-ml-history summary {
     cursor: pointer;
     padding-block: 4px;
+}
+
+.vc-illegal-ml-management summary:focus-visible,
+.vc-illegal-ml-entry-tools summary:focus-visible,
+.vc-illegal-ml-search-help summary:focus-visible,
+.vc-illegal-ml-history summary:focus-visible {
+    border-radius: 4px;
+    outline: 2px solid var(--text-link);
+    outline-offset: 2px;
 }
 
 .vc-illegal-ml-management summary span {
@@ -406,6 +440,10 @@
 
     .vc-illegal-ml-tabs {
         flex-wrap: wrap;
+    }
+
+    .vc-illegal-ml-filters {
+        align-items: flex-start;
     }
 }
 

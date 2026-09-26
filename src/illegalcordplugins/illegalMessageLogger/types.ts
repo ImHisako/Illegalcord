@@ -104,8 +104,8 @@ export interface LogStats {
     deleted: number;
     edited: number;
     ghostPinged: number;
-    protected: number;
-    estimatedBytes: number;
+    protected?: number;
+    estimatedBytes?: number;
 }
 
 export interface LogExport {

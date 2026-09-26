@@ -12,6 +12,7 @@ export default definePlugin({
     description: "Ports OpenAsar's optimizer code. ( https://openasar.dev/ ) ",
     tags: ["Utility"],
     authors: [EquicordDevs.seth],
+    hidden: true,
     methods: ["removeChild", "appendChild"],
     start() {
         for (const method of this.methods as (keyof Element)[]) {

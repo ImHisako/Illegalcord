@@ -10,7 +10,7 @@ import { AttachmentIcon, LogsIcon } from "@components/Icons";
 import { copyWithToast, openUserProfile } from "@utils/discord";
 import { parseUrl } from "@utils/misc";
 import type { RenderModalProps } from "@vencord/discord-types";
-import { Alerts, ChannelStore, GuildStore, lodash, MaskedLink, Modal, NavigationRouter, openModal, Parser, ScrollerThin, showToast, TextInput, Toasts, useEffect, useRef, useState } from "@webpack/common";
+import { Alerts, ChannelStore, GuildStore, lodash, MaskedLink, Modal, NavigationRouter, openModal, Parser, ScrollerThin, showToast, TextInput, Toasts, useEffect, useMemo, useRef, useState } from "@webpack/common";
 
 import { getLogPage, getLogStats, setLogProtected, setLogsProtected } from "./db";
 import { clearAllLogs, deleteLog, deleteManyLogs, flushQueuedLogs } from "./engine";
@@ -53,7 +53,10 @@ interface LogEntryProps {
 function LogEntry({ record, onDelete, onProtect, busy }: LogEntryProps) {
     const { message, status } = record;
     const [expanded, setExpanded] = useState(false);
-    const longContent = message.content.length > 600 || message.content.split("\n").length > 8;
+    const [historyOpen, setHistoryOpen] = useState(false);
+    const longContent = message.content.length > 600 || message.content.split("\n", 9).length > 8;
+    const content = longContent && !expanded ? `${message.content.slice(0, 600).split("\n").slice(0, 8).join("\n")}…` : message.content;
+    const parsedContent = useMemo(() => Parser.parse(content), [content]);
     const channel = ChannelStore.getChannel(message.channel_id);
     const guild = GuildStore.getGuild(message.guild_id ?? message.guildId ?? channel?.guild_id);
     const authorName = message.author.global_name ?? message.author.globalName ?? message.author.username;
@@ -71,7 +74,7 @@ function LogEntry({ record, onDelete, onProtect, busy }: LogEntryProps) {
                 <span className={cl("status", STATUS_CLASSES[status])}>{STATUS_LABELS[status]}</span>
             </div>
             <div className={cl("content", { collapsed: longContent && !expanded })}>
-                {message.content ? Parser.parse(message.content) : <span className={cl("muted")}>No text content.</span>}
+                {message.content ? parsedContent : <span className={cl("muted")}>No text content.</span>}
             </div>
             {longContent ? <Button size="xs" variant="link" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? "Collapse message" : "Show full message"}</Button> : null}
             {message.attachments.length > 0 && (
@@ -89,14 +92,14 @@ function LogEntry({ record, onDelete, onProtect, busy }: LogEntryProps) {
                 </div>
             )}
             {message.editHistory && message.editHistory.length > 0 && (
-                <details className={cl("history")}>
+                <details className={cl("history")} onToggle={event => setHistoryOpen(event.currentTarget.open)}>
                     <summary>{message.editHistory.length} previous version{message.editHistory.length === 1 ? "" : "s"}</summary>
-                    {message.editHistory.map(edit => (
+                    {historyOpen ? message.editHistory.map(edit => (
                         <div key={`${edit.timestamp}:${edit.content}`} className={cl("history-entry")}>
                             <time>{new Date(edit.timestamp).toLocaleString()}</time>
                             <div>{edit.content ? Parser.parse(edit.content) : "No text content."}</div>
                         </div>
-                    ))}
+                    )) : null}
                 </details>
             )}
             <div className={cl("entry-footer")}>
@@ -147,6 +150,8 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
     const [newest, setNewest] = useState(true);
     const [records, setRecords] = useState<LogRecord[]>([]);
     const [cursor, setCursor] = useState<string>();
+    const [pageCursors, setPageCursors] = useState<Array<string | undefined>>([undefined]);
+    const [pageIndex, setPageIndex] = useState(0);
     const [hasMore, setHasMore] = useState(false);
     const [total, setTotal] = useState(0);
     const [pending, setPending] = useState(true);
@@ -158,22 +163,27 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const request = useRef(0);
+    const controller = useRef<AbortController | undefined>(undefined);
     const searchQuery = [query, protectedOnly ? "is:protected" : "", attachmentsOnly ? "has:attachment" : ""].filter(Boolean).join(" ");
     const unprotectedCount = records.filter(record => !record.protected).length;
     const hasFilters = Boolean(query || protectedOnly || attachmentsOnly || status !== "ALL");
 
     useEffect(() => {
         const currentRequest = ++request.current;
+        const abortController = new AbortController();
+        controller.current = abortController;
         setPending(true);
         setRecords([]);
         setCursor(undefined);
         setHasMore(false);
+        setPageCursors([undefined]);
+        setPageIndex(0);
         setError("");
 
         const load = lodash.debounce(async () => {
             try {
                 await flushQueuedLogs();
-                const [page, summary] = await Promise.all([getLogPage(status, newest, settings.store.pageSize, searchQuery), getLogStats()]);
+                const [page, summary] = await Promise.all([getLogPage(status, newest, settings.store.pageSize, searchQuery, undefined, abortController.signal), getLogStats()]);
                 if (currentRequest !== request.current) return;
                 setRecords(page.records);
                 setCursor(page.cursor);
@@ -190,6 +200,7 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
 
         return () => {
             request.current++;
+            controller.current?.abort();
             load.cancel();
         };
     }, [status, searchQuery, newest, revision]);
@@ -198,35 +209,51 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
         setRevision(current => current + 1);
     }
 
-    async function loadMore() {
-        if (!cursor || pending) return;
+    async function changePage(next: boolean) {
+        if (pending || (next ? !cursor : pageIndex === 0)) return;
         const currentRequest = request.current;
+        controller.current?.abort();
+        const abortController = new AbortController();
+        controller.current = abortController;
+        const nextIndex = pageIndex + (next ? 1 : -1);
+        const pageCursor = next ? cursor : pageCursors[nextIndex];
         setPending(true);
         setError("");
         try {
-            const page = await getLogPage(status, newest, settings.store.pageSize, searchQuery, cursor);
+            const page = await getLogPage(status, newest, settings.store.pageSize, searchQuery, pageCursor, abortController.signal);
             if (currentRequest !== request.current) return;
-            setRecords(current => [...current, ...page.records]);
+            setRecords(page.records);
+            setPageIndex(nextIndex);
+            if (next) setPageCursors(current => [...current.slice(0, nextIndex), pageCursor]);
             setCursor(page.cursor);
             setHasMore(page.hasMore);
         } catch {
-            if (currentRequest === request.current) setError("Could not load more logs. Your loaded results are still available.");
+            if (currentRequest === request.current) setError("Could not load this page. Your current results are still available.");
         } finally {
             if (currentRequest === request.current) setPending(false);
         }
     }
 
-    async function runAction(action: () => Promise<unknown>) {
+    async function runAction(action: () => Promise<unknown>, reload = true) {
         if (busy) return;
         setBusy(true);
         try {
             await action();
-            refresh();
+            if (reload) refresh();
         } catch (error) {
+            if (error instanceof DOMException && error.name === "AbortError") return;
             showToast(error instanceof Error ? error.message : "The log action failed. Please try again.", Toasts.Type.FAILURE);
         } finally {
             setBusy(false);
         }
+    }
+
+    async function measureStorage() {
+        const currentRequest = request.current;
+        await runAction(async () => {
+            const summary = await getLogStats(true, controller.current?.signal);
+            if (currentRequest === request.current) setStats(summary);
+        }, false);
     }
 
     function removeLog(id: string) {
@@ -249,7 +276,7 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
             await flushQueuedLogs();
             const count = await exportLogs();
             showToast(`Exported ${count} message logs.`, Toasts.Type.SUCCESS);
-        });
+        }, false);
     }
 
     async function importBackup() {
@@ -307,8 +334,8 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
                 <div className={cl("toolbar")}>
                     <div className={cl("overview")}>
                         <div aria-live="polite">
-                            <strong>{pending ? "Loading archive…" : error && records.length === 0 ? "Archive unavailable" : `${records.length.toLocaleString()}${hasMore ? "+" : ""} matching log${records.length === 1 && !hasMore ? "" : "s"}`}</strong>
-                            <span>{pending ? "Searching saved messages" : error ? "Refresh to try again" : `${hasMore ? "More matches available below" : "All matching results loaded"} · ${total.toLocaleString()} saved in this category`}</span>
+                            <strong>{pending ? "Loading archive…" : error && records.length === 0 ? "Archive unavailable" : `${records.length.toLocaleString()} log${records.length === 1 ? "" : "s"} on this page`}</strong>
+                            <span>{pending ? "Searching saved messages" : error ? "Refresh to try again" : `${total.toLocaleString()} saved in this category · ${hasFilters ? "Filtered results" : "All saved messages"}`}</span>
                         </div>
                         <div className={cl("view-actions")}>
                             <Button size="small" variant="secondary" aria-pressed={compact} onClick={() => setCompact(value => !value)}>{compact ? "Comfortable view" : "Compact view"}</Button>
@@ -344,6 +371,7 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
                                     onClick={() => setStatus(option)}
                                 >
                                     {STATUS_LABELS[option]}
+                                    {stats ? <span className={cl("count")}>{(option === "ALL" ? stats.total : option === LogStatus.DELETED ? stats.deleted : option === LogStatus.EDITED ? stats.edited : stats.ghostPinged).toLocaleString()}</span> : null}
                                 </Button>
                             ))}
                         </div>
@@ -364,38 +392,41 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
                                 <span><strong>{stats.deleted.toLocaleString()}</strong> Deleted</span>
                                 <span><strong>{stats.edited.toLocaleString()}</strong> Edited</span>
                                 <span><strong>{stats.ghostPinged.toLocaleString()}</strong> Ghost pings</span>
-                                <span><strong>{stats.protected.toLocaleString()}</strong> Protected</span>
-                                <span><strong>{formatBytes(stats.estimatedBytes)}</strong> Storage</span>
+                                <span><strong>{stats.protected?.toLocaleString() ?? "Not measured"}</strong> Protected</span>
+                                <span><strong>{stats.estimatedBytes === undefined ? "Not measured" : formatBytes(stats.estimatedBytes)}</strong> Estimated storage</span>
                             </div>
                         )}
                         <div className={cl("backup-actions")}>
+                            <Button size="small" variant="secondary" disabled={busy || pending} onClick={measureStorage}>Measure storage</Button>
                             <Button size="small" variant="secondary" disabled={busy} onClick={exportBackup}>Export all</Button>
                             <Button size="small" variant="secondary" disabled={busy || pending || records.length === 0} onClick={() => exportLogRecords(records, "illegal-message-logger-visible")}>Export loaded</Button>
                             <Button size="small" variant="secondary" disabled={busy} onClick={importBackup}>Import backup</Button>
                             <Button size="small" variant="secondary" disabled={busy || pending || records.length === 0} onClick={() => protectVisible(true)}>Protect loaded</Button>
                             <Button size="small" variant="secondary" disabled={busy || pending || records.length === 0} onClick={() => protectVisible(false)}>Unprotect loaded</Button>
                             <Button size="small" variant="dangerSecondary" disabled={busy || pending || unprotectedCount === 0} onClick={confirmClearVisible}>Clear loaded</Button>
-                            <Button size="small" variant="dangerSecondary" disabled={busy || pending || !stats || stats.total === stats.protected} onClick={confirmClearAll}>Clear all unprotected</Button>
+                            <Button size="small" variant="dangerSecondary" disabled={busy || pending || !stats?.total || stats.total === stats.protected} onClick={confirmClearAll}>Clear all unprotected</Button>
                         </div>
-                        <p>Actions labeled “loaded” affect only loaded results. “Clear all unprotected” affects the entire archive. Full backups include all saved logs and their message content.</p>
+                        <p>Actions labeled “loaded” affect only this page. “Clear all unprotected” affects the entire archive. Storage is estimated on request. Full backups include all saved logs and their message content.</p>
                     </details>
                 </div>
-                <ScrollerThin fade className={cl("scroller")} aria-busy={pending}>
+                <ScrollerThin key={`${pageIndex}:${status}:${newest}:${searchQuery}:${revision}`} fade className={cl("scroller")} aria-busy={pending}>
                     {error ? <div className={cl("error")} role="alert"><strong>Archive unavailable</strong><span>{error}</span><Button size="small" variant="secondary" onClick={refresh}>Retry</Button></div> : null}
                     {records.map(record => <SafeLogEntry key={record.message_id} record={record} onDelete={removeLog} onProtect={protectLog} busy={busy || pending} />)}
-                    {!pending && !error && records.length === 0 && (
+                    {!pending && !error && records.length === 0 ? (
                         <div className={cl("empty")}>
                             <LogsIcon width={36} height={36} />
-                            <strong>No matching logs</strong>
-                            <span>Try another filter or search query.</span>
+                            <strong>{hasFilters ? "No matching logs" : "Your archive is empty"}</strong>
+                            <span>{hasFilters ? "Try another filter or search query." : "Deleted messages, edits and ghost pings will appear here when captured."}</span>
                             {hasFilters ? <Button size="small" variant="secondary" onClick={resetFilters}>Show all logs</Button> : null}
                         </div>
-                    )}
+                    ) : null}
                     {pending && <div className={cl("empty")}><span>Loading logs…</span></div>}
-                    {!pending && hasMore && (
-                        <Button className={cl("load-more")} variant="secondary" onClick={loadMore}>Load more</Button>
-                    )}
                 </ScrollerThin>
+                <div className={cl("pagination")}>
+                    <Button size="small" variant="secondary" disabled={pending || busy || pageIndex === 0} onClick={() => changePage(false)}>Previous</Button>
+                    <span role="status">Page {(pageIndex + 1).toLocaleString()}{pending ? " · Loading…" : ""}</span>
+                    <Button size="small" variant="secondary" disabled={pending || busy || !hasMore} onClick={() => changePage(true)}>Next</Button>
+                </div>
             </div>
         </Modal>
     );

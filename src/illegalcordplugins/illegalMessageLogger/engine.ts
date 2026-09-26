@@ -41,7 +41,7 @@ function hasToJS(message: Message | MessageJSON): message is Message & MessageWi
 
 function snapshotMessage(message: Message | MessageJSON): LoggedMessage {
     const raw = hasToJS(message) ? message.toJS() : message;
-    const copy = lodash.cloneDeep(raw) as LoggedMessage;
+    const copy = { ...raw, author: { ...raw.author } } as LoggedMessage;
     const { timestamp } = copy;
 
     copy.timestamp = new Date(String(timestamp)).toISOString();
@@ -56,17 +56,18 @@ function snapshotMessage(message: Message | MessageJSON): LoggedMessage {
     delete copy.__messageloggerDiffKey;
     delete copy.__messageloggerAggregated;
     delete copy.__messageloggerLastAppliedKey;
-    return copy;
+    return lodash.cloneDeep(copy);
 }
 
 function remember(message: LoggedMessage) {
-    while (!recentMessages.has(message.id) && recentMessages.size >= settings.store.memoryCacheLimit) {
+    const { memoryCacheLimit } = settings.store;
+    recentMessages.delete(message.id);
+    while (recentMessages.size >= memoryCacheLimit) {
         const oldestId = recentMessages.keys().next().value;
         if (!oldestId) break;
         recentMessages.delete(oldestId);
     }
 
-    recentMessages.delete(message.id);
     recentMessages.set(message.id, message);
 }
 
@@ -90,7 +91,7 @@ function queueRecord(message: LoggedMessage, status: LogStatus) {
         : status;
     const pendingHistory = pending?.message.editHistory ?? [];
     const messageHistory = message.editHistory ?? [];
-    if (pendingHistory.length > messageHistory.length) message.editHistory = pendingHistory;
+    if (pendingHistory.length > messageHistory.length) message = { ...message, editHistory: pendingHistory };
 
     pendingDeletes.delete(message.id);
     pendingWrites.set(message.id, {
@@ -164,8 +165,7 @@ export function handleMessageUpdate(payload: MessageUpdatePayload) {
         return;
     }
 
-    const message = lodash.cloneDeep(previous);
-    Object.assign(message, payload.message);
+    const message = { ...previous, ...lodash.cloneDeep(payload.message) };
     message.guildId = payload.guildId ?? previous.guildId;
     message.editHistory = [
         ...(previous.editHistory ?? []),
@@ -187,7 +187,7 @@ function saveDeletedMessage(payload: MessageDeletePayload) {
     const cachedMessage = recentMessages.get(payload.id);
     if (!cachedMessage && !storedMessage) return;
 
-    const message = snapshotMessage(cachedMessage ?? storedMessage);
+    const message = cachedMessage ? { ...cachedMessage } : snapshotMessage(storedMessage);
     message.guildId = payload.guildId ?? message.guildId;
     message.deleted = true;
     message.deletedTimestamp = new Date().toISOString();

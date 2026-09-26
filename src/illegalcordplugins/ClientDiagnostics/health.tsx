@@ -147,11 +147,18 @@ function memoryTrend() {
     }
     const complete = [...buckets].filter(([, bucket]) => bucket.count >= 10);
     const recent = complete.slice(-5);
-    if (recent.length < 5 || recent[4][0] - recent[0][0] !== 4 || recent[4][0] < Math.floor(performance.now() / 60_000) - 1) return undefined;
-    const growth = recent[4][1].floor - recent[0][1].floor;
+    for (let index = recent.length - 1; index > 0; index--) {
+        if (recent[index][0] - recent[index - 1][0] === 1) continue;
+        recent.splice(0, index);
+        break;
+    }
+    if (recent.length && recent[recent.length - 1][0] < Math.floor(performance.now() / 60_000) - 1) recent.length = 0;
+    const minutes = recent.length;
+    const ready = minutes === 5;
+    const growth = minutes >= 2 ? recent[minutes - 1][1].floor - recent[0][1].floor : undefined;
     const rising = recent.slice(1).every(([, bucket], index) => bucket.floor > recent[index][1].floor);
-    const elevated = growth > Math.max(16 * 1024 ** 2, recent[0][1].floor * 0.05);
-    return { growth, perMinute: growth / 4, elevated, suspected: rising && elevated };
+    const elevated = ready && growth !== undefined && growth > Math.max(16 * 1024 ** 2, recent[0][1].floor * 0.05);
+    return { minutes, ready, growth, perMinute: growth === undefined ? undefined : growth / (minutes - 1), elevated, suspected: rising && elevated };
 }
 
 function mb(value: number | undefined) {
@@ -176,7 +183,8 @@ export function ClientHealthPage() {
     useFixedTimer({ interval: 1000 });
     const latest = samples.at(-1);
     const trend = memoryTrend();
-    const status = latest?.heap === undefined ? "Heap data unavailable" : !trend ? "Collecting baseline" : trend.suspected ? "Possible memory leak" : trend.elevated ? "High memory growth, inconsistent trend" : "No persistent growth signal";
+    const memoryPending = latest && latest.heap === undefined ? "Unavailable" : "Collecting";
+    const status = !latest ? "Collecting memory samples" : latest.heap === undefined ? "Heap data unavailable" : !trend.ready ? `Collecting baseline (${trend.minutes}/5 sampled minutes)` : trend.suspected ? "Possible memory leak" : trend.elevated ? "High memory growth, inconsistent trend" : "No persistent growth signal";
     const ms = (value: number | undefined) => value === undefined ? "Collecting" : `${value.toFixed(1)} ms`;
     return <div className={cl("page")}>
         <div className={cl("toolbar")}>
@@ -191,10 +199,10 @@ export function ClientHealthPage() {
         </div>
         <BaseText tag="h3" size="lg" weight="semibold">Memory and possible leaks</BaseText>
         <div className={cl("metrics")}>
-            <HealthMetric label="JavaScript heap" value={mb(latest?.heap)} detail="Client renderer only, not total process RAM." />
-            <HealthMetric label="Heap pressure" value={latest?.heap !== undefined && latest.limit ? `${(latest.heap / latest.limit * 100).toFixed(1)}%` : "Unavailable"} detail="Used heap relative to the JavaScript heap limit." />
-            <HealthMetric label="Baseline growth" value={mb(trend?.growth)} detail="Difference between the first and last minute minima." />
-            <HealthMetric label="Growth rate" value={trend ? `${mb(trend.perMinute)}/min` : "Collecting"} detail="Requires five consecutive minutes with enough samples." />
+            <HealthMetric label="JavaScript heap" value={latest ? mb(latest.heap) : memoryPending} detail="Client renderer only, not total process RAM." />
+            <HealthMetric label="Heap pressure" value={latest?.heap !== undefined && latest.limit ? `${(latest.heap / latest.limit * 100).toFixed(1)}%` : memoryPending} detail="Used heap relative to the JavaScript heap limit." />
+            <HealthMetric label="Baseline growth" value={latest?.heap !== undefined && trend.growth !== undefined ? mb(trend.growth) : memoryPending} detail={trend.growth === undefined ? "Needs two consecutive minutes with at least ten foreground samples each." : `Difference between minute minima across ${trend.minutes} sampled minutes.`} />
+            <HealthMetric label="Growth rate" value={latest?.heap !== undefined && trend.perMinute !== undefined ? `${mb(trend.perMinute)}/min` : memoryPending} detail={trend.ready ? "Based on five consecutive sampled minutes." : "Early estimate. Leak checks require five consecutive sampled minutes."} />
         </div>
         <div className={cl("guide-section")}>
             <BaseText size="md" weight="semibold">{status}</BaseText>

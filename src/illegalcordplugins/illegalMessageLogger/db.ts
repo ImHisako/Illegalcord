@@ -10,7 +10,7 @@ import { createSearchMatcher } from "./search";
 import { LogPage, LogRecord, LogStats, LogStatus, LogViewStatus } from "./types";
 
 const DB_NAME = "MessageLoggerIDB";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 interface MessageLoggerDatabase extends DBSchema {
     messages: {
@@ -19,6 +19,7 @@ interface MessageLoggerDatabase extends DBSchema {
         indexes: {
             by_channel_id: string;
             by_status: LogStatus;
+            by_status_and_id: [LogStatus, string];
             by_timestamp: string;
             by_timestamp_and_message_id: [string, string];
         };
@@ -27,15 +28,19 @@ interface MessageLoggerDatabase extends DBSchema {
 
 let databasePromise: Promise<IDBPDatabase<MessageLoggerDatabase>> | undefined;
 let statsCache: LogStats | undefined;
+let statsRevision = 0;
 
 export function getDatabase() {
     return databasePromise ??= openDB<MessageLoggerDatabase>(DB_NAME, DB_VERSION, {
-        upgrade(database) {
-            const store = database.createObjectStore("messages", { keyPath: "message_id" });
-            store.createIndex("by_channel_id", "channel_id");
-            store.createIndex("by_status", "status");
-            store.createIndex("by_timestamp", "message.timestamp");
-            store.createIndex("by_timestamp_and_message_id", ["channel_id", "message.timestamp"]);
+        upgrade(database, oldVersion, _newVersion, transaction) {
+            if (oldVersion === 0) {
+                const store = database.createObjectStore("messages", { keyPath: "message_id" });
+                store.createIndex("by_channel_id", "channel_id");
+                store.createIndex("by_status", "status");
+                store.createIndex("by_timestamp", "message.timestamp");
+                store.createIndex("by_timestamp_and_message_id", ["channel_id", "message.timestamp"]);
+            }
+            transaction.objectStore("messages").createIndex("by_status_and_id", ["status", "message_id"]);
         }
     });
 }
@@ -58,23 +63,29 @@ export async function applyBatch(records: LogRecord[], deletedIds: string[]) {
         transaction.done
     ]);
     statsCache = undefined;
+    statsRevision++;
 }
 
-export async function getLogPage(status: LogViewStatus, newest: boolean, limit: number, query: string, cursor?: string): Promise<LogPage> {
+export async function getLogPage(status: LogViewStatus, newest: boolean, limit: number, query: string, cursor?: string, signal?: AbortSignal): Promise<LogPage> {
     const database = await getDatabase();
+    signal?.throwIfAborted();
     const transaction = database.transaction("messages");
-    const range = cursor
+    const range = status !== "ALL"
+        ? IDBKeyRange.bound([status, !newest && cursor ? cursor : ""], [status, newest && cursor ? cursor : "\uffff"], !!cursor && !newest, !!cursor && newest)
+        : cursor
         ? newest ? IDBKeyRange.upperBound(cursor, true) : IDBKeyRange.lowerBound(cursor, true)
         : undefined;
     const direction = newest ? "prev" : "next";
     const matchesSearch = createSearchMatcher(query);
     const records: LogRecord[] = [];
-    let next = await transaction.store.openCursor(range, direction);
+    const source = status === "ALL" ? transaction.store : transaction.store.index("by_status_and_id");
+    let next = await source.openCursor(range, direction);
     let lastScannedId: string | undefined;
 
     while (next) {
+        signal?.throwIfAborted();
         const record = next.value;
-        if ((status === "ALL" || record.status === status) && matchesSearch(record)) {
+        if (matchesSearch(record)) {
             if (records.length === limit) break;
             records.push(record);
         }
@@ -137,13 +148,17 @@ export async function deleteLogs(ids: string[]) {
             transaction.done
         ]);
     }
-    if (ids.length > 0) statsCache = undefined;
+    if (ids.length > 0) {
+        statsCache = undefined;
+        statsRevision++;
+    }
 }
 
 export async function clearLogs() {
     const database = await getDatabase();
     await database.clear("messages");
     statsCache = undefined;
+    statsRevision++;
 }
 
 export async function clearUnprotectedLogs() {
@@ -170,6 +185,7 @@ export async function setLogProtected(messageId: string, value: boolean) {
     await transaction.store.put(record);
     await transaction.done;
     statsCache = undefined;
+    statsRevision++;
     return record;
 }
 
@@ -188,6 +204,7 @@ export async function setLogsProtected(messageIds: string[], value: boolean) {
     }
 
     statsCache = undefined;
+    statsRevision++;
 }
 
 export async function getAllLogs() {
@@ -201,35 +218,36 @@ export async function importLogRecords(records: LogRecord[]) {
     }
 }
 
-export async function getLogStats(): Promise<LogStats> {
-    if (statsCache) return statsCache;
+export async function getLogStats(includeStorage = false, signal?: AbortSignal): Promise<LogStats> {
+    if (statsCache && (!includeStorage || statsCache.estimatedBytes !== undefined)) return statsCache;
 
     const database = await getDatabase();
+    signal?.throwIfAborted();
+    const revision = statsRevision;
+    const transaction = database.transaction("messages");
     const [total, deleted, edited, ghostPinged] = await Promise.all([
-        database.count("messages"),
-        database.countFromIndex("messages", "by_status", LogStatus.DELETED),
-        database.countFromIndex("messages", "by_status", LogStatus.EDITED),
-        database.countFromIndex("messages", "by_status", LogStatus.GHOST_PINGED)
+        transaction.store.count(),
+        transaction.store.index("by_status").count(LogStatus.DELETED),
+        transaction.store.index("by_status").count(LogStatus.EDITED),
+        transaction.store.index("by_status").count(LogStatus.GHOST_PINGED)
     ]);
-    const encoder = new TextEncoder();
-    let protectedCount = 0;
-    let estimatedBytes = 0;
-    let cursor = await database.transaction("messages").store.openCursor();
+    const stats: LogStats = { total, deleted, edited, ghostPinged };
+    if (includeStorage) {
+        const encoder = new TextEncoder();
+        stats.protected = 0;
+        stats.estimatedBytes = 0;
+        let cursor = await transaction.store.openCursor();
 
-    while (cursor) {
-        if (cursor.value.protected) protectedCount++;
-        estimatedBytes += encoder.encode(JSON.stringify(cursor.value)).byteLength;
-        cursor = await cursor.continue();
+        while (cursor) {
+            signal?.throwIfAborted();
+            if (cursor.value.protected) stats.protected++;
+            stats.estimatedBytes += encoder.encode(JSON.stringify(cursor.value)).byteLength;
+            cursor = await cursor.continue();
+        }
     }
-
-    return statsCache = {
-        total,
-        deleted,
-        edited,
-        ghostPinged,
-        protected: protectedCount,
-        estimatedBytes
-    };
+    await transaction.done;
+    if (revision === statsRevision) statsCache = stats;
+    return stats;
 }
 
 export async function runMaintenance(messageLimit: number, retentionDays: number, preservedChannelId?: string) {

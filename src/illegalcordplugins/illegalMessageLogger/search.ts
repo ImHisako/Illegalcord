@@ -31,6 +31,7 @@ function parseSearch(query: string): SearchTerm[] {
 
 export function createSearchMatcher(query: string) {
     const terms = parseSearch(query.trim());
+    if (terms.length === 0) return () => true;
 
     return (record: LogRecord) => {
         const { message } = record;
