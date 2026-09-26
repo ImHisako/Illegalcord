@@ -44,19 +44,19 @@ function getFilename() {
     switch (process.platform) {
         case "win32":
             return byArch({
-                arm64: "EquilotlCli-arm64.exe",
-                default: "EquilotlCli.exe"
+                arm64: "IllegalotlCli-arm64.exe",
+                default: "IllegalotlCli.exe"
             });
         case "darwin":
             return byArch({
-                x64: "EquilotlCli-x64",
-                arm64: "EquilotlCli-arm64",
-                default: "EquilotlCli-universal"
+                x64: "IllegalotlCli-x64",
+                arm64: "IllegalotlCli-arm64",
+                default: "IllegalotlCli-universal"
             });
         case "linux":
             return byArch({
-                arm64: "EquilotlCli-linux-arm64",
-                default: "EquilotlCli-Linux"
+                arm64: "IllegalotlCli-linux-arm64",
+                default: "IllegalotlCli-linux"
             });
         default:
             throw new Error("Unsupported platform: " + process.platform);
