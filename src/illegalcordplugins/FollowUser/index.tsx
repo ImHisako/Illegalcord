@@ -11,8 +11,8 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
 import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
-import type { Channel, User } from "@vencord/discord-types";
-import { findByPropsLazy, findStoreLazy } from "@webpack";
+import type { Channel, User, VoiceState } from "@vencord/discord-types";
+import { findByPropsLazy } from "@webpack";
 import {
     ChannelStore,
     Menu,
@@ -20,7 +20,8 @@ import {
     PermissionStore,
     SelectedChannelStore,
     Toasts,
-    UserStore
+    UserStore,
+    VoiceStateStore
 } from "@webpack/common";
 import type { PropsWithChildren, SVGProps } from "react";
 
@@ -86,21 +87,6 @@ function UnfollowIcon(props: IconProps) {
     );
 }
 
-interface VoiceState {
-    userId: string;
-    channelId?: string;
-    oldChannelId?: string;
-    deaf: boolean;
-    mute: boolean;
-    selfDeaf: boolean;
-    selfMute: boolean;
-    selfStream: boolean;
-    selfVideo: boolean;
-    sessionId: string;
-    suppress: boolean;
-    requestToSpeakTimestamp: string | null;
-}
-
 export const settings = definePluginSettings({
     executeOnFollow: {
         type: OptionType.BOOLEAN,
@@ -148,48 +134,16 @@ const ChannelActions: {
     selectVoiceChannel: (channelId: string) => void;
 } = findByPropsLazy("disconnect", "selectVoiceChannel");
 
-const VoiceStateStore: VoiceStateStore = findStoreLazy("VoiceStateStore");
-const CONNECT = 1n << 20n;
-
-interface VoiceStateStore {
-    getAllVoiceStates(): VoiceStateEntry;
-    getVoiceStatesForChannel(channelId: string): VoiceStateMember;
-}
-
-interface VoiceStateEntry {
-    [guildIdOrMe: string]: VoiceStateMember;
-}
-
-interface VoiceStateMember {
-    [userId: string]: VoiceState;
-}
-
-function getChannelId(userId: string) {
-    if (!userId) {
-        return null;
-    }
-    try {
-        const states = VoiceStateStore.getAllVoiceStates();
-        for (const users of Object.values(states)) {
-            if (users[userId]) {
-                return users[userId].channelId ?? null;
-            }
-        }
-    } catch (e) { }
-    return null;
-}
-
-function triggerFollow(userChannelId: string | null = getChannelId(settings.store.followUserId)) {
+function triggerFollow(userChannelId: string | null = VoiceStateStore.getVoiceStateForUser(settings.store.followUserId)?.channelId ?? null) {
     if (settings.store.followUserId) {
         const myChanId = SelectedChannelStore.getVoiceChannelId();
         if (userChannelId) {
             // join when not already in the same channel
             if (userChannelId !== myChanId) {
                 const channel = ChannelStore.getChannel(userChannelId);
-                const voiceStates = VoiceStateStore.getVoiceStatesForChannel(userChannelId);
-                const memberCount = voiceStates ? Object.keys(voiceStates).length : null;
-                if (channel.type === 1 || PermissionStore.can(CONNECT, channel)) {
-                    if (channel.userLimit !== 0 && memberCount !== null && memberCount >= channel.userLimit && !PermissionStore.can(PermissionsBits.MOVE_MEMBERS, channel)) {
+                if (channel.type === 1 || PermissionStore.can(PermissionsBits.CONNECT, channel)) {
+                    if (channel.userLimit > 0 && !PermissionStore.can(PermissionsBits.MOVE_MEMBERS, channel)
+                        && Object.keys(VoiceStateStore.getVoiceStatesForChannel(userChannelId)).length >= channel.userLimit) {
                         Toasts.show({
                             message: "Channel is full",
                             id: Toasts.genId(),
@@ -315,45 +269,35 @@ export default definePlugin({
 
     flux: {
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
-            if (settings.store.onlyManualTrigger || !settings.store.followUserId) {
+            const { onlyManualTrigger, followUserId, autoMoveBack, channelFull } = settings.store;
+            if (onlyManualTrigger || !followUserId) return;
+
+            const followedUpdate = voiceStates.findLast(state => state.userId === followUserId && state.channelId !== state.oldChannelId);
+            if (followedUpdate?.channelId || followedUpdate?.oldChannelId) {
+                // move or join new channel -> also join
+                // leave -> disconnect
+                triggerFollow(followedUpdate.channelId ?? null);
                 return;
             }
-            for (const { userId, channelId, oldChannelId } of voiceStates) {
-                if (channelId !== oldChannelId) {
-                    const isMe = userId === UserStore.getCurrentUser().id;
-                    // move back if the setting is on and you were moved
-                    if (settings.store.autoMoveBack && isMe && channelId && oldChannelId) {
-                        triggerFollow();
-                        continue;
-                    }
 
-                    // if you're not in the channel of the followed user and it is no longer full, join
-                    if (settings.store.channelFull && !isMe && !channelId && oldChannelId && oldChannelId !== SelectedChannelStore.getVoiceChannelId()) {
-                        const channel = ChannelStore.getChannel(oldChannelId);
-                        const channelVoiceStates = VoiceStateStore.getVoiceStatesForChannel(oldChannelId);
-                        const memberCount = channelVoiceStates ? Object.keys(channelVoiceStates).length : null;
-                        if (channel.userLimit !== 0 && memberCount !== null && memberCount === (channel.userLimit - 1) && !PermissionStore.can(PermissionsBits.MOVE_MEMBERS, channel)) {
-                            const users = Object.values(channelVoiceStates).map(x => x.userId);
-                            if (users.includes(settings.store.followUserId)) {
-                                triggerFollow(oldChannelId);
-                                continue;
-                            }
-                        }
-                    }
+            if (!autoMoveBack && !channelFull) return;
+            const myId = UserStore.getCurrentUser().id;
+            // move back if the setting is on and you were moved
+            if (autoMoveBack && voiceStates.some(state => state.userId === myId && state.channelId && state.oldChannelId && state.channelId !== state.oldChannelId)) {
+                triggerFollow();
+                return;
+            }
 
-                    const isFollowed = settings.store.followUserId === userId;
-                    if (!isFollowed) {
-                        continue;
-                    }
+            // if you're not in the channel of the followed user and it is no longer full, join
+            if (!channelFull || !voiceStates.some(state => state.userId !== myId && state.oldChannelId && state.channelId !== state.oldChannelId)) return;
+            const followedChannelId = VoiceStateStore.getVoiceStateForUser(followUserId)?.channelId;
+            if (!followedChannelId || followedChannelId === SelectedChannelStore.getVoiceChannelId()) return;
+            if (!voiceStates.some(state => state.userId !== myId && state.oldChannelId === followedChannelId && state.channelId !== followedChannelId)) return;
 
-                    if (channelId) {
-                        // move or join new channel -> also join
-                        triggerFollow(channelId);
-                    } else if (oldChannelId) {
-                        // leave -> disconnect
-                        triggerFollow(null);
-                    }
-                }
+            const channel = ChannelStore.getChannel(followedChannelId);
+            if (channel.userLimit > 0 && !PermissionStore.can(PermissionsBits.MOVE_MEMBERS, channel)
+                && Object.keys(VoiceStateStore.getVoiceStatesForChannel(followedChannelId)).length < channel.userLimit) {
+                triggerFollow(followedChannelId);
             }
         },
     },

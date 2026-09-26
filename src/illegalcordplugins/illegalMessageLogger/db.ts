@@ -49,21 +49,24 @@ export async function applyBatch(records: LogRecord[], deletedIds: string[]) {
     if (records.length === 0 && deletedIds.length === 0) return;
 
     const database = await getDatabase();
-    const transaction = database.transaction("messages", "readwrite");
-    const existingRecords = await Promise.all(records.map(record => transaction.store.get(record.message_id)));
     const updatedAt = new Date().toISOString();
-    await Promise.all([
-        ...records.map((record, index) => transaction.store.put({
-            ...record,
-            protected: record.protected ?? existingRecords[index]?.protected,
-            createdAt: existingRecords[index]?.createdAt ?? record.createdAt ?? updatedAt,
-            updatedAt
-        })),
-        ...deletedIds.map(id => transaction.store.delete(id)),
-        transaction.done
-    ]);
-    statsCache = undefined;
-    statsRevision++;
+    for (let offset = 0; offset < Math.max(records.length, deletedIds.length); offset += 250) {
+        const batch = records.slice(offset, offset + 250);
+        const transaction = database.transaction("messages", "readwrite");
+        const existingRecords = await Promise.all(batch.map(record => transaction.store.get(record.message_id)));
+        await Promise.all([
+            ...batch.map((record, index) => transaction.store.put({
+                ...record,
+                protected: record.protected ?? existingRecords[index]?.protected,
+                createdAt: existingRecords[index]?.createdAt ?? record.createdAt ?? updatedAt,
+                updatedAt
+            })),
+            ...deletedIds.slice(offset, offset + 250).map(id => transaction.store.delete(id)),
+            transaction.done
+        ]);
+        statsCache = undefined;
+        statsRevision++;
+    }
 }
 
 export async function getLogPage(status: LogViewStatus, newest: boolean, limit: number, query: string, cursor?: string, signal?: AbortSignal): Promise<LogPage> {
@@ -213,9 +216,7 @@ export async function getAllLogs() {
 }
 
 export async function importLogRecords(records: LogRecord[]) {
-    for (let offset = 0; offset < records.length; offset += 250) {
-        await applyBatch(records.slice(offset, offset + 250), []);
-    }
+    await applyBatch(records, []);
 }
 
 export async function getLogStats(includeStorage = false, signal?: AbortSignal): Promise<LogStats> {

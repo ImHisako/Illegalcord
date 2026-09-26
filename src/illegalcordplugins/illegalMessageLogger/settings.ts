@@ -58,9 +58,10 @@ export const settings = definePluginSettings({
     },
     messageLimit: {
         type: OptionType.NUMBER,
-        description: "Maximum number of persistent logs. Set to 0 for no limit.",
+        displayName: "Maximum saved messages",
+        description: "Maximum saved logs after each batch. Oldest unprotected logs are removed first. Protected logs are always kept, even above the limit. Set to 0 for no limit.",
         default: 5000,
-        isValid: (value: number) => value >= 0 ? true : "The message limit cannot be negative."
+        isValid: (value: number) => Number.isSafeInteger(value) && value >= 0 ? true : "Enter a whole number of 0 or greater."
     },
     retentionDays: {
         type: OptionType.NUMBER,

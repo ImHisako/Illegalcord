@@ -12,7 +12,7 @@ import { parseUrl } from "@utils/misc";
 import type { RenderModalProps } from "@vencord/discord-types";
 import { Alerts, ChannelStore, GuildStore, lodash, MaskedLink, Modal, NavigationRouter, openModal, Parser, ScrollerThin, showToast, TextInput, Toasts, useEffect, useMemo, useRef, useState } from "@webpack/common";
 
-import { getLogPage, getLogStats, setLogProtected, setLogsProtected } from "./db";
+import { getLogPage, getLogStats, runMaintenance, setLogProtected, setLogsProtected } from "./db";
 import { clearAllLogs, deleteLog, deleteManyLogs, flushQueuedLogs } from "./engine";
 import { exportLogRecords, exportLogs, importLogs } from "./io";
 import { settings } from "./settings";
@@ -20,6 +20,7 @@ import { LogRecord, LogStats, LogStatus, LogViewStatus } from "./types";
 import { cl } from "./utils";
 
 const STATUS_OPTIONS: LogViewStatus[] = ["ALL", LogStatus.DELETED, LogStatus.EDITED, LogStatus.GHOST_PINGED];
+const LIMIT_SETTINGS: Array<"messageLimit"> = ["messageLimit"];
 const STATUS_LABELS: Record<LogViewStatus, string> = {
     ALL: "All logs",
     [LogStatus.DELETED]: "Deleted",
@@ -145,6 +146,8 @@ function LogEntry({ record, onDelete, onProtect, busy }: LogEntryProps) {
 const SafeLogEntry = ErrorBoundary.wrap(LogEntry, { noop: true });
 
 function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
+    const { messageLimit } = settings.use(LIMIT_SETTINGS);
+    const [limitInput, setLimitInput] = useState(String(messageLimit));
     const [status, setStatus] = useState<LogViewStatus>("ALL");
     const [query, setQuery] = useState(initialQuery);
     const [newest, setNewest] = useState(true);
@@ -167,6 +170,10 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
     const searchQuery = [query, protectedOnly ? "is:protected" : "", attachmentsOnly ? "has:attachment" : ""].filter(Boolean).join(" ");
     const unprotectedCount = records.filter(record => !record.protected).length;
     const hasFilters = Boolean(query || protectedOnly || attachmentsOnly || status !== "ALL");
+    const limit = Number(limitInput);
+    const validLimit = limitInput.trim() !== "" && settings.def.messageLimit.isValid(limit) === true;
+
+    useEffect(() => setLimitInput(String(messageLimit)), [messageLimit]);
 
     useEffect(() => {
         const currentRequest = ++request.current;
@@ -386,6 +393,27 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
                     </div>
                     <details className={cl("management")}>
                         <summary>Archive overview and tools <span>{busy ? "Working…" : `${records.length} loaded logs`}</span></summary>
+                        <label className={cl("section-label")} htmlFor="illegal-ml-message-limit">Maximum saved messages</label>
+                        <div className={cl("search-row")}>
+                            <TextInput
+                                id="illegal-ml-message-limit"
+                                type="number"
+                                min={0}
+                                step={1}
+                                value={limitInput}
+                                onChange={setLimitInput}
+                                disabled={busy}
+                                aria-invalid={!validLimit}
+                                aria-describedby="illegal-ml-message-limit-help"
+                            />
+                            <Button size="small" disabled={busy || !validLimit} onClick={() => runAction(async () => {
+                                settings.store.messageLimit = limit;
+                                await flushQueuedLogs();
+                                await runMaintenance(limit, 0);
+                                showToast("Saved message limit applied.", Toasts.Type.SUCCESS);
+                            })}>Apply limit</Button>
+                        </div>
+                        <p id="illegal-ml-message-limit-help">Use a whole number of 0 or greater. 0 means no limit. Applying a limit removes the oldest unprotected logs. Protected logs are always kept, even above the limit.</p>
                         {stats && (
                             <div className={cl("stats")}>
                                 <span><strong>{stats.total.toLocaleString()}</strong> Total</span>

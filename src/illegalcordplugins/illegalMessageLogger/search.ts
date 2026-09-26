@@ -30,16 +30,27 @@ function parseSearch(query: string): SearchTerm[] {
 }
 
 export function createSearchMatcher(query: string) {
-    const terms = parseSearch(query.trim());
+    const terms = parseSearch(query.trim()).map(term => ({
+        ...term,
+        time: term.key === "before" || term.key === "after" ? Date.parse(term.value) : NaN
+    }));
     if (terms.length === 0) return () => true;
+    const needsText = terms.some(term => term.key === "text" || term.key === "content");
+    const needsGuild = needsText || terms.some(term => term.key === "guild" || term.key === "server");
+    const needsChannel = needsGuild || terms.some(term => term.key === "channel" || term.key === "in");
+    const needsTime = terms.some(term => term.key === "before" || term.key === "after");
 
     return (record: LogRecord) => {
         const { message } = record;
         const authorName = message.author.global_name ?? message.author.globalName ?? message.author.username;
-        const guildId = message.guild_id ?? message.guildId ?? ChannelStore.getChannel(message.channel_id)?.guild_id;
-
-        const channelName = ChannelStore.getChannel(message.channel_id)?.name?.toLowerCase() ?? "";
-        const guildName = GuildStore.getGuild(guildId)?.name.toLowerCase() ?? "";
+        const channel = needsChannel ? ChannelStore.getChannel(message.channel_id) : undefined;
+        const guildId = message.guild_id ?? message.guildId ?? channel?.guild_id;
+        const channelName = channel?.name?.toLowerCase() ?? "";
+        const guildName = needsGuild && guildId ? GuildStore.getGuild(guildId)?.name.toLowerCase() ?? "" : "";
+        const timestamp = needsTime ? Date.parse(message.timestamp) : NaN;
+        const text = needsText ? [message.content, authorName, message.author.username, channelName, guildName, message.id,
+            message.author.id, message.channel_id, guildId ?? "", ...(message.editHistory?.map(edit => edit.content) ?? [])]
+            .map(candidate => candidate.toLowerCase()) : [];
 
         return terms.every(term => {
             const { value } = term;
@@ -63,13 +74,11 @@ export function createSearchMatcher(query: string) {
                     matches = message.id === value;
                     break;
                 case "before": {
-                    const time = Date.parse(value);
-                    matches = !Number.isNaN(time) && Date.parse(message.timestamp) < time;
+                    matches = timestamp < term.time;
                     break;
                 }
                 case "after": {
-                    const time = Date.parse(value);
-                    matches = !Number.isNaN(time) && Date.parse(message.timestamp) > time;
+                    matches = timestamp > term.time;
                     break;
                 }
                 case "has":
@@ -86,9 +95,7 @@ export function createSearchMatcher(query: string) {
                     break;
                 case "text":
                 case "content":
-                    matches = [message.content, authorName, message.author.username, channelName, guildName, message.id,
-                        message.author.id, message.channel_id, guildId ?? "", ...(message.editHistory?.map(edit => edit.content) ?? [])]
-                        .some(candidate => candidate.toLowerCase().includes(value));
+                    matches = text.some(candidate => candidate.includes(value));
                     break;
                 default:
                     matches = false;

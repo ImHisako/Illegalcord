@@ -7,7 +7,7 @@
 import { isObject } from "@utils/misc";
 import { chooseFile, saveFile } from "@utils/web";
 
-import { clearUnprotectedLogs, getAllLogs, importLogRecords } from "./db";
+import { clearUnprotectedLogs, getAllLogs, importLogRecords, runMaintenance } from "./db";
 import { settings } from "./settings";
 import { LogExport, LoggedMessage, LogRecord, LogStatus } from "./types";
 
@@ -106,5 +106,6 @@ export async function importLogs() {
     const uniqueRecords = [...new Map(records.map(record => [record.message_id, record])).values()];
     if (settings.store.replaceOnImport) await clearUnprotectedLogs();
     await importLogRecords(uniqueRecords);
+    if (settings.store.messageLimit > 0) await runMaintenance(settings.store.messageLimit, 0);
     return uniqueRecords.length;
 }
