@@ -109,19 +109,13 @@ export async function getLogPage(status: LogViewStatus, newest: boolean, limit: 
     };
 }
 
-export async function getChannelLogsAfter(channelId: string, timestamp: string) {
+export async function getChannelLogsAfter(channelId: string, timestamp: string, signal: AbortSignal) {
     const database = await getDatabase();
+    if (signal.aborted) return [];
     const index = database.transaction("messages").store.index("by_timestamp_and_message_id");
     const range = IDBKeyRange.bound([channelId, timestamp], [channelId, "\uffff"]);
-    const records: LogRecord[] = [];
-    let cursor = await index.openCursor(range);
-
-    while (cursor) {
-        if (cursor.value.status !== LogStatus.EDITED) records.push(cursor.value);
-        cursor = await cursor.continue();
-    }
-
-    return records;
+    const records = await index.getAll(range, 100);
+    return records.filter(record => record.status !== LogStatus.EDITED);
 }
 
 async function getOldestIds(limit: number, cutoff?: string, preservedChannelId?: string) {

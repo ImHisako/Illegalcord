@@ -13,12 +13,12 @@ import { LazyComponent } from "@utils/lazyReact";
 import { Logger } from "@utils/Logger";
 import { removeFromArray } from "@utils/misc";
 import definePlugin, { OptionType, type PluginNative } from "@utils/types";
-import type { Embed } from "@vencord/discord-types";
-import { SettingsRouter, showToast, Toasts } from "@webpack/common";
+import type { Embed, VoiceState } from "@vencord/discord-types";
+import { SettingsRouter, showToast, Toasts, UserStore } from "@webpack/common";
 
 import { refreshAttachmentWarnings, startAttachmentWarnings, stopAttachmentWarnings } from "./AttachmentWarnings";
 import { BrowserSettings } from "./BrowserSettings";
-import { refreshCameraPrivacy, refreshMicrophonePrivacy, startMicrophonePrivacy, stopMicrophonePrivacy } from "./microphonePrivacy";
+import { refreshCameraPrivacy, refreshMicrophonePrivacy, scheduleMicrophonePrivacyRefresh, startMicrophonePrivacy, stopMicrophonePrivacy } from "./microphonePrivacy";
 import { DEFAULT_EMBED_DOMAINS, isAllowedEmbed, parseDomainList, validateDomainList } from "./policy";
 import { startHardening, stopHardening } from "./runtime";
 import { setBlockRecording, startPermissionSession, stopPermissionSession } from "./session";
@@ -582,19 +582,20 @@ export default definePlugin({
 
     flux: {
         AUDIO_SET_MODE() {
-            queueMicrotask(refreshMicrophonePrivacy);
+            scheduleMicrophonePrivacyRefresh();
         },
         AUDIO_SET_SELF_MUTE() {
-            queueMicrotask(refreshMicrophonePrivacy);
+            scheduleMicrophonePrivacyRefresh();
         },
         AUDIO_TOGGLE_SELF_MUTE() {
-            queueMicrotask(refreshMicrophonePrivacy);
+            scheduleMicrophonePrivacyRefresh();
         },
         VOICE_CHANNEL_SELECT() {
-            queueMicrotask(refreshMicrophonePrivacy);
+            scheduleMicrophonePrivacyRefresh();
         },
-        VOICE_STATE_UPDATES() {
-            queueMicrotask(refreshMicrophonePrivacy);
+        VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: VoiceState[]; }) {
+            const userId = UserStore.getCurrentUser().id;
+            if (voiceStates.some(state => state.userId === userId)) scheduleMicrophonePrivacyRefresh();
         },
     },
 });

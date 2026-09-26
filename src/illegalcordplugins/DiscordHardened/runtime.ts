@@ -642,12 +642,8 @@ function createChromeIdentity(originalUserAgent: string, spoofWindows: boolean, 
 function patchUserAgent(settings: PrivacySettings): void {
     if (typeof Navigator === "undefined") return;
 
-    const originalUserAgent = navigator.userAgent;
-    const originalAppVersion = navigator.appVersion;
-    const originalPlatform = navigator.platform;
     const userAgentNavigator = navigator as NavigatorWithUserAgentData;
     const originalUserAgentData = userAgentNavigator.userAgentData;
-    const chromeIdentity = createChromeIdentity(originalUserAgent, settings.spoofWindows, settings);
     if (originalUserAgentData) {
         const originalGetHighEntropyValues = originalUserAgentData.getHighEntropyValues;
         patchValue(originalUserAgentData, "getHighEntropyValues", function (this: UserAgentDataLike, hints: string[]) {
@@ -656,12 +652,17 @@ function patchUserAgent(settings: PrivacySettings): void {
                 : originalGetHighEntropyValues.call(this, hints);
         });
     }
-    const sanitizedUserAgent = sanitizeAgent(originalUserAgent);
-    const sanitizedAppVersion = sanitizeAgent(originalAppVersion);
-    patchGetter(Navigator.prototype, "userAgent", () => settings.spoofChrome ? chromeIdentity.userAgent : settings.hideElectronUserAgent ? sanitizedUserAgent : originalUserAgent);
-    patchGetter(Navigator.prototype, "appVersion", () => settings.spoofChrome ? chromeIdentity.appVersion : settings.hideElectronUserAgent ? sanitizedAppVersion : originalAppVersion);
-    patchGetter(Navigator.prototype, "platform", () => settings.spoofChrome ? chromeIdentity.navigatorPlatform : originalPlatform);
-    patchGetter(Navigator.prototype, "userAgentData", () => settings.spoofChrome ? chromeIdentity.userAgentData : originalUserAgentData);
+    if (!settings.spoofChrome && !settings.hideElectronUserAgent) return;
+
+    const chromeIdentity = settings.spoofChrome ? createChromeIdentity(navigator.userAgent, settings.spoofWindows, settings) : undefined;
+    const userAgent = chromeIdentity?.userAgent ?? sanitizeAgent(navigator.userAgent);
+    const appVersion = chromeIdentity?.appVersion ?? sanitizeAgent(navigator.appVersion);
+    patchGetter(Navigator.prototype, "userAgent", () => userAgent);
+    patchGetter(Navigator.prototype, "appVersion", () => appVersion);
+    if (chromeIdentity) {
+        patchGetter(Navigator.prototype, "platform", () => chromeIdentity.navigatorPlatform);
+        patchGetter(Navigator.prototype, "userAgentData", () => chromeIdentity.userAgentData);
+    }
 }
 
 function patchWebGl(settings: PrivacySettings): void {

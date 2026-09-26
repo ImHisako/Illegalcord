@@ -41,6 +41,7 @@ let originalDispatch: typeof FluxDispatcher.dispatch | null = null;
 let protectedDispatch: typeof FluxDispatcher.dispatch | null = null;
 let pttActive = false;
 let pttTimeout: number | undefined;
+let refreshQueued = false;
 
 function getVoiceState(): { inCall: boolean; pushToTalk: boolean; selfMuted: boolean; } | null {
     if (typeof MediaEngineStore === "undefined" || typeof SelectedChannelStore === "undefined") return null;
@@ -64,6 +65,7 @@ function shouldLockMicrophone(): boolean {
 }
 
 function setActualTrackState(track: MediaStreamTrack, enabled: boolean): void {
+    if (track.enabled === enabled) return;
     if (enabledDescriptor?.set) enabledDescriptor.set.call(track, enabled);
     else track.enabled = enabled;
 }
@@ -187,11 +189,23 @@ export function refreshMicrophonePrivacy(): void {
 
     if (settings.releaseMicrophoneOnDisconnect && getVoiceState()?.inCall === false) {
         for (const [track, state] of trackedMicrophones) {
-            if (state.callOwned && track.readyState !== "ended") track.stop();
+            if (state.callOwned) {
+                if (track.readyState !== "ended") track.stop();
+                removeTrack(track);
+            }
         }
     }
 
     applyMicrophoneGate();
+}
+
+export function scheduleMicrophonePrivacyRefresh(): void {
+    if (!settings || refreshQueued) return;
+    refreshQueued = true;
+    queueMicrotask(() => {
+        refreshQueued = false;
+        refreshMicrophonePrivacy();
+    });
 }
 
 export function refreshCameraPrivacy(): void {
@@ -254,7 +268,6 @@ export function startMicrophonePrivacy(newSettings: MicrophonePrivacySettings): 
     }
 
     window.addEventListener("blur", handleWindowBlur);
-    ensurePttConnectionHooks();
 
     if (isObject(FluxDispatcher) && "dispatch" in FluxDispatcher && isCallable(FluxDispatcher.dispatch)) {
         const nativeDispatch = FluxDispatcher.dispatch;

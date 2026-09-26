@@ -12,8 +12,8 @@ import { Devs } from "@utils/constants";
 import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Channel, User, VoiceState } from "@vencord/discord-types";
-import { findByPropsLazy } from "@webpack";
 import {
+    ChannelActions,
     ChannelStore,
     Menu,
     PermissionsBits,
@@ -129,11 +129,6 @@ export const settings = definePluginSettings({
 
 const FOLLOW_SETTING_KEYS = ["followUserId"] satisfies Array<keyof typeof settings.store>;
 
-const ChannelActions: {
-    disconnect: () => void;
-    selectVoiceChannel: (channelId: string) => void;
-} = findByPropsLazy("disconnect", "selectVoiceChannel");
-
 function triggerFollow(userChannelId: string | null = VoiceStateStore.getVoiceStateForUser(settings.store.followUserId)?.channelId ?? null) {
     if (settings.store.followUserId) {
         const myChanId = SelectedChannelStore.getVoiceChannelId();
@@ -174,7 +169,7 @@ function triggerFollow(userChannelId: string | null = VoiceStateStore.getVoiceSt
         } else if (myChanId) {
             // if not in a voice channel and the setting is on disconnect
             if (settings.store.followLeave) {
-                ChannelActions.disconnect();
+                ChannelActions.selectVoiceChannel(null);
                 Toasts.show({
                     message: "Followed user left, disconnected",
                     id: Toasts.genId(),

@@ -362,9 +362,9 @@ function formatBreadcrumb({ timestamp, pluginName, surface, detail }: PluginBrea
 }
 
 function trimBreadcrumbs(now = Date.now()) {
-    pluginBreadcrumbs = pluginBreadcrumbs
-        .filter(breadcrumb => now - breadcrumb.timestamp <= BREADCRUMB_MAX_AGE)
-        .slice(-BREADCRUMB_LIMIT);
+    let removed = Math.max(0, pluginBreadcrumbs.length - BREADCRUMB_LIMIT);
+    while (removed < pluginBreadcrumbs.length && now - pluginBreadcrumbs[removed].timestamp > BREADCRUMB_MAX_AGE) removed++;
+    if (removed > 0) pluginBreadcrumbs.splice(0, removed);
 }
 
 function addPluginBreadcrumb(pluginName: string, surface: string, detail?: string) {
@@ -454,12 +454,11 @@ function instrumentPlugin(plugin: Plugin) {
     wrapObjectMethod(pluginRecord, "onBeforeMessageEdit", plugin.name, "message edit");
     wrapObjectMethod(pluginRecord, "onMessageClick", plugin.name, "message click");
 
-    const selfReference = escapeRegExp(`Vencord.Plugins.plugins[${JSON.stringify(plugin.name)}]`);
-    const methodPattern = new RegExp(`(?:\\$self|${selfReference})\\.(\\w+)\\(`, "g");
+    const selfReference = `Vencord.Plugins.plugins[${JSON.stringify(plugin.name)}]`;
     for (const patch of plugin.patches ?? []) {
         for (const replacement of [patch.replacement].flat()) {
             if (typeof replacement.replace !== "string") continue;
-            for (const match of replacement.replace.matchAll(methodPattern)) {
+            for (const match of replacement.replace.replaceAll(selfReference, "$self").matchAll(/\$self\.(\w+)\(/g)) {
                 wrapObjectMethod(pluginRecord, match[1], plugin.name, `patch callback ${match[1]}`);
             }
         }

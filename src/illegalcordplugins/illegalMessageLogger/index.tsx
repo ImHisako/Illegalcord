@@ -95,12 +95,24 @@ function SettingsActions() {
 async function processMessageFetch(response: FetchMessagesResponse) {
     if (!response.ok || response.body.length === 0) return;
 
+    const controller = new AbortController();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
         const oldestMessage = response.body[response.body.length - 1];
-        const records = await getChannelLogsAfter(oldestMessage.channel_id, oldestMessage.timestamp);
-        response.body.extra = records.map(record => record.message);
+        const records = await Promise.race([
+            getChannelLogsAfter(oldestMessage.channel_id, oldestMessage.timestamp, controller.signal),
+            new Promise<undefined>(resolve => {
+                timeout = setTimeout(() => {
+                    controller.abort();
+                    resolve(undefined);
+                }, 200);
+            })
+        ]);
+        if (records) response.body.extra = records.map(record => record.message);
     } catch (error) {
         logger.error("Failed to restore persistent logs into the channel.", error);
+    } finally {
+        clearTimeout(timeout);
     }
 }
 
@@ -118,9 +130,8 @@ function mergeLoadedMessages(messages: LoggedMessage[] & { extra?: LoggedMessage
         && (includeOlder || message.timestamp >= oldestTimestamp)
     );
 
-    messages.push(...extra);
-    messages.sort((left, right) => right.timestamp.localeCompare(left.timestamp));
-    return messages;
+    if (extra.length === 0) return messages;
+    return [...messages, ...extra].sort((left, right) => right.timestamp.localeCompare(left.timestamp));
 }
 
 export default definePlugin({
@@ -157,6 +168,7 @@ export default definePlugin({
     patches: [
         {
             find: "_tryFetchMessagesCached",
+            group: true,
             replacement: [
                 {
                     match: /(?<=\.get\(\{url.{0,150}?\.then\()(\i)=>\(/,
