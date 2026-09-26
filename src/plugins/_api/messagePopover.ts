@@ -31,6 +31,20 @@ export default definePlugin({
                 replace: (_, ReactButton, ButtonComponent, showReactButton, message) => "" +
                     `]}):null,Vencord.Api.MessagePopover._buildPopoverElements(${ButtonComponent},${message}),${showReactButton}?${ReactButton}:null,`
             }
+        },
+        {
+            find: "#{intl::MESSAGE_UTILITIES_A11Y_LABEL}",
+            replacement: {
+                match: /className:(\i\(\)\(\i\.className,.{0,80}?\)),(onClick:.{0,150}?children:\(0,\i\.jsxs?\)\(\i,\{className:)(\i\.innerClassName),children:(\[\i,\i\])/,
+                replace: 'className:"vc-message-popover "+$1,$2$3+" vc-message-popover-bar",children:Vencord.Api.MessagePopover._wrapPopoverBar($4)'
+            }
+        },
+        {
+            find: 'role:"article",onMouseEnter',
+            replacement: {
+                match: /(?<=null!=(\i)\?\(0,\i\.jsxs?\)\("div",\{className:)\i\.\i(?=,children:\1\}\))/,
+                replace: '$&+" vc-message-popover-slot"'
+            }
         }
     ]
 });

@@ -36,21 +36,28 @@ const FILE_DIR = join(BASE_DIR, "dist", "Installer");
 const LOCAL_INSTALLER_DIR = join(BASE_DIR, "IllegalcordInstaller", "dist");
 const ETAG_FILE = join(FILE_DIR, "etag.txt");
 
+function byArch(files) {
+    return files[process.arch] ?? files.default;
+}
+
 function getFilename() {
     switch (process.platform) {
         case "win32":
-            return "EquilotlCli.exe";
+            return byArch({
+                arm64: "EquilotlCli-arm64.exe",
+                default: "EquilotlCli.exe"
+            });
         case "darwin":
-            switch (process.arch) {
-                case "x64":
-                    return "EquilotlCli-x64";
-                case "arm64":
-                    return "EquilotlCli-arm64";
-                default:
-                    return "EquilotlCli-universal";
-            }
+            return byArch({
+                x64: "EquilotlCli-x64",
+                arm64: "EquilotlCli-arm64",
+                default: "EquilotlCli-universal"
+            });
         case "linux":
-            return "EquilotlCli-linux";
+            return byArch({
+                arm64: "EquilotlCli-linux-arm64",
+                default: "EquilotlCli-Linux"
+            });
         default:
             throw new Error("Unsupported platform: " + process.platform);
     }

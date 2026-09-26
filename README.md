@@ -86,26 +86,30 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **SilentCall** | ( https://github.com/yahyepanna/Silent-call )
 - **SpatialAudio** ( https://github.com/onewhobridges/vc-spatial-audio/tree/main )
 
-</details>
+| | X64 | ARM64 |
+| --- | --- | --- |
+| GUI | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/Illegalotl.exe) | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/Illegalotl-arm64.exe) |
+| CLI | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/IllegalotlCli.exe) | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/IllegalotlCli-arm64.exe) |
 
 Illegalcord has his personal badges btw
 
 ## Installing Illegalcord
 
-- [Universal GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl.dmg)
-- [X64 GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-x64.dmg)
-- [ARM64 GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-arm64.dmg)
-- [Universal CLI](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-universal)
-- [X64 CLI](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-x64)
-- [ARM64 CLI](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-arm64)
+| | Universal | X64 | ARM64 |
+| --- | --- | --- | --- |
+| GUI | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl.dmg) | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-x64.dmg) | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-arm64.dmg) |
+| CLI | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-universal) | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-x64) | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-arm64) |
 
 The CLI builds are plain binaries, so run `chmod +x <file>` after downloading.
 
 Linux
 
-- [GUI](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-x11)
-- [CLI](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-Linux)
-- [AUR](https://aur.archlinux.org/packages?O=0&K=equicord)
+| | X64 | ARM64 |
+| --- | --- | --- |
+| Combined GUI | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl) | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-arm64) |
+| X11 GUI | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-x11) | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-x11-arm64) |
+| Wayland GUI | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-wayland) | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-wayland-arm64) |
+| CLI | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-linux) | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-linux-arm64) |
 
 ## Installing Illegalcord Devbuild
 
