@@ -24,64 +24,80 @@ I plugin inclusi possono essere trovati [qui](https://equicord.org/plugins).
 <summary>Clicca per vedere i plugin aggiunti a Illegalcord</summary>
 
 - **Surveillance**: Dashboard PoC sperimentale per analizzare eventi Discord già visibili al client dell'utente. Destinata esclusivamente a ricerca, formazione e test autorizzati.
-- **Kamidere Mutual Scanner**
-- **kamidere PresenceLab**
-- **Kamidere SendTrail**
+- **MutualScanner**
+- **PresenceLab**
+- **SendTrail**
 - **FloeP2PService** | Basato sul servizio Floe.one, il miglior servizio di condivisione file P2P.
 - **DiscordHardened** Reale esperienza di privacy su discord.
 - **StereoInstaller** Più Metodi!
 - **FakeMuteAndDeafen**
-- **BetterMic**
+- **BetterMicrophone**
 - **BetterScreenshare**
-- **Anon.li Drop** | Supera i limiti di Discord per la condivisione di file + Attenzione alla sicurezza e alla privacy https://anon.li/
+- **AnonLi** | Supera i limiti di Discord per la condivisione di file + Attenzione alla sicurezza e alla privacy https://anon.li/
 - **StaffDetector**
-- **BigFileUpload**
 - **Stalker**
 - **FastGifPicker**
 - **MassMention**
 - **WebRTCLeakPrevent**
 - **MultiInstance**
-- **Client Diagnostics**
+- **ClientDiagnostics**
 - **AutoModBypass**
 - **ServerCloner**
 - **Securecord** | (AES 256 sui messaggi)
-- **Securecord Opossum Blazing Edition** | BlazingOpossum, dimensione blocco + IV + MAC Tag 128 bit, chiave 256 bit. Basato su istruzioni AVX2, algoritmo crittografico simmetrico post-quantistico ad alte prestazioni. Avanzato e moderno. | https://github.com/ZygoteCode/BlazingOpossum)
+- **SecurecordOpossum** | BlazingOpossum, dimensione blocco + IV + MAC Tag 128 bit, chiave 256 bit. Basato su istruzioni AVX2, algoritmo crittografico simmetrico post-quantistico ad alte prestazioni. Avanzato e moderno. | https://github.com/ZygoteCode/BlazingOpossum)
 - **GhostSelfbot** | Avvia Ghost Selfbot (exe o source) con auto-configurazione, installer requisiti Python e gestione token | https://ghostt.cc/
 - **IGP** (plugin pgp)
-- **Mullvad DNS Over Discord** (Privacy e Sicurezza)
 - **CustomDNS**
 - **DisableAnimations**
-- **NoMirroredCam**
 - **OpenOptimizer**
-- **Vcjumkoptimizer**
-- **2FA Hider**
-- **Follow User** (Senza controllo amici, Segui tutti senza limiti)
+- **1FA**
+- **FollowUser** (Senza controllo amici, Segui tutti senza limiti)
 - **DontLimitMe**
-- **GateawayLogger**
-- **InviteDefaults**
-- **OsintToolKit**
-- **Ottimizzazioni di Hisako**
+- **GatewayLogger**
+- **OSINTToolkit**
+- **Hisako's Optimizations**
 - **SilentDelete**
 - **LarpCord**
-- **ScreenshareAlert**
-- **CrashHandlerEnhanched**
-- **SilentDelete**
-- **VoiceBoard** | ( https://github.com/aleeeh07/vc-voiceBoard )
+- **ScreenShareAlert**
+- **CrashHandlerEnhanced**
 - **SilentEdit** | ( https://github.com/aurickk/SilentEdit-Vencord )
-- **BoosterCount** ( https://github.com/Reathe/BoosterCount/tree/main )
-- **Nitro Sniper**: | ( https://github.com/neoarz/NitroSniper/tree/main )
+- **BoostCounts** ( https://github.com/Reathe/BoosterCount/tree/main )
+- **NitroSniper**: | ( https://github.com/neoarz/NitroSniper/tree/main )
 - **BadgeSelector** | ( https://github.com/002-sans/VencordPlugins/tree/b8c7c98a50c0700f7389b0484e5659fe5ec0f99e/BadgesSelector )
-- **CustomStream** | ( https://github.com/MrTopQ/customStream-Vencord)
+- **CustomStreamTopQ** | ( https://github.com/MrTopQ/customStream-Vencord)
 - **TypingFriends** | ( https://github.com/debxylen/Vencord/tree/main/src/plugins/typingFriends )
-- **embeddedURLs** | ( https://github.com/ddadiani/Vencord-EmbeddedLinks/blob/main/src/plugins/embeddedURLs/index.ts )
-- **GPU Binder** | ( https://github.com/UnClide/vencord-gpubinder )
-- **stereoScreenshareAudio** | ( https://github.com/nerdwave-nick/Vencord-Stereo-Fix/blob/main/src/plugins/stereoScreenshareAudio/index.ts )
+- **EmbeddedURLs** | ( https://github.com/ddadiani/Vencord-EmbeddedLinks/blob/main/src/plugins/embeddedURLs/index.ts )
+- **GpuBinder** | ( https://github.com/UnClide/vencord-gpubinder )
+- **StereoScreenshareAudio** | ( https://github.com/nerdwave-nick/Vencord-Stereo-Fix/blob/main/src/plugins/stereoScreenshareAudio/index.ts )
 - **DiscordLock** | ( https://github.com/vejcowski/DiscordLock/tree/main )
-- **Opsec Plugin** | ( https://github.com/ItzSolace/OpSec-Vencord/tree/main ) | (Abbiamo una versione diversa con supporto italiano)
+- **OpSec** | ( https://github.com/ItzSolace/OpSec-Vencord/tree/main ) | (Abbiamo una versione diversa con supporto italiano)
 - **PluginStars** | ( https://github.com/Nightwielder23/discord-plugin-stars )
 - **ServerBadges** | ( https://github.com/TomFront/ServerBadges )
-- **SilentCall** | ( https://github.com/yahyepanna/Silent-call )
-- **SpatialAudio** ( https://github.com/onewhobridges/vc-spatial-audio/tree/main )
+- **SilentGroupCall** | ( https://github.com/yahyepanna/Silent-call )
+- **ClanSwitcher**
+- **ConsoleCleaner**
+- **DetectBlock**
+- **ExpandedWidgets**
+- **IllegalcordAnnouncements**
+- **IllegalcordDynamicIsland**
+- **IllegalcordEasterEgg**
+- **IllegalcordTutorial**
+- **IllegalMessageLogger**
+- **NightcordPort**
+- **NitroSniper Nighty Ver**
+- **PhilsPluginLibrary**
+- **PrivateSearchBrowser**
+- **RamOptimizer**
+- **ScamLinkDetector**
+- **SecureBookmarks**
+- **SecureZipper**
+- **ShareClientConfig**
+- **SoundPad**
+- **StatusCycler**
+- **StreamProofEnhanched**
+- **VoiceServerInfo**
+- **YMusicSync**
+- **ZeroWidthSanitizer**
 
 </details>
 
