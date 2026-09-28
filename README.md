@@ -86,30 +86,33 @@ Our included plugins can be found [here](https://equicord.org/plugins).
 - **SilentCall** | ( https://github.com/yahyepanna/Silent-call )
 - **SpatialAudio** ( https://github.com/onewhobridges/vc-spatial-audio/tree/main )
 
-| | X64 | ARM64 |
-| --- | --- | --- |
-| GUI | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/Illegalotl.exe) | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/Illegalotl-arm64.exe) |
-| CLI | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/IllegalotlCli.exe) | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/IllegalotlCli-arm64.exe) |
+</details>
 
 Illegalcord has his personal badges btw
 
 ## Installing Illegalcord
 
-| | Universal | X64 | ARM64 |
-| --- | --- | --- | --- |
-| GUI | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl.dmg) | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-x64.dmg) | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-arm64.dmg) |
-| CLI | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-universal) | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-x64) | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-arm64) |
-
-The CLI builds are plain binaries, so run `chmod +x <file>` after downloading.
-
-Linux
+### Windows
 
 | | X64 | ARM64 |
 | --- | --- | --- |
-| Combined GUI | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl) | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-arm64) |
-| X11 GUI | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-x11) | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-x11-arm64) |
-| Wayland GUI | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-wayland) | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/Equilotl-wayland-arm64) |
-| CLI | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-linux) | [Download](https://github.com/Equicord/Equilotl/releases/latest/download/EquilotlCli-linux-arm64) |
+| GUI | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/Illegalotl.exe) | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/Illegalotl-arm64.exe) |
+| CLI | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/IllegalotlCli.exe) | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/IllegalotlCli-arm64.exe) |
+
+### macOS
+
+Prebuilt macOS installers are not currently available. Check the [IllegalcordInstaller releases](https://github.com/ImHisako/IllegalcordInstaller/releases) for updates.
+
+### Linux
+
+| | X64 | ARM64 |
+| --- | --- | --- |
+| Combined GUI | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/Illegalotl) | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/Illegalotl-arm64) |
+| X11 GUI | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/Illegalotl-x11) | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/Illegalotl-x11-arm64) |
+| Wayland GUI | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/Illegalotl-wayland) | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/Illegalotl-wayland-arm64) |
+| CLI | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/IllegalotlCli-linux) | [Download](https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/IllegalotlCli-linux-arm64) |
+
+Run `chmod +x <file>` after downloading, then execute the installer.
 
 ## Installing Illegalcord Devbuild
 

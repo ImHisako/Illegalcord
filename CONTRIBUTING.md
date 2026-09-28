@@ -1,78 +1,61 @@
-# Introduction
+# Contributing to Illegalcord
 
-> [!NOTE]
-> **AI Usage Notice**
->
-> Your contribution must be majority human written! Some AI assistance like inline suggestions is acceptable, but "vibecoded" contributions are not welcome.
-> Also **do not** use AI to generate your pull request description, README.md or in communication. Ignoring this rule will lead to a permanent block.
+Illegalcord welcomes contributions from anyone: plugins, bug fixes, performance improvements, documentation, translations, and ideas. Start with the [Illegalcord documentation](https://illegalcord.mintlify.site/) and the [setup instructions](./README.md#installing-illegalcord-devbuild).
 
-Equicord is a community project and welcomes any kind of contribution from anyone!
+## Our philosophy
 
-We have development documentation for new contributors, which can be found at <https://docs.equicord.org>.
+As explained on the [Illegalcord website](https://illegalcord.netlify.app/), this project is built around user freedom, experimentation, transparency, and control. Better audio, screen sharing, privacy tools, and diagnostics are all part of that direction.
 
-> [!IMPORTANT]
-> All contributions must follow our [Code of Conduct](./CODE_OF_CONDUCT.md).
+We do not impose arbitrary rules about which ideas contributors are allowed to explore. A feature does not need mass appeal, acceptance by another client, or a place in an upstream roadmap to deserve consideration. Niche plugins and experimental features are welcome. Rejection by Vencord or Equicord is not, by itself, a reason for rejection here.
 
-## How to contribute
+Vencord, Equicord, and their contributors deserve credit for the foundation. Illegalcord makes its own decisions about what to build on it. You are free to name other clients, compare features, question decisions, and discuss alternatives respectfully.
 
-Contributions are submitted through pull requests. If you are new to Git or GitHub, we recommend reading [this guide](https://opensource.com/article/19/7/create-pull-request-github).
+## AI is a development tool
 
-Pull requests can be made either to the `main` or the `dev` branch. However, unless you're an advanced user, I recommend sticking to `main`.
-This is because the dev branch might contain unstable changes and be force pushed frequently, which could cause conflicts in your pull request.
+AI assistance is welcome for code, debugging, tests, documentation, translations, pull request descriptions, and communication. There is no requirement that a contribution be majority human written, and using AI is not grounds for rejection or a ban.
 
-Before working on a major change, I highly recommend opening a feature request for it, making sure to check "I am willing to work on this myself",
-so we can discuss before you invest time. Alternatively, you can also do so in our Discord server's development
-channels. This saves you a lot of time in case your feature is considered too niche or rejected for any other reason.
+We review the submitted work on its merits. What matters is whether you understand it, review it, verify its behavior, and can address feedback. Check generated code and factual claims, describe the testing you actually performed, and explain any limitations. The same expectations apply regardless of the tools used.
 
-## Writing a Plugin
+## Submitting a contribution
 
-Developing a plugin is the primary way to contribute.
+1. Check existing issues and pull requests for related work.
+2. Fork [Illegalcord](https://github.com/ImHisako/Illegalcord), create a branch, and keep your change focused on the problem you want to solve.
+3. Build and check the affected functionality. Include reproduction steps for fixes and explain how to try new features.
+4. Open a pull request against Illegalcord's default branch. Describe the problem, the resulting behavior, and the checks you ran.
+5. Respond to review feedback and update your contribution as needed.
 
-Before starting your plugin:
+For a large change, opening an issue first can help agree on the approach and avoid duplicate work. Prior approval or membership in a Discord server is not required to submit an idea or pull request.
 
-- Consider if this plugin would be useful to a large portion of the userbase. We do not accept niche plugins
-- Check existing pull requests to see if someone is already working on a similar plugin
-- Familarise yourself with our plugin rules below to ensure your plugin is not banned
+## Plugins and technical quality
 
-- Join our Discord server.
-- Check existing pull requests to avoid duplicate work.
-- Check the [plugin requests tracker](https://discord.com/channels/1173279886065029291/1419347113745059961) to see if your idea already exists or was rejected.
-- If no request exists, open one and clearly state that you want to work on it yourself.
-- Wait for feedback before starting development, as some ideas may not be accepted or may need adjustments.
-- Familiarize yourself with the plugin rules below.
+We generally prefer to leave plugins inherited from Equicord and Vencord unchanged. Local modifications can conflict with future upstream updates or introduce incompatibilities, creating extra work to merge, test, and maintain them. This is a preference, not a blanket ban: when a change is necessary, keep it small and explain why it is needed.
 
-> [!WARNING]
-> Skipping these steps may result in your plugin being rejected, even if it is technically correct.
+Explain what your plugin does, who it helps, and how its settings affect behavior. Document any external services, credentials, data storage, or information it sends outside the client so users can make informed choices.
 
-## Illegalcord Rules
-1. No Rules
-2. We made a fork not a plugin.
+Follow the repository's coding conventions and reuse existing APIs and components. Keep changes focused, clean up resources when a plugin stops, and justify new dependencies. These expectations help keep contributions understandable and maintainable.
 
-## Plugin Rules
+For code changes, run the checks relevant to your work. Common checks include:
 
-To keep Equicord stable, secure and maintainable, all plugins must follow these rules:
+```sh
+pnpm testTsc
+pnpm lint
+pnpm build
+```
 
-1. No simple slash-command plugins (e.g. `/cat`). If applicable, create a [user-installable Discord app](https://discord.com/developers/docs/change-log#userinstallable-apps-preview) instead.
-2. No simple text replacement plugins (the built-in TextReplace plugin already covers this).
-3. No raw DOM manipulation - always use proper patches and React.
-4. No FakeDeafen or FakeMute functionality.
-5. No StereoMic-related plugins.
-6. No plugins that only hide or redesign UI elements (use CSS for that). This rule may be negotiable.
-7. No plugins that interact with specific third-party Discord bots (official Discord apps are allowed).
-8. No selfbots or API abuse (auto-replies, animated statuses, message pruning, Nitro snipers, etc.).
-9. No untrusted third-party APIs (well-known services like Google or GitHub are acceptable).
-10. No plugins that require users to provide their own API keys.
-11. Do not introduce new dependencies unless they are strictly necessary and well justified.
+Use `pnpm buildWeb` when your change affects the web build. Test the actual feature in the supported client environment and state clearly if a platform or behavior could not be tested. Documentation changes do not require a client build.
 
-**Plugins that violate any of these rules will not be accepted.**
+Reviews should identify concrete concerns such as broken behavior, performance regressions, unclear data handling, or maintenance costs. Experimental status and a small audience are not automatic disqualifications. Openness to an idea does not guarantee that every implementation will be merged.
 
-## Improving Equicord Itself
+## Transparency and responsible use
 
-If you want to improve Equicord beyond plugins, such as internal features or performance improvements, you are welcome to open a feature request so it can be discussed.
+The website emphasizes inspectable source code, clear risks, and informed user choice. Describe experimental behavior honestly and avoid unsupported promises about privacy, security, or stability. Follow the project's [disclaimer](./README.md#disclaimer) and [Privacy Policy](./PRIVACY_POLICY.md) when documenting sensitive features.
 
-Bug fixes, refactors, and documentation improvements are also highly appreciated!
+Illegalcord does not endorse malware, credential theft, harassment, or abuse. Research and proof of concept features should have a clear purpose and make their data handling and limitations understandable.
 
-## Helping the Community
+Keep existing attribution and license notices, credit reused work, and ensure you have permission to contribute it under the project's [license](./LICENSE).
 
-We have an open support channel in our [Discord community](https://equicord.org/discord).
-Helping out users there is always appreciated! The more, the merrier.
+## Community
+
+Constructive criticism and comparisons with other clients are welcome. Treat contributors and users with respect, in line with the [Code of Conduct](./CODE_OF_CONDUCT.md).
+
+Use this repository's issues and pull requests for development discussions. Follow [Illegalcord on Telegram](https://t.me/Illegalcord) for project news and updates.
