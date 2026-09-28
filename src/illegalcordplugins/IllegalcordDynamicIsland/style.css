@@ -143,6 +143,11 @@
     transition-duration: 120ms;
 }
 
+.vc-illegalcord-dynamic-island-root.vc-illegalcord-dynamic-island-root-dragging {
+    transform: translateX(-50%);
+    transition: none;
+}
+
 .vc-illegalcord-dynamic-island-root-expanded {
     width: min(440px, calc(100vw - 320px));
     border-radius: 20px;
@@ -180,6 +185,10 @@
 
 .vc-illegalcord-dynamic-island-summary:active {
     cursor: grabbing;
+}
+
+.vc-illegalcord-dynamic-island-root-draggable .vc-illegalcord-dynamic-island-summary {
+    touch-action: none;
 }
 
 .vc-illegalcord-dynamic-island-root-expanded .vc-illegalcord-dynamic-island-summary {

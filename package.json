@@ -59,6 +59,7 @@
         "nanoid": "^5.1.16",
         "native-file-system-adapter": "^3.0.1",
         "virtual-merge": "^1.0.1",
+        "ws": "^8.21.0",
         "yaml-js": "^0.3.1"
     },
     "devDependencies": {
@@ -69,6 +70,7 @@
         "@types/node": "^26.0.1",
         "@types/react": "19.1.0",
         "@types/react-dom": "19.1.0",
+        "@types/ws": "^8.18.1",
         "@types/yazl": "^3.3.1",
         "@vencord/discord-types": "link:packages/discord-types",
         "diff": "^9.0.0",

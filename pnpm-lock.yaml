@@ -214,6 +214,9 @@ importers:
       virtual-merge:
         specifier: ^1.0.1
         version: 1.0.2
+      ws:
+        specifier: ^8.21.0
+        version: 8.21.0
       yaml-js:
         specifier: ^0.3.1
         version: 0.3.1
@@ -239,6 +242,9 @@ importers:
       '@types/react-dom':
         specifier: 19.1.0
         version: 19.1.0(@types/react@19.1.0)
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       '@types/yazl':
         specifier: ^3.3.1
         version: 3.3.1
@@ -795,6 +801,9 @@ packages:
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@types/yazl@3.3.1':
     resolution: {integrity: sha512-DIWfCKpsTp6hE5BDBHV3+fIL/bLUF9Bv13iDrWnMlmhQpH67buNvI291ZauQ1xcccxK3FqQ9honnXpq4R8NMuQ==}
@@ -2915,6 +2924,10 @@ snapshots:
 
   '@types/trusted-types@2.0.7':
     optional: true
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 26.0.1
 
   '@types/yazl@3.3.1':
     dependencies:

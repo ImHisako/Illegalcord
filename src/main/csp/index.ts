@@ -43,6 +43,7 @@ export const CspPolicies: PolicyMap = {
 
     "i.imgur.com": ImageSrc, // Imgur, used by some themes
     "i.ibb.co": ImageSrc, // ImgBB, used by some themes
+    "*.sndcdn.com": ["img-src"],
     "i.pinimg.com": ImageSrc, // Pinterest, used by some themes
     "files.catbox.moe": ImageAndCssSrc, // Catbox, used by some themes
 
