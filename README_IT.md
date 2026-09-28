@@ -41,6 +41,7 @@ I plugin inclusi possono essere trovati [qui](https://equicord.org/plugins).
 - **WebRTCLeakPrevent**
 - **MultiInstance**
 - **ClientDiagnostics**
+- **ClientIcon** | Icone personalizzate per la finestra e i collegamenti su Windows e Linux.
 - **AutoModBypass**
 - **ServerCloner**
 - **Securecord** | (AES 256 sui messaggi)
