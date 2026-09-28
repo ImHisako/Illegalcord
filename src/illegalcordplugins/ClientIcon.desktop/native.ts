@@ -6,7 +6,7 @@
 
 import { isTrustedSender } from "@illegalcordplugins/DiscordHardened/nativeSecurity";
 import { createHash } from "crypto";
-import { app, BrowserWindow, type IpcMainInvokeEvent, nativeImage } from "electron";
+import { app, BrowserWindow, type IpcMainInvokeEvent, nativeImage, session } from "electron";
 import illegalcordIcon from "file://../../../browser/Illegalcord.png?base64";
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { basename, dirname, join } from "path";
@@ -99,16 +99,32 @@ export function configure(event: IpcMainInvokeEvent, mode: unknown, shortcuts: u
             if (window.isDestroyed()) return { success: false, error: "The client window is no longer available." };
 
             const linux = process.platform === "linux";
-            const iconPath = join(directory, linux ? "active.png" : "active.ico");
+            const png = image.toPNG();
+            const iconPath = join(directory, linux ? "active.png" : `icon-${createHash("sha256").update(png).digest("hex")}.ico`);
             if (mode !== "original") {
                 mkdirSync(directory, { recursive: true });
-                const png = image.toPNG();
                 if (typeof data === "string") writeFileSync(join(directory, "custom.png"), png);
                 writeFileSync(iconPath, linux ? png : toIco(png));
             }
+            const backupDir = join(directory, "shortcuts");
+            const restore = mode === "original" || !shortcuts;
+            const result: { changed: number; failed: number; appId?: string; } = linux
+                ? updateLinuxShortcuts(iconPath, backupDir, restore)
+                : updateShortcuts(iconPath, backupDir, restore);
+            if (!linux) {
+                const client = basename(process.execPath, ".exe");
+                const appId = result.appId
+                    || (/^Discord(?:Canary|PTB|Development)?$/.test(client)
+                        ? process.argv.includes("--localdev") ? process.execPath : `com.squirrel.${client}.${client}`
+                        : undefined);
+                window.setAppDetails({
+                    ...(window.webContents.session === session.defaultSession && appId ? { appId } : {}),
+                    appIconPath: mode === "original" ? process.execPath : iconPath,
+                    appIconIndex: 0
+                });
+            }
             window.setIcon(image);
-            const update = linux ? updateLinuxShortcuts : updateShortcuts;
-            const { changed, failed } = update(iconPath, join(directory, "shortcuts"), mode === "original" || !shortcuts);
+            const { changed, failed } = result;
             return { success: true, preview: image.toDataURL(), client: basename(process.execPath, ".exe"), changed, failed };
         } catch {
             return { success: false, error: "The icon could not be applied. Check that your client data folder is writable, then try again." };

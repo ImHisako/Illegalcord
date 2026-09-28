@@ -39,6 +39,7 @@ export function updateShortcuts(iconPath: string, backupDir: string, restore: bo
     ];
     let changed = 0;
     let failed = 0;
+    let appId: string | undefined;
 
     function scan(directory: string, depth: number) {
         if (!existsSync(directory)) return;
@@ -62,9 +63,11 @@ export function updateShortcuts(iconPath: string, backupDir: string, restore: bo
                 continue;
             }
             if (!isCurrentClient(shortcut)) continue;
+            appId ||= shortcut.appUserModelId;
 
             try {
-                const ours = samePath(shortcut.icon ?? "", iconPath);
+                const icon = shortcut.icon ?? "";
+                const ours = samePath(dirname(icon), dirname(iconPath)) && /^(?:active|icon-[a-f0-9]{64})\.ico$/i.test(basename(icon));
                 const backupPath = join(backupDir, createHash("sha256").update(normalize(path).toLowerCase()).digest("hex") + ".json");
                 if (restore) {
                     if (!ours) continue;
@@ -95,5 +98,5 @@ export function updateShortcuts(iconPath: string, backupDir: string, restore: bo
     }
 
     for (const root of roots) scan(root, 0);
-    return { changed, failed };
+    return { changed, failed, appId };
 }

@@ -118,7 +118,7 @@ function IconSettings() {
         {message ? <Paragraph role="status">{message}</Paragraph> : null}
         <Paragraph>{IS_LINUX
             ? "Application menu changes use local launcher overrides. On Wayland, the dock may use the launcher icon and require a client restart. Sandboxed installations may restrict access to launchers. The tray icon is unchanged."
-            : "Windows may keep a cached taskbar icon. If needed, unpin the client and pin it again. The tray icon next to the clock is unchanged."}</Paragraph>
+            : "The running client's taskbar icon is updated too. Enable shortcut updates to keep the icon when the client is closed. If a pinned icon stays unchanged, unpin the client and pin it again. The tray icon next to the clock is unchanged."}</Paragraph>
     </>;
 }
 
