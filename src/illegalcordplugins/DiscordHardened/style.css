@@ -4,13 +4,168 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-.vc-discord-hardened-console {
-    height: 320px;
+.vc-discord-hardened-panel {
+    display: grid;
+    gap: 20px;
+    padding-bottom: 20px;
+    color: var(--text-normal);
+}
+
+.vc-discord-hardened-overview {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+    gap: 12px;
+}
+
+.vc-discord-hardened-metric,
+.vc-discord-hardened-card {
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    background: var(--background-secondary);
+}
+
+.vc-discord-hardened-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.vc-discord-hardened-metric strong {
+    color: var(--header-primary);
+    font-size: 28px;
+    font-variant-numeric: tabular-nums;
+}
+
+.vc-discord-hardened-metric small {
+    color: var(--text-muted);
+    font-size: 16px;
+    font-weight: 400;
+}
+
+.vc-discord-hardened-card {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px;
+}
+
+.vc-discord-hardened-toolbar,
+.vc-discord-hardened-check {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.vc-discord-hardened-checks {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+    gap: 8px 20px;
+}
+
+.vc-discord-hardened-check {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 13px;
+}
+
+.vc-discord-hardened-status {
+    flex-shrink: 0;
+    padding: 4px 8px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    background: var(--background-tertiary);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.vc-discord-hardened-status[data-status="Active"] {
+    color: var(--text-positive);
+}
+
+.vc-discord-hardened-status[data-status="Not active"] {
+    color: var(--text-warning);
+}
+
+.vc-discord-hardened-status[data-status="Not applied"] {
+    color: var(--text-danger);
+}
+
+.vc-discord-hardened-details {
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.vc-discord-hardened-details summary {
+    width: fit-content;
+    cursor: pointer;
+    color: var(--text-normal);
+}
+
+.vc-discord-hardened-details[open] summary {
+    margin-bottom: 8px;
+}
+
+.vc-discord-hardened-details summary:focus-visible,
+.vc-discord-hardened-console [role="region"]:focus-visible {
+    outline: 2px solid var(--focus-primary);
+    outline-offset: 2px;
+}
+
+.vc-discord-hardened-permission-controls {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.vc-discord-hardened-field {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 160px;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.vc-discord-hardened-grants {
+    display: grid;
+    gap: 8px;
+}
+
+.vc-discord-hardened-grant {
     padding: 12px;
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
-    background: var(--background-secondary);
-    color: var(--text-normal);
+    background: var(--background-primary);
+}
+
+.vc-discord-hardened-countdown {
+    margin-top: 4px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.vc-discord-hardened-search {
+    min-width: 0;
+    flex: 1 1 200px;
+}
+
+.vc-discord-hardened-console {
+    height: 300px;
+    padding: 8px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--background-primary);
     font-family: var(--font-code);
     font-size: 12px;
     line-height: 1.6;
@@ -20,12 +175,15 @@
 .vc-discord-hardened-console-entry {
     display: flex;
     flex-wrap: wrap;
-    gap: 0 8px;
-    padding: 4px 0;
+    align-items: baseline;
+    gap: 4px 12px;
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--border-subtle);
     overflow-wrap: anywhere;
 }
 
-.vc-discord-hardened-console-time {
+.vc-discord-hardened-console-time,
+.vc-discord-hardened-console-count {
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
 }
@@ -33,4 +191,15 @@
 .vc-discord-hardened-console-label {
     color: var(--text-warning);
     font-weight: 600;
+}
+
+.vc-discord-hardened-console-category {
+    flex: 1 1 160px;
+}
+
+.vc-discord-hardened-empty {
+    padding: 20px 12px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    text-align: center;
 }
