@@ -51,31 +51,11 @@ const UBLOCK_ORIGIN_DIR = join(DATA_DIR, "uBlockOriginElite");
 const UBLOCK_ORIGIN_VERSION_PATH = join(UBLOCK_ORIGIN_DIR, ".equicord-release");
 const PRELOAD_DIR = join(tmpdir(), "illegalcord-private-search-browser");
 const PRELOAD_PATH = join(PRELOAD_DIR, "preload.js");
-const MULLVAD_DNS = {
-    dns: {
-        hostname: "dns.mullvad.net",
-        doh: "https://dns.mullvad.net/dns-query"
-    },
-    adblock: {
-        hostname: "adblock.dns.mullvad.net",
-        doh: "https://adblock.dns.mullvad.net/dns-query"
-    },
-    base: {
-        hostname: "base.dns.mullvad.net",
-        doh: "https://base.dns.mullvad.net/dns-query"
-    },
-    extended: {
-        hostname: "extended.dns.mullvad.net",
-        doh: "https://extended.dns.mullvad.net/dns-query"
-    },
-    family: {
-        hostname: "family.dns.mullvad.net",
-        doh: "https://family.dns.mullvad.net/dns-query"
-    },
-    all: {
-        hostname: "all.dns.mullvad.net",
-        doh: "https://all.dns.mullvad.net/dns-query"
-    }
+const QUAD9_DNS = {
+    secure: "https://dns.quad9.net/dns-query",
+    unfiltered: "https://dns10.quad9.net/dns-query",
+    secureEcs: "https://dns11.quad9.net/dns-query",
+    unfilteredEcs: "https://dns12.quad9.net/dns-query"
 } as const;
 const TRACKER_HOSTS = [
     "adservice.google.com",
@@ -110,20 +90,20 @@ const POPUP_HOSTS = [
 
 let win: BrowserWindow | undefined;
 let webrtcSwitchApplied = false;
-let appliedDnsProfile: MullvadDnsProfile | undefined;
+let appliedDnsProfile: Quad9DnsProfile | undefined;
 let activeHardenFingerprinting = true;
 let activeSpoofBrowserInfo = false;
 let activeFingerprintMode: FingerprintMode = DEFAULT_FINGERPRINT_MODE;
 let activeBlockTrackers = true;
 let activeAntiPopups = true;
-let activeDnsProfile: MullvadDnsProfile = "base";
+let activeDnsProfile: Quad9DnsProfile = "secure";
 let activeLoadUblockOrigin = true;
 let activeUnpackedExtensionPath = "";
 let activeHomeUrl: string = ENGINES[DEFAULT_ENGINE].url;
 let popupOpenTimes: number[] = [];
 
 type Engine = keyof typeof ENGINES;
-type MullvadDnsProfile = keyof typeof MULLVAD_DNS;
+type Quad9DnsProfile = keyof typeof QUAD9_DNS;
 type FingerprintMode = "unique" | "semiRandom" | "random";
 type ExtensionSession = Electron.Session & {
     extensions?: {
@@ -163,10 +143,10 @@ function normalizeEngine(value: unknown): Engine {
         : DEFAULT_ENGINE;
 }
 
-function normalizeDnsProfile(value: unknown): MullvadDnsProfile {
-    return typeof value === "string" && value in MULLVAD_DNS
-        ? value as MullvadDnsProfile
-        : "base";
+function normalizeDnsProfile(value: unknown): Quad9DnsProfile {
+    return typeof value === "string" && Object.hasOwn(QUAD9_DNS, value)
+        ? value as Quad9DnsProfile
+        : "secure";
 }
 
 function normalizeFingerprintMode(value: unknown): FingerprintMode {
@@ -429,7 +409,7 @@ async function loadPrivateExtensions(ses: Electron.Session, loadUblockOrigin: bo
     }
 }
 
-function applyChromiumSwitches(dnsProfile: MullvadDnsProfile, hardenFingerprinting: boolean) {
+function applyChromiumSwitches(dnsProfile: Quad9DnsProfile, hardenFingerprinting: boolean) {
     if (hardenFingerprinting && !webrtcSwitchApplied) {
         webrtcSwitchApplied = true;
         app.commandLine.appendSwitch("disable-webrtc");
@@ -441,7 +421,7 @@ function applyChromiumSwitches(dnsProfile: MullvadDnsProfile, hardenFingerprinti
 
     app.configureHostResolver({
         secureDnsMode: "secure",
-        secureDnsServers: [MULLVAD_DNS[dnsProfile].doh]
+        secureDnsServers: [QUAD9_DNS[dnsProfile]]
     });
 }
 

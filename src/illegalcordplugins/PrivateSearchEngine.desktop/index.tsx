@@ -5,7 +5,7 @@
  */
 
 import { HeaderBarButton } from "@api/HeaderBar";
-import { definePluginSettings } from "@api/Settings";
+import { definePluginSettings, migratePluginSetting, PlainSettings, Settings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType, type PluginNative } from "@utils/types";
@@ -14,6 +14,12 @@ import type { SVGProps } from "react";
 
 const Native = VencordNative?.pluginHelpers?.PrivateSearchBrowser as PluginNative<typeof import("./native")> | undefined;
 const SEARCH_ENGINE_SETTING_KEYS: Array<"searchEngine"> = ["searchEngine"];
+
+migratePluginSetting("PrivateSearchBrowser", "quad9DnsProfile", "mullvadDnsProfile");
+const previousDnsProfile: unknown = PlainSettings.plugins.PrivateSearchBrowser?.quad9DnsProfile;
+if (typeof previousDnsProfile === "string" && ["dns", "adblock", "base", "extended", "family", "all"].includes(previousDnsProfile)) {
+    Settings.plugins.PrivateSearchBrowser.quad9DnsProfile = previousDnsProfile === "dns" ? "unfiltered" : "secure";
+}
 
 const settings = definePluginSettings({
     hideFromToolbox: {
@@ -71,16 +77,14 @@ const settings = definePluginSettings({
         description: "Absolute unpacked extension folder to load in the private browser window.",
         default: ""
     },
-    mullvadDnsProfile: {
+    quad9DnsProfile: {
         type: OptionType.SELECT,
-        description: "Mullvad DNS-over-HTTPS profile used by the private browser window.",
+        description: "Quad9 DNS over HTTPS profile used by the private browser window.",
         options: [
-            { label: "Base: ads, trackers, malware", value: "base", default: true },
-            { label: "DNS: no content blocking", value: "dns" },
-            { label: "Adblock: ads, trackers", value: "adblock" },
-            { label: "Extended: ads, trackers, malware, social media", value: "extended" },
-            { label: "Family: ads, trackers, malware, adult, gambling", value: "family" },
-            { label: "All: ads, trackers, malware, adult, gambling, social media", value: "all" }
+            { label: "Secure: block threats", value: "secure", default: true },
+            { label: "Unfiltered: no threat blocking", value: "unfiltered" },
+            { label: "Secure with ECS: block threats and optimize CDN routing", value: "secureEcs" },
+            { label: "Unfiltered with ECS: no threat blocking and optimize CDN routing", value: "unfilteredEcs" }
         ] as const
     }
 });
@@ -101,7 +105,7 @@ async function openSearchBrowser() {
         return;
     }
 
-    const result = await Native.openSearchEngine(settings.store.searchEngine, settings.store.hardenFingerprinting, settings.store.spoofBrowserInfo, settings.store.fingerprintMode, settings.store.blockTrackers, settings.store.antiPopups, settings.store.mullvadDnsProfile, settings.store.loadUblockOrigin, settings.store.unpackedExtensionPath);
+    const result = await Native.openSearchEngine(settings.store.searchEngine, settings.store.hardenFingerprinting, settings.store.spoofBrowserInfo, settings.store.fingerprintMode, settings.store.blockTrackers, settings.store.antiPopups, settings.store.quad9DnsProfile, settings.store.loadUblockOrigin, settings.store.unpackedExtensionPath);
     if (!result.success) showToast(result.error ?? "Could not open Private Search.", Toasts.Type.FAILURE);
 }
 
@@ -111,7 +115,7 @@ async function openBrowserLeaksTest() {
         return;
     }
 
-    const result = await Native.openBrowserLeaks(settings.store.searchEngine, settings.store.hardenFingerprinting, settings.store.spoofBrowserInfo, settings.store.fingerprintMode, settings.store.blockTrackers, settings.store.antiPopups, settings.store.mullvadDnsProfile, settings.store.loadUblockOrigin, settings.store.unpackedExtensionPath);
+    const result = await Native.openBrowserLeaks(settings.store.searchEngine, settings.store.hardenFingerprinting, settings.store.spoofBrowserInfo, settings.store.fingerprintMode, settings.store.blockTrackers, settings.store.antiPopups, settings.store.quad9DnsProfile, settings.store.loadUblockOrigin, settings.store.unpackedExtensionPath);
     if (!result.success) showToast(result.error ?? "Could not open BrowserLeaks.", Toasts.Type.FAILURE);
 }
 

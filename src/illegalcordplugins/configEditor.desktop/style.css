@@ -23,11 +23,23 @@
     box-sizing: border-box;
     width: 100%;
     height: 440px;
+    padding: 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--background-secondary);
+    color: var(--text-normal);
+    color-scheme: dark;
+    caret-color: var(--text-normal);
     resize: vertical;
     font-family: var(--font-code);
     font-size: 13px;
     line-height: 1.6;
     tab-size: 4;
+}
+
+.vc-config-editor-input:focus-visible {
+    outline: 2px solid var(--focus-primary);
+    outline-offset: 2px;
 }
 
 .vc-config-editor-preview,
