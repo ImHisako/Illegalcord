@@ -442,6 +442,12 @@
     flex-shrink: 0;
 }
 
+.vc-channeltabs-tab-scroller-following .vc-channeltabs-new-button {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+}
+
 .vc-channeltabs-new-button:hover {
     background-color: var(--background-mod-subtle);
     transform: scale(1.1);
