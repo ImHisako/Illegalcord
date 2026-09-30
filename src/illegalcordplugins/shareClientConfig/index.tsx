@@ -6,14 +6,16 @@
 
 import { ApplicationCommandInputType } from "@api/Commands";
 import { importSettings } from "@api/SettingsSync/offline";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
 import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
+import { Margins } from "@utils/margins";
 import { isObject, parseUrl } from "@utils/misc";
 import definePlugin from "@utils/types";
-import { MessageAttachment } from "@vencord/discord-types";
-import { ChannelStore, ConfirmModal, DraftType, openModal, showToast, Toasts, UploadHandler } from "@webpack/common";
+import type { Message, MessageAttachment } from "@vencord/discord-types";
+import { Button, ChannelStore, ConfirmModal, DraftType, openModal, showToast, Toasts, UploadHandler } from "@webpack/common";
 
 const FILE_NAME = "illegalcord-config.json";
 const FORMAT = "illegalcord-shared-config";
@@ -154,11 +156,35 @@ function openImportConfirmation(attachment: MessageAttachment, author: string) {
             onConfirm={() => void applySharedConfig(attachment)}
         >
             <Paragraph>
-                This will import the settings shared by {author}. Your API keys and other sensitive values will not be replaced.
+                This will import {attachment.filename} shared by {author}, including which plugins are enabled.
+                Your API keys and other recognized sensitive values will not be replaced. Restart Illegalcord after applying the configuration.
             </Paragraph>
         </ConfirmModal>
     ));
 }
+
+interface ConfigAccessoryProps {
+    message?: Message;
+}
+
+const ConfigAccessory = ErrorBoundary.wrap(function ConfigAccessory({ message }: ConfigAccessoryProps) {
+    if (!message) return null;
+    const attachments = message.attachments.filter((attachment: MessageAttachment) => attachment.filename === FILE_NAME);
+    if (!attachments.length) return null;
+
+    return <>
+        {attachments.map((attachment: MessageAttachment) => (
+            <div key={attachment.id} className={Margins.top8}>
+                <Button
+                    size={Button.Sizes.SMALL}
+                    onClick={() => openImportConfirmation(attachment, message.author.username)}
+                >
+                    Apply Illegalcord configuration
+                </Button>
+            </div>
+        ))}
+    </>;
+}, { noop: true });
 
 function ConfigIcon() {
     return (
@@ -173,7 +199,7 @@ export default definePlugin({
     description: "Share your Illegalcord configuration in chat without API keys or other sensitive values.",
     authors: [EquicordDevs.irritably],
     tags: ["Chat", "Privacy", "Utility"],
-    dependencies: ["CommandsAPI", "MessagePopoverAPI"],
+    dependencies: ["CommandsAPI", "MessageAccessoriesAPI", "MessagePopoverAPI"],
 
     settingsAboutComponent() {
         return (
@@ -192,8 +218,8 @@ export default definePlugin({
                 </Paragraph>
                 <Heading tag="h4">2. Apply a shared configuration</Heading>
                 <Paragraph>
-                    Hover over the message containing <code>{FILE_NAME}</code> and click
-                    {" "}<strong>Apply Illegalcord configuration</strong> in the message action bar.
+                    Click <strong>Apply Illegalcord configuration</strong> below the message containing <code>{FILE_NAME}</code>.
+                    You can also use the same action in the message action bar.
                     Confirm with <strong>Apply</strong>, wait for the success message, then restart Illegalcord.
                     Keep the original attachment filename so the plugin can recognize it.
                 </Paragraph>
@@ -233,6 +259,8 @@ export default definePlugin({
             }
         }
     }],
+
+    renderMessageAccessory: (props: ConfigAccessoryProps) => <ConfigAccessory {...props} />,
 
     messagePopoverButton: {
         icon: ConfigIcon,
