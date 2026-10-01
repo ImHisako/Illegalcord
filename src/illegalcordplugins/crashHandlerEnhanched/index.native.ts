@@ -7,11 +7,13 @@
 import {
     getCrashLogDir,
     openCrashLogDir,
+    openProcessCrashDir,
     writeCrashLog,
 } from "./native";
 
 export default {
     getCrashLogDir,
     openCrashLogDir,
+    openProcessCrashDir,
     writeCrashLog,
 };

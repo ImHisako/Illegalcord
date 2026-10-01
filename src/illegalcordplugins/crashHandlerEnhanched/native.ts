@@ -5,7 +5,7 @@
  */
 
 import { DATA_DIR } from "@main/utils/constants";
-import { shell } from "electron";
+import { app, shell } from "electron";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 
@@ -25,6 +25,16 @@ export async function getCrashLogDir(_event: Electron.IpcMainInvokeEvent): Promi
 export async function openCrashLogDir(_event: Electron.IpcMainInvokeEvent): Promise<string> {
     await mkdir(CRASH_LOG_DIR, { recursive: true });
     return shell.openPath(CRASH_LOG_DIR);
+}
+
+export async function openProcessCrashDir(_event: Electron.IpcMainInvokeEvent): Promise<string> {
+    try {
+        const crashDir = app.getPath("crashDumps");
+        await mkdir(crashDir, { recursive: true });
+        return await shell.openPath(crashDir) ? "Could not open the process crash dumps folder." : "";
+    } catch {
+        return "Could not open the process crash dumps folder.";
+    }
 }
 
 export async function writeCrashLog(_event: Electron.IpcMainInvokeEvent, contents: unknown, crashId: unknown): Promise<WriteCrashLogResult> {

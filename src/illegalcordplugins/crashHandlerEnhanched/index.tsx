@@ -21,7 +21,7 @@ import "./styles.css";
 import * as DataStore from "@api/DataStore";
 import { showNotification } from "@api/Notifications";
 import { isPluginEnabled, pluginRequiresRestart, plugins as Plugins, stopPlugin } from "@api/PluginManager";
-import { definePluginSettings, Settings } from "@api/Settings";
+import { definePluginSettings, PlainSettings, Settings } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
 import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
@@ -47,10 +47,10 @@ import type * as NativeModule from "./native";
 
 const PLUGIN_NAME = "CrashHandlerEnhanced";
 const TELEGRAM_URL = "https://t.me/Illegalcord";
-const REINSTALL_URL = "https://github.com/ImHisako/Illegalcord";
+const REINSTALL_URL = "https://github.com/ImHisako/IllegalcordInstaller";
 const cl = classNameFactory("vc-crash-handler-enhanced-");
 const logger = new Logger("CrashHandlerEnhanced");
-const SETTINGS_KEYS: Array<"lastCrashAt" | "crashCount"> = ["lastCrashAt", "crashCount"];
+const SETTINGS_KEYS: Array<"lastCrashAt" | "crashCount" | "crashHistory" | "autoDisabledPlugins" | "safeModePlugins"> = ["lastCrashAt", "crashCount", "crashHistory", "autoDisabledPlugins", "safeModePlugins"];
 const SCREEN_SETTINGS_KEYS: Array<"lastCrashReport" | "showSupportPopup" | "detectBlankScreen"> = ["lastCrashReport", "showSupportPopup", "detectBlankScreen"];
 const PROTECTED_PLUGIN_NAMES = new Set([PLUGIN_NAME, "CrashHandler"]);
 const BREADCRUMB_LIMIT = 40;
@@ -60,6 +60,8 @@ const NO_PLUGIN_DETECTED = "No plugin detected";
 const NO_PLUGIN_DETECTION_REASON = "The crash stack did not match any enabled plugin.";
 const NO_PLUGIN_DISABLED = "None";
 const NO_PLUGIN_DISABLE_REASON = "No plugin was disabled.";
+const CRASH_HISTORY_LIMIT = 10;
+const CRASH_LOOP_WINDOW = 5 * 60_000;
 const MESSAGE_SEND_FORBIDDEN_RE = /^POST \/channels\/(?:\d+|xxx)\/messages \[403\]$/;
 const GUILD_VANITY_FORBIDDEN_RE = /^GET \/guilds\/(?:\d+|xxx)\/vanity-url \[403\]$/;
 const USER_PROFILE_UNAVAILABLE_RE = /^GET \/users\/(?:\d+|xxx)\/profile \[(?:404|409)\]$/;
@@ -68,6 +70,21 @@ const Native = VencordNative.pluginHelpers.CrashHandlerEnhanced as PluginNative<
 
 type DetectionConfidence = "none" | "low" | "medium" | "high";
 type DetectionSource = "none" | "callback-error" | "stack-path" | "stack-name" | "breadcrumb";
+type CrashKind = "render" | "blank-screen" | "window-error" | "unhandled-rejection";
+const CRASH_KIND_LABELS = {
+    render: "Screen rendering crash",
+    "blank-screen": "Blank screen",
+    "window-error": "Window error",
+    "unhandled-rejection": "Unhandled promise rejection"
+} satisfies Record<CrashKind, string>;
+
+interface CrashSummary {
+    id: string;
+    timestamp: number;
+    kind: CrashKind;
+    message: string;
+    suspectedPlugin: string;
+}
 
 interface CrashBoundary {
     setState(state: CrashErrorState | RecoveredCrashState): void;
@@ -86,6 +103,7 @@ interface RecoveredCrashState {
 interface CrashReport {
     id: string;
     timestamp: number;
+    kind: CrashKind;
     message: string;
     stack?: string;
     componentStack?: string;
@@ -206,7 +224,7 @@ const settings = definePluginSettings({
     },
     captureGlobalErrors: {
         type: OptionType.BOOLEAN,
-        description: "Log window errors and unhandled promise rejections for debugging.",
+        description: "Record window errors and unhandled promise rejections separately from screen crashes.",
         default: false
     },
     showRecoveryToast: {
@@ -236,6 +254,30 @@ const settings = definePluginSettings({
         description: "Stores the total crash count.",
         default: "0",
         hidden: true
+    },
+    recentCrashTimes: {
+        type: OptionType.STRING,
+        description: "Stores recent crash times across restarts.",
+        default: "[]",
+        hidden: true
+    },
+    crashHistory: {
+        type: OptionType.STRING,
+        description: "Stores the last ten crashes.",
+        default: "[]",
+        hidden: true
+    },
+    autoDisabledPlugins: {
+        type: OptionType.STRING,
+        description: "Stores plugins disabled automatically after a crash.",
+        default: "[]",
+        hidden: true
+    },
+    safeModePlugins: {
+        type: OptionType.STRING,
+        description: "Stores enabled plugins to restore after safe mode.",
+        default: "",
+        hidden: true
     }
 });
 
@@ -244,7 +286,6 @@ let isRecovering = false;
 let crashModalOpen = false;
 let latestReport: CrashReport | null = null;
 let queuedCrash: PendingCrash | null = null;
-let recentCrashTimes: number[] = [];
 let pluginErrorOrigins = new WeakMap<object, PluginDetection>();
 let pluginBreadcrumbs: PluginBreadcrumb[] = [];
 const notifiedPluginNames = new Set<string>();
@@ -252,6 +293,7 @@ let crashLogWriteQueue: Promise<void> = Promise.resolve();
 let globalListenersInstalled = false;
 let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
 let supportScreenMounted = false;
+let openSupportViews = 0;
 const breadcrumbWrappedFunctions = new WeakSet<object>();
 const instrumentedMethods: InstrumentedMethod[] = [];
 
@@ -388,6 +430,42 @@ function asRecord(value: unknown) {
     return value as Record<PropertyKey, unknown>;
 }
 
+function readStringList(value: string) {
+    try {
+        const parsed: unknown = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+    } catch {
+        return [];
+    }
+}
+
+function readRecentCrashTimes() {
+    try {
+        const parsed: unknown = JSON.parse(settings.store.recentCrashTimes);
+        return Array.isArray(parsed) ? parsed.filter((item): item is number => typeof item === "number" && Number.isFinite(item)) : [];
+    } catch {
+        return [];
+    }
+}
+
+function isCrashKind(value: unknown): value is CrashKind {
+    return value === "render" || value === "blank-screen" || value === "window-error" || value === "unhandled-rejection";
+}
+
+function readCrashHistory(): CrashSummary[] {
+    try {
+        const parsed: unknown = JSON.parse(settings.store.crashHistory);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((item): item is CrashSummary => {
+            const entry = asRecord(item);
+            return typeof entry?.id === "string" && typeof entry.timestamp === "number" && Number.isFinite(entry.timestamp) && isCrashKind(entry.kind)
+                && typeof entry.message === "string" && typeof entry.suspectedPlugin === "string";
+        });
+    } catch {
+        return [];
+    }
+}
+
 function isLazyProxy(value: unknown) {
     const record = asRecord(value);
     return typeof record?.[SYM_LAZY_GET] === "function";
@@ -503,10 +581,13 @@ function restoreInstrumentedMethods() {
     instrumentedMethods.length = 0;
 }
 
-function createReport(errorState: CrashErrorState): CrashReport {
+function createReport(errorState: CrashErrorState, kind: CrashKind = "render"): CrashReport {
     const now = Date.now();
-    recentCrashTimes = recentCrashTimes.filter(time => now - time < 10000);
-    recentCrashTimes.push(now);
+    const recentCrashTimes = readRecentCrashTimes().filter(time => time <= now && now - time < CRASH_LOOP_WINDOW).slice(-10);
+    if (kind === "render" || kind === "blank-screen") {
+        recentCrashTimes.push(now);
+        settings.store.recentCrashTimes = JSON.stringify(recentCrashTimes);
+    }
 
     const totalCrashes = Number(settings.store.crashCount || "0") + 1;
     const detection = detectSuspectedPlugin(errorState);
@@ -515,6 +596,7 @@ function createReport(errorState: CrashErrorState): CrashReport {
     return {
         id: `${now}-${totalCrashes}`,
         timestamp: now,
+        kind,
         message: getErrorMessage(errorState.error),
         stack: getErrorStack(errorState.error),
         componentStack: getComponentStack(errorState.info),
@@ -541,6 +623,7 @@ function createPlaceholderReport(): CrashReport {
     return {
         id: "placeholder",
         timestamp: Date.now(),
+        kind: "render",
         message: "No crash report available.",
         crashCount: Number(settings.store.crashCount || "0"),
         recentCrashCount: 0,
@@ -561,6 +644,7 @@ function formatReport(report: CrashReport) {
     const parts = [
         "Illegalcord crash report",
         `Time: ${new Date(report.timestamp).toISOString()}`,
+        `Error type: ${CRASH_KIND_LABELS[report.kind]}`,
         `Crash count: ${report.crashCount}`,
         `Recent crashes: ${report.recentCrashCount}`,
         `Recovered: ${report.recovered ? "Yes" : "No"}`,
@@ -591,6 +675,15 @@ function saveReport(report: CrashReport) {
     settings.store.crashCount = String(report.crashCount);
     settings.store.lastCrashAt = String(report.timestamp);
     settings.store.lastCrashReport = formatReport(report);
+    const history = readCrashHistory().filter(entry => entry.id !== report.id);
+    history.unshift({
+        id: report.id,
+        timestamp: report.timestamp,
+        kind: report.kind,
+        message: report.message,
+        suspectedPlugin: report.suspectedPlugin
+    });
+    settings.store.crashHistory = JSON.stringify(history.slice(0, CRASH_HISTORY_LIMIT));
 }
 
 function copyLatestReport() {
@@ -605,6 +698,136 @@ function copyLatestReport() {
 
 function openExternal(url: string) {
     VencordNative.native.openExternal(url);
+}
+
+function disableOptionalPlugins(closeCrashModal: () => void, report: CrashReport) {
+    const candidates = Object.values(Plugins).filter(plugin =>
+        !plugin.required && !plugin.enabledByDefault && !plugin.isDependency && Settings.plugins[plugin.name]?.enabled
+    );
+
+    if (!candidates.length) {
+        showNotification({ title: "No optional plugins are enabled.", body: "There is nothing to disable.", noPersist: true });
+        return;
+    }
+
+    closeCrashModal();
+    setTimeout(() => Alerts.show({
+        title: "Disable optional plugins?",
+        body: `This will disable ${candidates.length} enabled plugins. Plugins enabled by default, required plugins, and their dependencies will stay on.`,
+        confirmText: "Disable plugins",
+        cancelText: "Cancel",
+        onCancel: () => openCrashSupportModal(report),
+        onConfirm: () => {
+            let restartNeeded = false;
+            const failed: string[] = [];
+
+            for (const plugin of candidates) {
+                if (pluginRequiresRestart(plugin)) {
+                    Settings.plugins[plugin.name].enabled = false;
+                    restartNeeded = true;
+                } else if (!plugin.started || stopPlugin(plugin)) {
+                    Settings.plugins[plugin.name].enabled = false;
+                } else {
+                    failed.push(plugin.name);
+                }
+            }
+
+            if (failed.length) logger.error(`Failed to stop plugins: ${failed.join(", ")}`);
+
+            if (restartNeeded) {
+                Alerts.show({
+                    title: "Restart required.",
+                    body: failed.length
+                        ? `Some plugins need a restart to turn off. These plugins could not be stopped: ${failed.join(", ")}.`
+                        : "Some plugins need a restart to turn off completely.",
+                    confirmText: "Restart now",
+                    cancelText: "Later",
+                    onConfirm: relaunch
+                });
+            } else {
+                showNotification({
+                    title: failed.length ? "Some plugins could not be disabled." : "Optional plugins disabled.",
+                    body: failed.length ? `Could not stop ${failed.join(", ")}.` : `${candidates.length} plugins were disabled.`,
+                    noPersist: true
+                });
+            }
+        }
+    }), 0);
+}
+
+function restoreAutoDisabledPlugin(name: string, closeCrashModal?: () => void) {
+    const disabled = readStringList(settings.store.autoDisabledPlugins);
+    if (!Plugins[name] || !disabled.includes(name)) return;
+
+    Settings.plugins[name].enabled = true;
+    settings.store.autoDisabledPlugins = JSON.stringify(disabled.filter(plugin => plugin !== name));
+    closeCrashModal?.();
+    setTimeout(() => Alerts.show({
+        title: `${name} restored.`,
+        body: "Restart the client to load the plugin again.",
+        confirmText: "Restart now",
+        cancelText: "Later",
+        onConfirm: relaunch
+    }), 0);
+}
+
+function requestSafeMode(closeCrashModal?: () => void, report?: CrashReport) {
+    if (settings.store.safeModePlugins) return;
+
+    closeCrashModal?.();
+    setTimeout(() => Alerts.show({
+        title: "Restart in safe mode?",
+        body: "Only required plugins will remain enabled. Your current plugin selection will be saved so you can restore it later.",
+        confirmText: "Restart in safe mode",
+        cancelText: "Cancel",
+        onCancel: report ? () => openCrashSupportModal(report) : undefined,
+        onConfirm: async () => {
+            const enabled = Object.values(Plugins)
+                .filter(plugin => !plugin.required && Settings.plugins[plugin.name]?.enabled)
+                .map(plugin => plugin.name);
+            settings.store.safeModePlugins = JSON.stringify(enabled);
+            for (const plugin of Object.values(Plugins)) {
+                if (!plugin.required) Settings.plugins[plugin.name].enabled = false;
+            }
+            try {
+                await VencordNative.settings.set(PlainSettings);
+                relaunch();
+            } catch (error) {
+                const previouslyEnabled = new Set(enabled);
+                for (const plugin of Object.values(Plugins)) {
+                    if (!plugin.required) Settings.plugins[plugin.name].enabled = previouslyEnabled.has(plugin.name);
+                }
+                settings.store.safeModePlugins = "";
+                logger.error("Failed to save safe mode settings.", error);
+                showNotification({ title: "Safe mode was not saved.", body: "Try again before restarting the client.", noPersist: true });
+            }
+        }
+    }), 0);
+}
+
+async function restoreSafeMode() {
+    const savedPlugins = settings.store.safeModePlugins;
+    if (!savedPlugins) return;
+
+    const previouslyEnabled = new Set(readStringList(savedPlugins));
+    const currentlyEnabled = new Set(Object.values(Plugins)
+        .filter(plugin => !plugin.required && Settings.plugins[plugin.name]?.enabled)
+        .map(plugin => plugin.name));
+    for (const plugin of Object.values(Plugins)) {
+        if (!plugin.required) Settings.plugins[plugin.name].enabled = previouslyEnabled.has(plugin.name);
+    }
+    settings.store.safeModePlugins = "";
+    try {
+        await VencordNative.settings.set(PlainSettings);
+        relaunch();
+    } catch (error) {
+        for (const plugin of Object.values(Plugins)) {
+            if (!plugin.required) Settings.plugins[plugin.name].enabled = currentlyEnabled.has(plugin.name);
+        }
+        settings.store.safeModePlugins = savedPlugins;
+        logger.error("Failed to restore safe mode settings.", error);
+        showNotification({ title: "Previous plugins were not saved.", body: "Try restoring them again before restarting the client.", noPersist: true });
+    }
 }
 
 async function checkAndUpdateIllegalcord() {
@@ -739,8 +962,8 @@ function maybeDisableSuspectedPlugin(report: CrashReport) {
         return;
     }
 
-    if (plugin.required || plugin.isDependency) {
-        report.disableReason = "The suspected plugin is required or enabled as a dependency.";
+    if (plugin.required || plugin.enabledByDefault || plugin.isDependency) {
+        report.disableReason = "The suspected plugin is required, enabled by default, or needed as a dependency.";
         return;
     }
 
@@ -748,6 +971,10 @@ function maybeDisableSuspectedPlugin(report: CrashReport) {
     const stopped = plugin.started ? stopPlugin(plugin) : true;
 
     report.disabledPlugin = report.suspectedPlugin;
+    const autoDisabledPlugins = readStringList(settings.store.autoDisabledPlugins);
+    if (!autoDisabledPlugins.includes(plugin.name)) {
+        settings.store.autoDisabledPlugins = JSON.stringify([...autoDisabledPlugins, plugin.name]);
+    }
     report.disableReason = !stopped
         ? "The suspected plugin was disabled for next startup, but stopping it immediately failed."
         : pluginRequiresRestart(plugin)
@@ -812,6 +1039,15 @@ function openCrashLogsFolder() {
             if (error) logger.error("Failed to open crash logs folder.", error);
         })
         .catch(error => logger.error("Failed to open crash logs folder.", error));
+}
+
+function openProcessCrashFolder() {
+    if (!Native?.openProcessCrashDir) return;
+    void Native.openProcessCrashDir()
+        .then(error => {
+            if (error) logger.error("Failed to open process crash dumps folder.", error);
+        })
+        .catch(error => logger.error("Failed to open process crash dumps folder.", error));
 }
 
 function handleCrash(boundary: CrashBoundary, errorState: CrashErrorState) {
@@ -916,13 +1152,17 @@ function handleGlobalError(event: ErrorEvent) {
     const error = normalizeGlobalError(event.error, event.message || "Window error.");
     if (isIgnorableGlobalError(error)) return;
 
-    if (settings.store.captureGlobalErrors) logger.debug("Window error outside Discord crash boundary.", error);
+    if (!settings.store.captureGlobalErrors) return;
+    if (latestReport && Date.now() - latestReport.timestamp < 1000 && latestReport.message === getErrorMessage(error)) return;
+    const report = createReport({ error }, "window-error");
+    saveReport(report);
+    writeCrashLog(report);
 }
 
 function reportScreenFailure(error: unknown) {
     if (isRecovering || (latestReport && Date.now() - latestReport.timestamp < 5000)) return;
 
-    const report = createReport({ error });
+    const report = createReport({ error }, "blank-screen");
     maybeDisableSuspectedPlugin(report);
     saveReport(report);
     writeCrashLog(report);
@@ -934,7 +1174,11 @@ function handleUnhandledRejection(event: PromiseRejectionEvent) {
 
     const error = normalizeGlobalError(event.reason, "Unhandled promise rejection.");
 
-    if (settings.store.captureGlobalErrors) logger.debug("Unhandled rejection outside Discord crash boundary.", error);
+    if (!settings.store.captureGlobalErrors) return;
+    if (latestReport && Date.now() - latestReport.timestamp < 1000 && latestReport.message === getErrorMessage(error)) return;
+    const report = createReport({ error }, "unhandled-rejection");
+    saveReport(report);
+    writeCrashLog(report);
 }
 
 function installGlobalListeners() {
@@ -968,6 +1212,19 @@ function triggerTestCrash() {
 function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
     const isLooping = report.recentCrashCount >= 3;
     const [isCheckingUpdate, setIsCheckingUpdate] = React.useState(false);
+    const safeModeActive = Boolean(settings.store.safeModePlugins);
+    const canRestorePlugin = readStringList(settings.store.autoDisabledPlugins).includes(report.disabledPlugin);
+    React.useEffect(() => {
+        openSupportViews++;
+        document.documentElement.classList.add(cl("scroll-locked"));
+        document.body.classList.add(cl("scroll-locked"));
+        return () => {
+            if (--openSupportViews === 0) {
+                document.documentElement.classList.remove(cl("scroll-locked"));
+                document.body.classList.remove(cl("scroll-locked"));
+            }
+        };
+    }, []);
     const recoveredText = report.recovered
         ? "Illegalcord recovered the screen, but the crash can happen again if the install or a plugin is broken."
         : "Illegalcord could not confirm a clean recovery. Restart or reinstall the client before continuing.";
@@ -1042,10 +1299,51 @@ function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
                                 <OpenExternalIcon height={16} width={16} />
                             </Button>
                         </section>
+
+                        <section className={cl("action")}>
+                            <div className={cl("action-copy")}>
+                                <BaseText size="md" weight="semibold">Disable optional plugins</BaseText>
+                                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                    Turn off enabled plugins while keeping the plugins active by default.
+                                </BaseText>
+                            </div>
+                            <Button variant="dangerSecondary" onClick={() => disableOptionalPlugins(modalProps.onClose, report)} className={cl("action-button")}>
+                                Disable plugins
+                            </Button>
+                        </section>
+
+                        <section className={cl("action")}>
+                            <div className={cl("action-copy")}>
+                                <BaseText size="md" weight="semibold">{safeModeActive ? "Safe mode is active" : "Start safe mode"}</BaseText>
+                                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                    {safeModeActive ? "Restore the plugins that were enabled before safe mode." : "Restart with only required plugins. Your current selection will be saved."}
+                                </BaseText>
+                            </div>
+                            <Button variant="secondary" onClick={safeModeActive ? restoreSafeMode : () => requestSafeMode(modalProps.onClose, report)} className={cl("action-button")}>
+                                {safeModeActive ? "Restore plugins" : "Start safe mode"}
+                            </Button>
+                        </section>
+
+                        {canRestorePlugin && (
+                            <section className={cl("action")}>
+                                <div className={cl("action-copy")}>
+                                    <BaseText size="md" weight="semibold">{report.disabledPlugin} was disabled</BaseText>
+                                    <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                        Restore this plugin if it was not the cause of the crash.
+                                    </BaseText>
+                                </div>
+                                <Button variant="secondary" disabled={safeModeActive} onClick={() => restoreAutoDisabledPlugin(report.disabledPlugin, modalProps.onClose)} className={cl("action-button")}>
+                                    Restore plugin
+                                </Button>
+                            </section>
+                        )}
                     </div>
 
                     <div className={cl("report")}>
                         <BaseText size="sm" weight="semibold">Last error</BaseText>
+                        <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                            Error type: {CRASH_KIND_LABELS[report.kind]}
+                        </BaseText>
                         <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
                             {report.message}
                         </BaseText>
@@ -1074,6 +1372,9 @@ function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
                             </Button>
                             <Button variant="secondary" disabled={!Native?.openCrashLogDir} onClick={openCrashLogsFolder}>
                                 Open logs folder
+                            </Button>
+                            <Button variant="secondary" disabled={!Native?.openProcessCrashDir} onClick={openProcessCrashFolder}>
+                                Open process dumps
                             </Button>
                         </div>
                         <div className={cl("footer-actions")}>
@@ -1188,33 +1489,65 @@ function recoverCrashBoundary(boundary: CrashBoundary) {
 }
 
 function CrashHandlerSettings() {
-    const { crashCount, lastCrashAt } = settings.use(SETTINGS_KEYS);
+    const { crashCount, lastCrashAt, autoDisabledPlugins, safeModePlugins } = settings.use(SETTINGS_KEYS);
     const hasCrashReport = Boolean(settings.store.lastCrashReport);
     const report = latestReport ?? createPlaceholderReport();
     const lastCrashText = lastCrashAt ? new Date(Number(lastCrashAt)).toLocaleString() : "No crashes recorded.";
+    const disabledPlugins = readStringList(autoDisabledPlugins).filter(name => Plugins[name]);
+    const history = readCrashHistory();
 
     return (
         <div className={cl("settings")}>
-            <div className={cl("settings-copy")}>
-                <BaseText size="sm" weight="semibold">Recorded crashes: {crashCount || "0"}</BaseText>
-                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                    Last crash: {lastCrashText}
-                </BaseText>
+            <div className={cl("settings-header")}>
+                <div className={cl("settings-copy")}>
+                    <BaseText size="sm" weight="semibold">Recorded errors: {crashCount || "0"}</BaseText>
+                    <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                        Last error: {lastCrashText}
+                    </BaseText>
+                </div>
+                <Flex flexWrap="wrap" gap="8px" className={cl("settings-actions")}>
+                    <Button size="small" variant="secondary" disabled={!hasCrashReport} onClick={copyLatestReport}>
+                        Copy report
+                    </Button>
+                    <Button size="small" variant="secondary" disabled={!Native?.openCrashLogDir} onClick={openCrashLogsFolder}>
+                        Open logs folder
+                    </Button>
+                    <Button size="small" variant="secondary" disabled={!Native?.openProcessCrashDir} onClick={openProcessCrashFolder}>
+                        Open process dumps
+                    </Button>
+                    <Button size="small" variant="secondary" onClick={triggerTestCrash}>
+                        Trigger test crash
+                    </Button>
+                    <Button size="small" onClick={() => openCrashSupportModal(report)}>
+                        Open popup
+                    </Button>
+                </Flex>
             </div>
-            <Flex flexWrap="wrap" gap="8px" className={cl("settings-actions")}>
-                <Button size="small" variant="secondary" disabled={!hasCrashReport} onClick={copyLatestReport}>
-                    Copy report
+            <div className={cl("settings-row")}>
+                <BaseText size="sm" weight="semibold">{safeModePlugins ? "Safe mode is active." : "Safe mode is off."}</BaseText>
+                <Button size="small" variant="secondary" onClick={safeModePlugins ? restoreSafeMode : () => requestSafeMode()}>
+                    {safeModePlugins ? "Restore previous plugins" : "Restart in safe mode"}
                 </Button>
-                <Button size="small" variant="secondary" disabled={!Native?.openCrashLogDir} onClick={openCrashLogsFolder}>
-                    Open logs folder
-                </Button>
-                <Button size="small" variant="secondary" onClick={triggerTestCrash}>
-                    Trigger test crash
-                </Button>
-                <Button size="small" onClick={() => openCrashSupportModal(report)}>
-                    Open popup
-                </Button>
-            </Flex>
+            </div>
+            {disabledPlugins.map(name => (
+                <div key={name} className={cl("settings-row")}>
+                    <BaseText size="sm">Automatically disabled: {name}</BaseText>
+                    <Button size="small" variant="secondary" disabled={Boolean(safeModePlugins)} onClick={() => restoreAutoDisabledPlugin(name)}>
+                        Restore plugin
+                    </Button>
+                </div>
+            ))}
+            <div className={cl("history")}>
+                <BaseText size="sm" weight="semibold">Recent errors</BaseText>
+                {history.length ? history.map(entry => (
+                    <div key={entry.id} className={cl("history-entry")}>
+                        <BaseText size="sm" weight="semibold">{new Date(entry.timestamp).toLocaleString()} · {CRASH_KIND_LABELS[entry.kind]}</BaseText>
+                        <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                            {entry.message} · Suspected plugin: {entry.suspectedPlugin}
+                        </BaseText>
+                    </div>
+                )) : <BaseText size="sm" color="text-muted">No errors recorded yet.</BaseText>}
+            </div>
         </div>
     );
 }
@@ -1234,11 +1567,11 @@ export default definePlugin({
         "Open latest crash popup": () => openCrashSupportModal(latestReport ?? createPlaceholderReport()),
         "Copy latest crash report": copyLatestReport,
         "Open crash logs folder": openCrashLogsFolder,
+        "Open process crash dumps": openProcessCrashFolder,
         "Trigger test crash": triggerTestCrash
     },
 
     start() {
-        settings.store.crashCount = "0";
         instrumentPlugins();
         installGlobalListeners();
     },

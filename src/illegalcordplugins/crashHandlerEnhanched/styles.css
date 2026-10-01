@@ -8,8 +8,17 @@
     display: grid;
     place-items: center;
     overflow: auto;
+    scrollbar-width: none;
     padding: 24px;
     background: var(--background-primary);
+}
+
+.vc-crash-handler-enhanced-overlay::-webkit-scrollbar {
+    display: none;
+}
+
+.vc-crash-handler-enhanced-scroll-locked {
+    overflow: hidden;
 }
 
 .vc-crash-handler-enhanced-modal {
@@ -122,6 +131,12 @@
 }
 
 .vc-crash-handler-enhanced-settings {
+    display: grid;
+    gap: 12px;
+}
+
+.vc-crash-handler-enhanced-settings-header,
+.vc-crash-handler-enhanced-settings-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -132,9 +147,22 @@
     flex-shrink: 0;
 }
 
+.vc-crash-handler-enhanced-history {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm, 8px);
+}
+
+.vc-crash-handler-enhanced-history-entry {
+    overflow-wrap: anywhere;
+}
+
 @media (width <= 520px) {
     .vc-crash-handler-enhanced-action,
-    .vc-crash-handler-enhanced-settings {
+    .vc-crash-handler-enhanced-settings-header,
+    .vc-crash-handler-enhanced-settings-row {
         align-items: stretch;
         flex-direction: column;
     }

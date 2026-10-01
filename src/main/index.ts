@@ -18,7 +18,7 @@
 
 import "./ipcMain";
 
-import { app, net, protocol } from "electron";
+import { app, crashReporter, net, protocol } from "electron";
 import { join } from "path";
 import { pathToFileURL } from "url";
 
@@ -29,6 +29,7 @@ import { ensureSafePath } from "./utils/ensureSafePath";
 import { installExt } from "./utils/extensions";
 
 if (!IS_VANILLA && !IS_EXTENSION) {
+    crashReporter.start({ uploadToServer: false });
     app.whenReady().then(() => {
         protocol.handle("vencord", ({ url: unsafeUrl }) => {
             let url = decodeURI(unsafeUrl).slice("vencord://".length).replace(/\?v=\d+$/, "");
