@@ -174,7 +174,7 @@ function SoundCloudSetup() {
         <>
             <Paragraph>
                 SoundCloud requires the Illegalcord desktop client and the WebNowPlaying browser extension.
-                Playback is shown only in your Dynamic Island.
+                Playback and controls are available in your Dynamic Island.
             </Paragraph>
             <Paragraph>
                 Download for <MaskedLink href="https://addons.mozilla.org/en-US/firefox/addon/webnowplaying">Firefox / Waterfox</MaskedLink>
@@ -298,6 +298,16 @@ function SpotifySection() {
     );
 }
 
+async function controlSoundCloud(action: "play" | "pause" | "previous" | "next") {
+    if (!Native) return;
+    try {
+        if (!await Native.control(action)) showToast("SoundCloud is no longer connected.", Toasts.Type.FAILURE);
+    } catch {
+        logger.error("Could not control SoundCloud playback through WebNowPlaying.");
+        showToast("Could not control SoundCloud playback.", Toasts.Type.FAILURE);
+    }
+}
+
 function SoundCloudSection({ track }: { track: SoundCloudTrack; }) {
     return (
         <section className={cl("section")} aria-label="SoundCloud playback">
@@ -310,6 +320,17 @@ function SoundCloudSection({ track }: { track: SoundCloudTrack; }) {
                     <span>{track.artist || "SoundCloud"}</span>
                     <span>{track.playing ? "Playing on SoundCloud" : "SoundCloud paused"}</span>
                 </div>
+            </div>
+            <div className={cl("controls")}>
+                <ControlButton label="Previous track" onClick={() => void controlSoundCloud("previous")}>
+                    <Glyph path="M6 5h2v14H6V5Zm3 7 9-7v14l-9-7Z" />
+                </ControlButton>
+                <ControlButton label={track.playing ? "Pause" : "Play"} active={track.playing} onClick={() => void controlSoundCloud(track.playing ? "pause" : "play")}>
+                    <Glyph path={track.playing ? "M6 5h4v14H6V5Zm8 0h4v14h-4V5Z" : "M8 5v14l11-7L8 5Z"} />
+                </ControlButton>
+                <ControlButton label="Next track" onClick={() => void controlSoundCloud("next")}>
+                    <Glyph path="M16 5h2v14h-2V5ZM6 5l9 7-9 7V5Z" />
+                </ControlButton>
             </div>
         </section>
     );
@@ -404,6 +425,7 @@ function DynamicIsland() {
     const primaryStream = primary === IslandType.ScreenShare ? stream : null;
     const primaryTrack = primary === IslandType.Spotify ? track : null;
     const primarySoundCloud = primary === IslandType.SoundCloud ? soundCloudTrack : null;
+    const primaryPlaying = primaryTrack ? isPlaying : primarySoundCloud?.playing;
     const primaryCover = primarySoundCloud?.cover || primaryTrack?.album.image.url;
     const primaryChannelId = primary === IslandType.Voice ? channelId : undefined;
     const idle = !track && !soundCloudTrack && !channelId && !stream;
@@ -645,14 +667,27 @@ function DynamicIsland() {
                                 ? primaryTrack.artists.map(artist => artist.name).join(", ")
                                 : primaryChannelId ? "Call controls available" : "Ready for your activities")}</span>
                 </div>
-                {!notification && primaryTrack && (
+                {!notification && expanded && primaryTrack && (
                     <span className={cl("visualizer")} aria-label={isPlaying ? "Spotify playing" : "Spotify paused"}>
                         <span /><span /><span />
                     </span>
                 )}
-                {!notification && primarySoundCloud && (
+                {!notification && expanded && primarySoundCloud && (
                     <span className={cl("visualizer")} aria-label={primarySoundCloud.playing ? "SoundCloud playing" : "SoundCloud paused"}>
                         <span /><span /><span />
+                    </span>
+                )}
+                {!notification && !expanded && (primaryTrack || primarySoundCloud) && (
+                    <span className={cl("controls")}>
+                        <ControlButton compact label="Previous track" onClick={() => primaryTrack ? SpotifyStore.prev() : void controlSoundCloud("previous")}>
+                            <Glyph path="M6 5h2v14H6V5Zm3 7 9-7v14l-9-7Z" />
+                        </ControlButton>
+                        <ControlButton compact label={primaryPlaying ? "Pause" : "Play"} active={primaryPlaying} onClick={() => primaryTrack ? SpotifyStore.setPlaying(!isPlaying) : void controlSoundCloud(primaryPlaying ? "pause" : "play")}>
+                            <Glyph path={primaryPlaying ? "M6 5h4v14H6V5Zm8 0h4v14h-4V5Z" : "M8 5v14l11-7L8 5Z"} />
+                        </ControlButton>
+                        <ControlButton compact label="Next track" onClick={() => primaryTrack ? SpotifyStore.next() : void controlSoundCloud("next")}>
+                            <Glyph path="M16 5h2v14h-2V5ZM6 5l9 7-9 7V5Z" />
+                        </ControlButton>
                     </span>
                 )}
                 {!notification && primaryStream && (

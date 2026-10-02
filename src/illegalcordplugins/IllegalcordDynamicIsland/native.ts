@@ -140,3 +140,20 @@ export function configure(event: IpcMainInvokeEvent, enabled: unknown) {
 export function getState(_: IpcMainInvokeEvent) {
     return snapshot();
 }
+
+export function control(_: IpcMainInvokeEvent, action: unknown) {
+    if (action !== "play" && action !== "pause" && action !== "previous" && action !== "next") return false;
+
+    const active = [...players].filter(([, player]) => player.name === "SoundCloud" && player.title && !player.stopped);
+    const selected = active.find(([, player]) => player.playing) ?? active[0];
+    if (!selected || selected[0].readyState !== WebSocket.OPEN) return false;
+
+    const command = {
+        play: "TRY_SET_STATE PLAYING",
+        pause: "TRY_SET_STATE PAUSED",
+        previous: "TRY_SKIP_PREVIOUS",
+        next: "TRY_SKIP_NEXT"
+    }[action];
+    selected[0].send(command);
+    return true;
+}
