@@ -143,8 +143,14 @@
     gap: 12px;
 }
 
+.vc-crash-handler-enhanced-settings-header {
+    align-items: stretch;
+    flex-direction: column;
+}
+
 .vc-crash-handler-enhanced-settings-actions {
-    flex-shrink: 0;
+    min-width: 0;
+    width: 100%;
 }
 
 .vc-crash-handler-enhanced-history {

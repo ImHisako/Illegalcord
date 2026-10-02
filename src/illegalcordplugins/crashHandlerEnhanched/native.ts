@@ -5,17 +5,57 @@
  */
 
 import { DATA_DIR } from "@main/utils/constants";
-import { app, shell } from "electron";
-import { mkdir, writeFile } from "fs/promises";
+import { app, session, shell } from "electron";
+import { mkdir, rm, writeFile } from "fs/promises";
 import path from "path";
 
 const CRASH_LOG_DIR = path.join(DATA_DIR, "CrashLogs");
 const MAX_CRASH_LOG_SIZE = 2 * 1024 * 1024;
 const CRASH_ID_RE = /^\d{13}-[1-9]\d{0,9}$/;
+const CLIENT_NAMES = new Set(["discord", "discordcanary", "discordptb", "discord-canary", "discord-ptb"]);
+const CACHE_DIRS = ["Cache", "Code Cache", "GPUCache", "DawnCache", "DawnGraphiteCache", path.join("Service Worker", "CacheStorage")];
 
 export type WriteCrashLogResult =
     | { success: true; filePath: string; }
     | { success: false; error: string; };
+
+export async function clearClientCache(_event: Electron.IpcMainInvokeEvent): Promise<{ success: true; client: string; failed: string[]; } | { success: false; error: string; }> {
+    if (process.platform !== "win32" && process.platform !== "linux") return { success: false, error: "Cache cleanup is available on Windows and Linux." };
+
+    const userData = path.normalize(app.getPath("userData"));
+    const client = path.basename(userData);
+    if (!CLIENT_NAMES.has(client.toLowerCase())) return { success: false, error: "Could not identify the current Discord client." };
+
+    const root = userData + path.sep;
+    const failed: string[] = [];
+    try {
+        await session.defaultSession.clearCache();
+    } catch {
+        failed.push("browser cache");
+    }
+    try {
+        await session.defaultSession.clearCodeCaches({});
+    } catch {
+        failed.push("code cache");
+    }
+    try {
+        await session.defaultSession.clearStorageData({ storages: ["cachestorage", "shadercache"] });
+    } catch {
+        failed.push("stored cache");
+    }
+
+    for (const name of CACHE_DIRS) {
+        const target = path.normalize(path.join(userData, name));
+        if (!target.startsWith(root)) return { success: false, error: "Cache path is outside the Discord client folder." };
+        try {
+            await rm(target, { recursive: true, force: true });
+        } catch {
+            failed.push(name);
+        }
+    }
+
+    return { success: true, client, failed };
+}
 
 export async function getCrashLogDir(_event: Electron.IpcMainInvokeEvent): Promise<string> {
     await mkdir(CRASH_LOG_DIR, { recursive: true });

@@ -5,6 +5,7 @@
  */
 
 import {
+    clearClientCache,
     getCrashLogDir,
     openCrashLogDir,
     openProcessCrashDir,
@@ -12,6 +13,7 @@ import {
 } from "./native";
 
 export default {
+    clearClientCache,
     getCrashLogDir,
     openCrashLogDir,
     openProcessCrashDir,

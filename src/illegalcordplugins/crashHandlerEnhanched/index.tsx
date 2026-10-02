@@ -700,6 +700,21 @@ function openExternal(url: string) {
     VencordNative.native.openExternal(url);
 }
 
+async function clearClientCache() {
+    const clearCache = Native?.clearClientCache;
+    if (!clearCache) return "Cache cleanup is unavailable.";
+
+    try {
+        const result = await clearCache();
+        if (!result.success) return result.error;
+        if (result.failed.length) return `Could not clear ${result.failed.join(", ")}. Restart the client and try again.`;
+        return `${result.client} cache cleared. Restart the client to finish.`;
+    } catch (err) {
+        logger.error("Failed to clear the Discord cache.", err);
+        return "Could not clear Discord cache.";
+    }
+}
+
 function disableOptionalPlugins(closeCrashModal: () => void, report: CrashReport) {
     const candidates = Object.values(Plugins).filter(plugin =>
         !plugin.required && !plugin.enabledByDefault && !plugin.isDependency && Settings.plugins[plugin.name]?.enabled
@@ -936,6 +951,17 @@ function detectSuspectedPlugin(errorState: CrashErrorState): PluginDetection | u
     const now = Date.now();
     const recent = pluginBreadcrumbs.filter(entry => now - entry.timestamp <= BREADCRUMB_DETECTION_AGE && isPluginEnabled(entry.pluginName));
     const names = new Set(recent.map(entry => entry.pluginName));
+    if (names.size > 1) {
+        const counts = [...names].map(name => ({ name, count: recent.filter(entry => entry.pluginName === name).length }))
+            .sort((a, b) => b.count - a.count);
+        if (counts[0].count < 5 || counts[0].count < counts[1].count * 4 || counts[0].count < recent.length * 0.75) return undefined;
+        return {
+            name: counts[0].name,
+            confidence: "low",
+            source: "breadcrumb",
+            reason: `This plugin ran ${counts[0].count} of the last ${recent.length} recorded callbacks. Repeated activity suggests involvement but does not prove the cause.`
+        };
+    }
     if (names.size !== 1) return undefined;
     const breadcrumb = recent[recent.length - 1];
     return {
@@ -1212,6 +1238,8 @@ function triggerTestCrash() {
 function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
     const isLooping = report.recentCrashCount >= 3;
     const [isCheckingUpdate, setIsCheckingUpdate] = React.useState(false);
+    const [isClearingCache, setIsClearingCache] = React.useState(false);
+    const [cacheStatus, setCacheStatus] = React.useState("");
     const safeModeActive = Boolean(settings.store.safeModePlugins);
     const canRestorePlugin = readStringList(settings.store.autoDisabledPlugins).includes(report.disabledPlugin);
     React.useEffect(() => {
@@ -1232,6 +1260,11 @@ function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
         setIsCheckingUpdate(true);
         await checkAndUpdateIllegalcord();
         setIsCheckingUpdate(false);
+    };
+    const runCacheCleanup = async () => {
+        setIsClearingCache(true);
+        setCacheStatus(await clearClientCache());
+        setIsClearingCache(false);
     };
 
     return (
@@ -1297,6 +1330,18 @@ function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
                             <Button variant="secondary" onClick={() => openExternal(TELEGRAM_URL)} className={cl("action-button")}>
                                 Open Telegram
                                 <OpenExternalIcon height={16} width={16} />
+                            </Button>
+                        </section>
+
+                        <section className={cl("action")}>
+                            <div className={cl("action-copy")}>
+                                <BaseText size="md" weight="semibold">Clear Discord cache</BaseText>
+                                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                    {cacheStatus || "Remove temporary cache files for this Discord client, then restart it."}
+                                </BaseText>
+                            </div>
+                            <Button variant="secondary" disabled={!Native?.clearClientCache || isClearingCache} onClick={() => void runCacheCleanup()} className={cl("action-button")}>
+                                {isClearingCache ? "Clearing..." : "Clear cache"}
                             </Button>
                         </section>
 
@@ -1514,6 +1559,9 @@ function CrashHandlerSettings() {
                     </Button>
                     <Button size="small" variant="secondary" disabled={!Native?.openProcessCrashDir} onClick={openProcessCrashFolder}>
                         Open process dumps
+                    </Button>
+                    <Button size="small" variant="secondary" disabled={!Native?.clearClientCache} onClick={() => void clearClientCache().then(body => showNotification({ title: "Discord cache cleanup", body, noPersist: true }))}>
+                        Clear client cache
                     </Button>
                     <Button size="small" variant="secondary" onClick={triggerTestCrash}>
                         Trigger test crash
