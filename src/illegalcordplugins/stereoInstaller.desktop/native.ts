@@ -10,7 +10,7 @@ import { app, dialog, type IpcMainInvokeEvent } from "electron";
 import method512 from "file://StereoMethods/Discord-Voice/(512) discord_voice.node?base64&trim=false";
 import method2Index from "file://StereoMethods/Discord-Voice/index.js?base64&trim=false";
 import { appendFileSync, constants, type Dirent, existsSync, mkdirSync } from "fs";
-import { access, chmod, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "fs/promises";
+import { access, chmod, cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "fs/promises";
 import { arch, homedir, platform as osPlatform, release } from "os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "path";
 
@@ -229,8 +229,8 @@ export async function patch(_: IpcMainInvokeEvent, rootPath: string): Promise<Na
 
         await ensurePermanentUnpatchedBackup(target, log);
         const patchedVoiceDir = await downloadPatchedPayload(log);
-        await scheduleWorker("Patch", patchedVoiceDir, target, "discordAudioCollective", log);
-        log.ok("Patch scheduled. Discord will close, install Discord Audio Collective Method, then reopen.");
+        const installed = await scheduleWorker("Patch", patchedVoiceDir, target, "discordAudioCollective", log);
+        log.ok(installed ? "Installed Discord Audio Collective Method. Discord will close and reopen." : "Patch scheduled. Discord will close, install Discord Audio Collective Method, then reopen.");
 
         return ok({ ...await installInfoFromTarget(target), logPath: logPath() }, log.lines);
     } catch (error) {
@@ -311,8 +311,8 @@ export async function revert(_: IpcMainInvokeEvent, rootPath: string): Promise<N
             throw new Error(`No permanent UNPATCHED backup found at: ${backupDir}. Run Patch once first to create the baseline.`);
         }
 
-        await scheduleWorker("Revert", backupDir, target, undefined, log);
-        log.ok("Revert scheduled. Discord will close, restore the backup, then reopen.");
+        const restored = await scheduleWorker("Revert", backupDir, target, undefined, log);
+        log.ok(restored ? "Restored the backup. Discord will close and reopen." : "Revert scheduled. Discord will close, restore the backup, then reopen.");
 
         return ok({ ...await installInfoFromTarget(target), logPath: logPath() }, log.lines);
     } catch (error) {
@@ -1176,7 +1176,7 @@ async function downloadPatchedPayload(log: ActionLog): Promise<string> {
     return payloadVoice;
 }
 
-async function scheduleWorker(actionName: "Patch" | "Revert", sourceDir: string, target: Target, metaMethod: PatchMethod | undefined, log: ActionLog, copyMode: WorkerConfig["copyMode"] = "directory", fileName: SingleFileName = "discord_voice.node", copyMethod2Index = false): Promise<void> {
+async function scheduleWorker(actionName: "Patch" | "Revert", sourceDir: string, target: Target, metaMethod: PatchMethod | undefined, log: ActionLog, copyMode: WorkerConfig["copyMode"] = "directory", fileName: SingleFileName = "discord_voice.node", copyMethod2Index = false): Promise<boolean> {
     assertPathInside(hubDataDir(), sourceDir);
     assertPathInside(target.discordRoot, target.voiceDir);
 
@@ -1212,6 +1212,54 @@ async function scheduleWorker(actionName: "Patch" | "Revert", sourceDir: string,
         }
     };
 
+    if (platformKey() === "linux" && process.env.FLATPAK_ID) {
+        const parentDir = dirname(target.voiceDir);
+        const suffix = `${process.pid}-${Date.now()}`;
+        const stagedDir = join(parentDir, `discord_voice.stereo-staged-${suffix}`);
+        const previousDir = join(parentDir, `discord_voice.stereo-previous-${suffix}`);
+        assertPathInside(target.discordRoot, stagedDir);
+        assertPathInside(target.discordRoot, previousDir);
+        log.info("Installing voice files before Discord Flatpak closes.");
+
+        try {
+            await cp(sourceDir, stagedDir, { recursive: true });
+            if (!await looksLikeDiscordVoiceDir(stagedDir)) throw new Error("The prepared Discord voice module is incomplete.");
+
+            await rename(target.voiceDir, previousDir);
+            try {
+                await rename(stagedDir, target.voiceDir);
+            } catch (error) {
+                await rename(previousDir, target.voiceDir);
+                throw error;
+            }
+        } finally {
+            await rm(stagedDir, { recursive: true, force: true });
+        }
+        await rm(previousDir, { recursive: true, force: true });
+        log.info(`Installed voice files in: ${target.voiceDir}`);
+
+        if (config.metaPath) {
+            await mkdir(dirname(config.metaPath), { recursive: true });
+            await writeFile(config.metaPath, JSON.stringify({
+                last_patch_utc: new Date().toISOString(),
+                client_label: config.patchClientLabel,
+                build_label: config.patchBuildLabel
+            }, null, 2), "utf8");
+        }
+
+        await mkdir(dirname(config.statePath), { recursive: true });
+        await writeFile(config.statePath, JSON.stringify({
+            status: actionName === "Revert" ? "notInstalled" : "installed",
+            build_label: config.patchBuildLabel,
+            updated_utc: new Date().toISOString(),
+            ...(config.activeMethod ? { active_method: config.activeMethod } : {})
+        }, null, 2), "utf8");
+        log.ok(`${actionName} complete.`);
+        app.relaunch();
+        setTimeout(() => app.exit(0), 700).unref();
+        return true;
+    }
+
     await mkdir(workerDir, { recursive: true });
     await writeFile(workerScript, usePowershellWorker ? POWERSHELL_WORKER_SOURCE : WORKER_SOURCE, "utf8");
     await writeFile(configPath, JSON.stringify(config), "utf8");
@@ -1245,6 +1293,7 @@ async function scheduleWorker(actionName: "Patch" | "Revert", sourceDir: string,
     log.info("Discord exit scheduled so the worker can replace the voice files.");
 
     setTimeout(() => app.exit(0), 700).unref();
+    return false;
 }
 
 async function startWindowsWorker(launcherScript: string, taskName: string, log: ActionLog): Promise<void> {

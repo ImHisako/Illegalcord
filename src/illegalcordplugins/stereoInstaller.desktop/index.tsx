@@ -50,7 +50,7 @@ const METHOD_LAST_PATCH_KEYS = {
 } satisfies Record<InstallerMethod, keyof InstallInfo["lastPatchLabels"]>;
 
 const METHOD_OPTIONS = [
-    { label: METHOD_LABELS.method1, value: "method1" },
+    { label: "Discord Audio Collective (OUTDATED)", value: "method1" },
     { label: METHOD_LABELS.method2, value: "method2" }
 ] satisfies Array<{ label: string; value: InstallerMethod; }>;
 
