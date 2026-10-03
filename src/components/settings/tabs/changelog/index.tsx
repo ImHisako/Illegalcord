@@ -354,8 +354,8 @@ function ChangelogContent() {
                 if (!logged) {
                     setChangelog([]);
                     showToast("Already up to date with repository", "message", {
-                            position: ToastPosition.BOTTOM,
-                        });
+                        position: ToastPosition.BOTTOM,
+                    });
                 }
                 return;
             }
@@ -381,16 +381,16 @@ function ChangelogContent() {
                     setRecentlyChecked(true);
 
                     showToast(`Found ${updates.value.length} commit${updates.value.length === 1 ? "" : "s"} from repository`, "success", {
-                            position: ToastPosition.BOTTOM,
-                        });
+                        position: ToastPosition.BOTTOM,
+                    });
                 } else {
                     const logged = await ensureLocalUpdateLogged();
                     setRecentlyChecked(true);
                     showToast(logged
-                            ? "Logged commits from your latest update"
-                            : "Repository is up to date with your local copy", logged ? "success" : "message", {
-                            position: ToastPosition.BOTTOM,
-                        });
+                        ? "Logged commits from your latest update"
+                        : "Repository is up to date with your local copy", logged ? "success" : "message", {
+                        position: ToastPosition.BOTTOM,
+                    });
                     if (!logged) {
                         setChangelog([]);
                     }
@@ -409,8 +409,8 @@ function ChangelogContent() {
 
             // funny little error toast hopefully doesn't happen!
             showToast("Could not fetch commits from repository", "failure", {
-                    position: ToastPosition.BOTTOM,
-                });
+                position: ToastPosition.BOTTOM,
+            });
         } finally {
             setIsLoading(false);
         }
@@ -502,8 +502,8 @@ function ChangelogContent() {
                                         await loadChangelogHistory();
                                         setShowHistory(false);
                                         showToast("All logs have been cleared", "success", {
-                                                position: ToastPosition.BOTTOM,
-                                            });
+                                            position: ToastPosition.BOTTOM,
+                                        });
                                     },
                                 });
                             }}
@@ -636,8 +636,8 @@ function ChangelogContent() {
                                                 ),
                                             );
                                             showToast("Log has been cleared", "success", {
-                                                    position: ToastPosition.BOTTOM,
-                                                });
+                                                position: ToastPosition.BOTTOM,
+                                            });
                                         },
                                     });
                                 }}

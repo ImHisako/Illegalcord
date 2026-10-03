@@ -92,8 +92,8 @@ export function Updatable(props: CommonProps) {
                             setUpdates([]);
 
                             showToast("No updates found!", "message", {
-                                    position: ToastPosition.BOTTOM
-                                });
+                                position: ToastPosition.BOTTOM
+                            });
                         }
                     })}
                 >
@@ -131,24 +131,6 @@ export function Updatable(props: CommonProps) {
                         Update Now
                     </Button>
                 )}
-                <Button
-                    disabled={isUpdating || isChecking}
-                    onClick={runWithDispatch(setIsChecking, async () => {
-                        const outdated = await checkForUpdates();
-
-                        if (outdated) {
-                            setUpdates(changes);
-                        } else {
-                            setUpdates([]);
-
-                            showToast("No updates found!", "message", {
-                                position: ToastPosition.BOTTOM
-                            });
-                        }
-                    })}
-                >
-                    Check for Updates
-                </Button>
             </Flex>
             {!updates && updateError ? (
                 <>
