@@ -314,7 +314,7 @@ export default definePlugin({
                 match: /case \i\.\i\.WINDOWS:/,
                 replace: 'case "WEB":'
             },
-            predicate: () => Settings.winNativeTitleBar,
+            predicate: () => Settings.nativeTitleBar,
         },
         {
             find: '"refresh-title-bar-small"',
@@ -328,7 +328,7 @@ export default definePlugin({
                     replace: "true"
                 }
             ],
-            predicate: () => Settings.winNativeTitleBar,
+            predicate: () => Settings.nativeTitleBar,
         },
         {
             find: "DirectMessage: getSpringConfigs()",
@@ -350,7 +350,7 @@ export default definePlugin({
                     replace: "$&&&!$self.isChannelMuted($1?.guildId,$1?.channelId)"
                 },
                 {
-                    match: /\.getEmbeddedActivitiesForGuild\((\i)\)(?=.flatMap\(\i=>)/,
+                    match: /\.getEmbeddedActivitiesForGuild\((\i)\)(?=.{0,100}\.flatMap\(\i=>)/,
                     replace: "$&.filter(e=>!$self.isChannelMuted($1?.guildId,e?.channelId))"
                 }
             ],
