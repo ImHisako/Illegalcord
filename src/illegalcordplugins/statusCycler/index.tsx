@@ -21,7 +21,7 @@ import definePlugin, { OptionType, type PluginNative } from "@utils/types";
 import { chooseFile } from "@utils/web";
 import type { Channel, SpotifyTrack } from "@vencord/discord-types";
 import { findComponentByCodeLazy } from "@webpack";
-import { Alerts, ChannelStore, Clickable, Popout, SelectedChannelStore, showToast, SpotifyStore as DiscordSpotifyStore, TextArea, Toasts, useRef, UserStore, useStateFromStores } from "@webpack/common";
+import { Alerts, ChannelStore, Clickable, Popout, SelectedChannelStore, showToast, SpotifyStore as DiscordSpotifyStore, TextArea, useRef, UserStore, useStateFromStores } from "@webpack/common";
 
 interface CustomStatusSetting {
     createdAtMs?: string;
@@ -610,7 +610,7 @@ async function importPhrases() {
     try {
         const phrases = getPhrases(await file.text());
         if (!phrases.length) {
-            showToast("The file does not contain any valid phrases.", Toasts.Type.FAILURE);
+            showToast("The file does not contain any valid phrases.", "failure");
             return;
         }
 
@@ -619,10 +619,10 @@ async function importPhrases() {
             sourceFileName: file.name
         });
         restartPhraseRotation();
-        showToast(`Imported ${phrases.length} ${phrases.length === 1 ? "phrase" : "phrases"} from ${file.name}.`, Toasts.Type.SUCCESS);
+        showToast(`Imported ${phrases.length} ${phrases.length === 1 ? "phrase" : "phrases"} from ${file.name}.`, "success");
     } catch (error) {
         logger.error("Could not read the selected text file.", error);
-        showToast("Could not read the selected file.", Toasts.Type.FAILURE);
+        showToast("Could not read the selected file.", "failure");
     }
 }
 
@@ -752,19 +752,19 @@ function SpicetifyInstallerSetting() {
         cancelText: "Cancel",
         onConfirm: () => {
             if (!Native) {
-                showToast("The Spicetify installer is only available in the desktop client.", Toasts.Type.FAILURE);
+                showToast("The Spicetify installer is only available in the desktop client.", "failure");
                 return;
             }
 
-            showToast("Opening the Spicetify installer.", Toasts.Type.MESSAGE);
+            showToast("Opening the Spicetify installer.", "message");
             void Native.installSpicetify()
                 .then(result => showToast(
                     result.success ? "Spicetify installer opened in a terminal." : result.error,
-                    result.success ? Toasts.Type.SUCCESS : Toasts.Type.FAILURE
+                    result.success ? "success" : "failure"
                 ))
                 .catch(error => {
                     logger.error("Could not open the Spicetify installer.", error);
-                    showToast("Could not open the Spicetify installer.", Toasts.Type.FAILURE);
+                    showToast("Could not open the Spicetify installer.", "failure");
                 });
         }
     });

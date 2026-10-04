@@ -9,7 +9,7 @@ import { definePluginSettings, migratePluginSetting, PlainSettings, Settings } f
 import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType, type PluginNative } from "@utils/types";
-import { showToast, Toasts } from "@webpack/common";
+import { showToast } from "@webpack/common";
 import type { SVGProps } from "react";
 
 const Native = VencordNative?.pluginHelpers?.PrivateSearchBrowser as PluginNative<typeof import("./native")> | undefined;
@@ -101,22 +101,22 @@ function StartpageIcon({ width = 20, height = 20, className }: SVGProps<SVGSVGEl
 
 async function openSearchBrowser() {
     if (!Native) {
-        showToast("Private Search native helper is unavailable.", Toasts.Type.FAILURE);
+        showToast("Private Search native helper is unavailable.", "failure");
         return;
     }
 
     const result = await Native.openSearchEngine(settings.store.searchEngine, settings.store.hardenFingerprinting, settings.store.spoofBrowserInfo, settings.store.fingerprintMode, settings.store.blockTrackers, settings.store.antiPopups, settings.store.quad9DnsProfile, settings.store.loadUblockOrigin, settings.store.unpackedExtensionPath);
-    if (!result.success) showToast(result.error ?? "Could not open Private Search.", Toasts.Type.FAILURE);
+    if (!result.success) showToast(result.error ?? "Could not open Private Search.", "failure");
 }
 
 async function openBrowserLeaksTest() {
     if (!Native) {
-        showToast("Private Search native helper is unavailable.", Toasts.Type.FAILURE);
+        showToast("Private Search native helper is unavailable.", "failure");
         return;
     }
 
     const result = await Native.openBrowserLeaks(settings.store.searchEngine, settings.store.hardenFingerprinting, settings.store.spoofBrowserInfo, settings.store.fingerprintMode, settings.store.blockTrackers, settings.store.antiPopups, settings.store.quad9DnsProfile, settings.store.loadUblockOrigin, settings.store.unpackedExtensionPath);
-    if (!result.success) showToast(result.error ?? "Could not open BrowserLeaks.", Toasts.Type.FAILURE);
+    if (!result.success) showToast(result.error ?? "Could not open BrowserLeaks.", "failure");
 }
 
 function StartpageBrowserButton() {

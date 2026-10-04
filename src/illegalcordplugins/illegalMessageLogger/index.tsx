@@ -17,7 +17,7 @@ import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import type { Message } from "@vencord/discord-types";
-import { Alerts, Menu, showToast, Toasts } from "@webpack/common";
+import { Alerts, Menu, showToast } from "@webpack/common";
 
 import { MessageLoggerLegalWarning } from "../_legalWarnings";
 import { getChannelLogsAfter } from "./db";
@@ -66,8 +66,8 @@ function SettingsActions() {
                 <Button
                     variant="secondary"
                     onClick={() => void runMaintenanceNow()
-                        .then(() => showToast("Message log maintenance completed.", Toasts.Type.SUCCESS))
-                        .catch(() => showToast("Message log maintenance failed.", Toasts.Type.FAILURE))}
+                        .then(() => showToast("Message log maintenance completed.", "success"))
+                        .catch(() => showToast("Message log maintenance failed.", "failure"))}
                 >
                     Run maintenance
                 </Button>
@@ -81,7 +81,7 @@ function SettingsActions() {
                         cancelText: "Cancel",
                         onConfirm: async () => {
                             await clearAllLogs(true);
-                            showToast("Cleared every message log.", Toasts.Type.SUCCESS);
+                            showToast("Cleared every message log.", "success");
                         }
                     })}
                 >
@@ -203,7 +203,7 @@ export default definePlugin({
     start() {
         if (isPluginEnabled("MessageLoggerEnhanced")) {
             Settings.plugins.MessageLoggerEnhanced.enabled = false;
-            showToast("MessageLoggerEnhanced was disabled. Restart to activate IllegalMessageLogger safely.", Toasts.Type.FAILURE);
+            showToast("MessageLoggerEnhanced was disabled. Restart to activate IllegalMessageLogger safely.", "failure");
             return;
         }
 

@@ -8,7 +8,7 @@ import * as DataStore from "@api/DataStore";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import { findStoreLazy } from "@webpack";
-import { Menu, Toasts } from "@webpack/common";
+import { Menu,showToast } from "@webpack/common";
 const UserProfileStore = findStoreLazy("UserProfileStore");
 const userBadgesMap = new Map<string, any[]>();
 
@@ -376,45 +376,25 @@ function toggleBadge(userId: string, badge: any, hasActualBadge: boolean) {
     if (hasActualBadge) {
         if (isHidden) {
             unhideRealBadge(userId, badge.id);
-            Toasts.show({
-                message: `Restored ${badge.title}`,
-                type: Toasts.Type.SUCCESS,
-                id: Toasts.genId()
-            });
+            showToast(`Restored ${badge.title}`, "success");
         } else {
             hideRealBadge(userId, badge.id);
-            Toasts.show({
-                message: `Removed ${badge.title}`,
-                type: Toasts.Type.SUCCESS,
-                id: Toasts.genId()
-            });
+            showToast(`Removed ${badge.title}`, "success");
         }
     } else {
         if (hasUserBadge) {
             removeBadgeFromUser(userId, badge.id);
-            Toasts.show({
-                message: `Removed ${badge.title}`,
-                type: Toasts.Type.SUCCESS,
-                id: Toasts.genId()
-            });
+            showToast(`Removed ${badge.title}`, "success");
         } else {
             addBadgesToUser(userId, [badge]);
-            Toasts.show({
-                message: `Added ${badge.title}`,
-                type: Toasts.Type.SUCCESS,
-                id: Toasts.genId()
-            });
+            showToast(`Added ${badge.title}`, "success");
         }
     }
 }
 
 function giveAllBadges(userId: string) {
     addBadgesToUser(userId, availableBadges);
-    Toasts.show({
-        message: "Added all badges",
-        type: Toasts.Type.SUCCESS,
-        id: Toasts.genId()
-    });
+    showToast("Added all badges", "success");
 }
 
 function addUserBadge(userId: string) {
@@ -437,11 +417,7 @@ function addUserBadge(userId: string) {
     };
 
     addBadgesToUser(userId, [userBadge]);
-    Toasts.show({
-        message: `Added badge: ${badgeId}`,
-        type: Toasts.Type.SUCCESS,
-        id: Toasts.genId()
-    });
+    showToast(`Added badge: ${badgeId}`, "success");
 }
 
 let originalGetUserProfile: any;
@@ -561,11 +537,7 @@ export default definePlugin({
                             });
                             userBadgesMap.delete(user.id);
 
-                            Toasts.show({
-                                message: "Removed all badges",
-                                type: Toasts.Type.SUCCESS,
-                                id: Toasts.genId()
-                            });
+                            showToast("Removed all badges", "success");
                         }}
                     />
                     <Menu.MenuItem
@@ -576,11 +548,7 @@ export default definePlugin({
                             userBadgesMap.delete(user.id);
                             removedBadgesMap.delete(user.id);
 
-                            Toasts.show({
-                                message: "Reset badges to original state",
-                                type: Toasts.Type.SUCCESS,
-                                id: Toasts.genId()
-                            });
+                            showToast("Reset badges to original state", "success");
                         }}
                     />
                 </Menu.MenuItem>

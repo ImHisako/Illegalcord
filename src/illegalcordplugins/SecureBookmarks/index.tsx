@@ -10,7 +10,7 @@ import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { ReporterTestable } from "@utils/types";
 import type { Message } from "@vencord/discord-types";
-import { Menu, showToast, Toasts } from "@webpack/common";
+import { Menu, showToast } from "@webpack/common";
 import type { ReactElement } from "react";
 
 import { renderSecureBookmarksToolboxMenu } from "./components";
@@ -41,7 +41,7 @@ function addBookmarkMenu(children: Array<ReactElement | null>, props: MessageCon
                     action={() => {
                         void saveMessageBookmark(message, duration).catch(error => {
                             logger.error("Failed to save bookmark.", error);
-                            showToast("Could not save this bookmark.", Toasts.Type.FAILURE);
+                            showToast("Could not save this bookmark.", "failure");
                         });
                     }}
                 />

@@ -6,7 +6,7 @@
 
 import * as DataStore from "@api/DataStore";
 import type { Channel, Message } from "@vencord/discord-types";
-import { ChannelStore, showToast, Toasts } from "@webpack/common";
+import { ChannelStore, showToast } from "@webpack/common";
 
 import { settings } from "./settings";
 
@@ -280,7 +280,7 @@ export async function getBookmarkProtectionState(): Promise<BookmarkProtectionSt
 export async function saveMessageBookmark(message: Message, duration: BookmarkDurationOption): Promise<void> {
     const channel = ChannelStore.getChannel(message.channel_id);
     if (!channel) {
-        showToast("Open the channel before saving this bookmark.", Toasts.Type.FAILURE);
+        showToast("Open the channel before saving this bookmark.", "failure");
         return;
     }
 
@@ -296,7 +296,7 @@ export async function saveMessageBookmark(message: Message, duration: BookmarkDu
     if (settings.plain.usePassword) {
         const { password } = settings.plain;
         if (!password) {
-            showToast("Set a SecureBookmarks password before saving.", Toasts.Type.FAILURE);
+            showToast("Set a SecureBookmarks password before saving.", "failure");
             return;
         }
 
@@ -310,7 +310,7 @@ export async function saveMessageBookmark(message: Message, duration: BookmarkDu
         await saveStore({ ...store, records: [record, ...store.records] });
     }
 
-    showToast(`Bookmark saved${duration.milliseconds === null ? "." : ` for ${duration.label.toLowerCase()}.`}`, Toasts.Type.SUCCESS);
+    showToast(`Bookmark saved${duration.milliseconds === null ? "." : ` for ${duration.label.toLowerCase()}.`}`, "success");
 }
 
 export async function getVisibleBookmarks(password: string): Promise<VisibleBookmark[]> {

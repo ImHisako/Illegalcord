@@ -19,7 +19,7 @@ import { fetchUserProfile } from "@utils/discord";
 import { parseUrl } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import type { ProfileEffect, RenderModalProps, User } from "@vencord/discord-types";
-import { AuthenticationStore, Constants, FluxDispatcher, IconUtils, Menu, Modal, openModal, React, RestAPI, Select, SettingsRouter, SnowflakeUtils, Toasts, UserProfileStore, UserStore } from "@webpack/common";
+import { AuthenticationStore, Constants, IconUtils, Menu, Modal, openModal, React, RestAPI, Select, SettingsRouter, showToast, SnowflakeUtils, UserProfileStore, UserStore } from "@webpack/common";
 
 const ICON_SETTING_KEYS: "showIcon"[] = ["showIcon"];
 
@@ -385,7 +385,7 @@ function getProfileEffectPreview(effect: ProfileEffect) {
 }
 
 function showLarpCordToast(message: string) {
-    Toasts.show({ message, type: Toasts.Type.SUCCESS, id: Toasts.genId() });
+    showToast(message, "success");
 }
 
 interface CustomProfileData {
@@ -1330,17 +1330,7 @@ function CustomProfileModal(rootProps: RenderModalProps) {
                         style={{ color: "var(--text-link)", cursor: "pointer", fontWeight: 500 }}
                         onClick={() => {
                             rootProps.onClose();
-                            try {
-                                SettingsRouter.openUserSettings("equicord_main");
-                            } catch {
-                                try {
-                                    SettingsRouter.open("equicord_main");
-                                } catch {
-                                    try {
-                                        FluxDispatcher.dispatch({ type: "USER_SETTINGS_MODAL_OPEN", section: "equicord_main" });
-                                    } catch { }
-                                }
-                            }
+                            void SettingsRouter.openUserSettings("equicord_main");
                         }}
                     >
                         LarpCord changes stay on this client. Right click another user to import their public profile into your local preview.

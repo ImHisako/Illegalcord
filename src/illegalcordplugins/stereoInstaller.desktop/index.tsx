@@ -16,7 +16,7 @@ import SettingsPlugin from "@plugins/_core/settings";
 import { EquicordDevs } from "@utils/constants";
 import { classes, removeFromArray } from "@utils/misc";
 import definePlugin, { OptionType, PluginNative, ReporterTestable } from "@utils/types";
-import { Alerts, Button, React, Select, SettingsRouter, showToast, TextInput, Toasts } from "@webpack/common";
+import { Alerts, Button, React, Select, SettingsRouter, showToast, TextInput } from "@webpack/common";
 
 import type { ActionInfo, InstallInfo, NativeResult } from "./native";
 
@@ -195,7 +195,7 @@ function StereoInstallerPanel() {
 
             if (!result.success) {
                 setStatus(result.error);
-                showToast(result.error, Toasts.Type.FAILURE);
+                showToast(result.error, "failure");
                 return null;
             }
 
@@ -227,7 +227,7 @@ function StereoInstallerPanel() {
         settings.store.logRestartCount = 0;
         setLogs([]);
         setStatus("Logs cleared.");
-        showToast("StereoInstaller logs cleared.", Toasts.Type.SUCCESS);
+        showToast("StereoInstaller logs cleared.", "success");
     }
 
     async function browse(): Promise<void> {
@@ -243,7 +243,7 @@ function StereoInstallerPanel() {
     async function runAction(kind: "patch" | "revert" | "method2Index"): Promise<void> {
         if (!root.trim()) {
             setStatus("Choose a Discord install folder first.");
-            showToast("Choose a Discord install folder first.", Toasts.Type.FAILURE);
+            showToast("Choose a Discord install folder first.", "failure");
             return;
         }
 
@@ -259,7 +259,7 @@ function StereoInstallerPanel() {
         settings.store.logRestartCount = 0;
         setInfo(result);
         setStatus("Discord will close now. Check the StereoInstaller log if it does not reopen.");
-        showToast("Discord will close now to finish StereoInstaller.", Toasts.Type.SUCCESS);
+        showToast("Discord will close now to finish StereoInstaller.", "success");
     }
 
     function confirmPatch(): void {
@@ -320,7 +320,7 @@ function StereoInstallerPanel() {
     function selectInstallerMethod(value: InstallerMethod): void {
         if (value === "method2" && voicePlaygroundUnavailable) {
             setStatus("Voice Playground Method is only available on Windows. Linux support is handled by Discord Audio Collective Method.");
-            showToast("Voice Playground Method is only available on Windows.", Toasts.Type.FAILURE);
+            showToast("Voice Playground Method is only available on Windows.", "failure");
             return;
         }
 

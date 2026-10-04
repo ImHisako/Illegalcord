@@ -15,7 +15,7 @@ import { Margins } from "@utils/margins";
 import { isObject, parseUrl } from "@utils/misc";
 import definePlugin from "@utils/types";
 import type { Message, MessageAttachment } from "@vencord/discord-types";
-import { Button, ChannelStore, ConfirmModal, DraftType, openModal, showToast, Toasts, UploadHandler } from "@webpack/common";
+import { Button, ChannelStore, ConfirmModal, DraftType, openModal, showToast, UploadHandler } from "@webpack/common";
 
 const FILE_NAME = "illegalcord-config.json";
 const FORMAT = "illegalcord-shared-config";
@@ -139,10 +139,10 @@ async function applySharedConfig(attachment: MessageAttachment): Promise<void> {
 
         const settings = sanitizeObject(parsed.settings, "", []);
         await importSettings(JSON.stringify({ settings }), "plugins");
-        showToast("Configuration applied. Restart Illegalcord to finish applying the changes.", Toasts.Type.SUCCESS);
+        showToast("Configuration applied. Restart Illegalcord to finish applying the changes.", "success");
     } catch (error) {
         logger.error("Failed to import shared configuration", error);
-        showToast(error instanceof Error ? error.message : "Failed to import the configuration.", Toasts.Type.FAILURE);
+        showToast(error instanceof Error ? error.message : "Failed to import the configuration.", "failure");
     }
 }
 
@@ -255,7 +255,7 @@ export default definePlugin({
                 setTimeout(() => UploadHandler.promptToUpload([file], context.channel, DraftType.ChannelMessage), 10);
             } catch (error) {
                 logger.error("Failed to prepare shared configuration", error);
-                showToast(error instanceof Error ? error.message : "Failed to prepare the configuration.", Toasts.Type.FAILURE);
+                showToast(error instanceof Error ? error.message : "Failed to prepare the configuration.", "failure");
             }
         }
     }],

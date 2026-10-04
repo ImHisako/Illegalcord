@@ -19,8 +19,8 @@ import { Switch } from "@components/Switch";
 import { classNameFactory } from "@utils/css";
 import { Margins } from "@utils/margins";
 import { sleep } from "@utils/misc";
-import type { RenderModalProps, User } from "@vencord/discord-types";
-import { Alerts, ChannelStore, IconUtils, MessageActions, Modal, NavigationRouter, openModal, React, Select, TextInput, Toasts, UserStore, UserUtils, useStateFromStores } from "@webpack/common";
+import type { RenderModalProps, ToastType, User } from "@vencord/discord-types";
+import { Alerts, ChannelStore, IconUtils, MessageActions, Modal, NavigationRouter, openModal, React, Select, showToast as showDiscordToast, TextInput, UserStore, UserUtils, useStateFromStores } from "@webpack/common";
 
 import { BRAND_ICON_DATA_URL, BRAND_NAME } from "../_kamidereCompat/branding";
 import { removeKamidereRuntimeTask, upsertKamidereRuntimeTask } from "../_kamidereCompat/runtimeActivity";
@@ -97,15 +97,8 @@ interface DmUserContact {
     avatarUrl: string;
 }
 
-function showToast(message: string, type: typeof Toasts.Type[keyof typeof Toasts.Type]) {
-    Toasts.show({
-        message,
-        type,
-        id: Toasts.genId(),
-        options: {
-            position: Toasts.Position.BOTTOM,
-        },
-    });
+function showToast(message: string, type: ToastType) {
+    showDiscordToast(message, type, { position: 1 });
 }
 
 function makeEmptyPurgeStatus(): PurgeStatusState {
@@ -465,12 +458,12 @@ function SendTrailConfigModal({
         const normalized = manualProtectedDmUserId.trim();
 
         if (!/^\d{5,24}$/.test(normalized)) {
-            showToast("Enter a numeric Discord user ID to save a friend rule.", Toasts.Type.FAILURE);
+            showToast("Enter a numeric Discord user ID to save a friend rule.", "failure");
             return;
         }
 
         if (protectedDmUserIds.has(normalized)) {
-            showToast("That DM user ID is already protected.", Toasts.Type.FAILURE);
+            showToast("That DM user ID is already protected.", "failure");
             return;
         }
 
@@ -478,7 +471,7 @@ function SendTrailConfigModal({
         next.add(normalized);
         updateProtectedDmUserIds(next);
         setManualProtectedDmUserId("");
-        showToast("Saved permanent DM protection for that user ID.", Toasts.Type.SUCCESS);
+        showToast("Saved permanent DM protection for that user ID.", "success");
     }, [manualProtectedDmUserId, protectedDmUserIds, updateProtectedDmUserIds]);
 
     React.useEffect(() => {
@@ -1200,7 +1193,7 @@ function SendTrailTab() {
                 currentLabel: undefined,
             } satisfies PurgeStatusState;
             applyPurgeStatus(nextStatus, startedAt);
-            showToast("Nothing in the current purge target is allowed by your purge config.", Toasts.Type.FAILURE);
+            showToast("Nothing in the current purge target is allowed by your purge config.", "failure");
             return;
         }
 
@@ -1284,11 +1277,11 @@ function SendTrailTab() {
         applyPurgeStatus(finishedStatus, startedAt);
 
         if (phase === "success") {
-            showToast(`Purged ${deleted} message${deleted === 1 ? "" : "s"} from Discord.`, Toasts.Type.SUCCESS);
+            showToast(`Purged ${deleted} message${deleted === 1 ? "" : "s"} from Discord.`, "success");
         } else if (phase === "partial") {
-            showToast(`Purged ${deleted} message${deleted === 1 ? "" : "s"}, but ${failed} failed.`, Toasts.Type.FAILURE);
+            showToast(`Purged ${deleted} message${deleted === 1 ? "" : "s"}, but ${failed} failed.`, "failure");
         } else {
-            showToast("No selected messages could be purged from Discord.", Toasts.Type.FAILURE);
+            showToast("No selected messages could be purged from Discord.", "failure");
         }
     }, [applyPurgeStatus, currentUserId, protectedDmChannels, protectedDmUserIds, purgeConfig.protectAllDms, purgeTarget, updateDeletingId]);
 
@@ -1322,7 +1315,7 @@ function SendTrailTab() {
             async onConfirm() {
                 await clearSentTrailRecords(currentUserId);
                 setSelectedIds(new Set());
-                showToast("Cleared local Send Trail history.", Toasts.Type.SUCCESS);
+                showToast("Cleared local Send Trail history.", "success");
             },
         });
     }, [currentUserId, records.length]);

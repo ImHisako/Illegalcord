@@ -20,7 +20,7 @@ import { useFixedTimer } from "@utils/react";
 import { formatDurationMs } from "@utils/text";
 import definePlugin, { OptionType, type PluginNative } from "@utils/types";
 import type { Message, Stream } from "@vencord/discord-types";
-import { ApplicationStreamingStore, ChannelActions, ChannelStore, Clickable, FluxDispatcher, GuildMemberStore, IconUtils, MaskedLink, MediaEngineStore, MessageStore, ReactDOM, showToast, Toasts, Tooltip, useEffect, useLayoutEffect, useRef, UserGuildSettingsStore, UserStore, useState, useStateFromStores, VoiceActions, VoiceStateStore } from "@webpack/common";
+import { ApplicationStreamingStore, ChannelActions, ChannelStore, Clickable, FluxDispatcher, GuildMemberStore, IconUtils, MaskedLink, MediaEngineStore, MessageStore, ReactDOM, showToast, Tooltip, useEffect, useLayoutEffect, useRef, UserGuildSettingsStore, UserStore, useState, useStateFromStores, VoiceActions, VoiceStateStore } from "@webpack/common";
 import type { MouseEvent, PointerEvent, ReactNode, SVGProps } from "react";
 
 import type { SoundCloudTrack } from "./native";
@@ -301,10 +301,10 @@ function SpotifySection() {
 async function controlSoundCloud(action: "play" | "pause" | "previous" | "next") {
     if (!Native) return;
     try {
-        if (!await Native.control(action)) showToast("SoundCloud is no longer connected.", Toasts.Type.FAILURE);
+        if (!await Native.control(action)) showToast("SoundCloud is no longer connected.", "failure");
     } catch {
         logger.error("Could not control SoundCloud playback through WebNowPlaying.");
-        showToast("Could not control SoundCloud playback.", Toasts.Type.FAILURE);
+        showToast("Could not control SoundCloud playback.", "failure");
     }
 }
 
@@ -436,7 +436,7 @@ function DynamicIsland() {
         setBrowserTrack(null);
         if (!showSoundCloudIsland || IS_WEB) return;
         if (!Native) {
-            showToast("Restart Discord completely to load SoundCloud support.", Toasts.Type.FAILURE);
+            showToast("Restart Discord completely to load SoundCloud support.", "failure");
             return;
         }
 
@@ -448,7 +448,7 @@ function DynamicIsland() {
                 if (disposed) return;
                 setBrowserTrack(state.track);
                 if (state.error) {
-                    showToast(state.error, Toasts.Type.FAILURE);
+                    showToast(state.error, "failure");
                     return;
                 }
                 timeoutId = window.setTimeout(() => void update(false), 1000);
@@ -456,7 +456,7 @@ function DynamicIsland() {
                 if (disposed) return;
                 setBrowserTrack(null);
                 logger.error("Could not read SoundCloud playback from WebNowPlaying.");
-                showToast("Could not connect to WebNowPlaying. Restart Discord and try again.", Toasts.Type.FAILURE);
+                showToast("Could not connect to WebNowPlaying. Restart Discord and try again.", "failure");
             }
         };
         void update(true);

@@ -8,7 +8,7 @@ import { definePluginSettings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
-import { showToast, Toasts } from "@webpack/common";
+import { showToast } from "@webpack/common";
 
 import type { DnsFamily, DnsResolveResult } from "./native";
 
@@ -274,7 +274,7 @@ const log = {
     }
 };
 
-function showPluginToast(message: string, type = Toasts.Type.MESSAGE) {
+function showPluginToast(message: string, type: "message" | "success" | "failure" = "message") {
     if (settings.store.showNotifications) {
         showToast(`[CustomDNS] ${message}`, type);
     }
@@ -506,7 +506,7 @@ export default definePlugin({
 
                     statistics.successfulResolutions++;
                     log.info(`Rewrote ${url.hostname} to ${address}.`);
-                    showPluginToast(`Resolved ${url.hostname} through ${getProviderName()}.`, Toasts.Type.SUCCESS);
+                    showPluginToast(`Resolved ${url.hostname} through ${getProviderName()}.`, "success");
 
                     return originalFetch.call(window, rewrittenInput, init);
                 } catch (error) {
@@ -535,13 +535,13 @@ export default definePlugin({
 
                 if (!Native) {
                     log.error("Native resolver is not available.");
-                    showPluginToast("Native resolver is not available.", Toasts.Type.FAILURE);
+                    showPluginToast("Native resolver is not available.", "failure");
                     return;
                 }
 
                 if (settings.store.dnsProvider === DnsProvider.CUSTOM && !getCustomServers(4).length && !getCustomServers(6).length) {
                     log.error("Custom DNS is selected, but no resolver address is configured.");
-                    showPluginToast("Add a custom DNS resolver before starting.", Toasts.Type.FAILURE);
+                    showPluginToast("Add a custom DNS resolver before starting.", "failure");
                     return;
                 }
 
@@ -555,7 +555,7 @@ export default definePlugin({
                     log.warn("Fetch URL rewriting is experimental and can break HTTPS requests.");
 
                     if (!patchFetch()) {
-                        showPluginToast("Fetch patch failed.", Toasts.Type.FAILURE);
+                        showPluginToast("Fetch patch failed.", "failure");
                         return;
                     }
                 } else {
@@ -563,7 +563,7 @@ export default definePlugin({
                 }
 
                 isActive = true;
-                showPluginToast(`${PLUGIN_NAME} activated with ${getProviderName()}.`, Toasts.Type.SUCCESS);
+                showPluginToast(`${PLUGIN_NAME} activated with ${getProviderName()}.`, "success");
             },
 
             stop() {

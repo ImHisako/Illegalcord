@@ -24,7 +24,7 @@ import { getIntlMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
 import type { RenderModalProps } from "@vencord/discord-types";
 import { findComponentByCodeLazy } from "@webpack";
-import { ChannelRTCStore, Forms, Menu, Modal, openModal, showToast, TextInput, Toasts, UserStore, useState } from "@webpack/common";
+import { ChannelRTCStore, Forms, Menu, Modal, openModal, showToast, TextInput, UserStore, useState } from "@webpack/common";
 
 import { PluginInfo } from "../betterScreenshare.desktop/constants";
 import { openScreenshareModal } from "../betterScreenshare.desktop/modals";
@@ -135,7 +135,7 @@ function refreshActiveScreenshareOptions() {
 
 function notifyQuickSettingsChange(label: string) {
     refreshActiveScreenshareOptions();
-    showToast(`BetterScreenshare: ${label} applied.`, Toasts.Type.SUCCESS);
+    showToast(`BetterScreenshare: ${label} applied.`, "success");
 }
 
 function isCompleteQualityProfile(profile: ScreenshareProfile): profile is ScreenshareProfile & Required<Pick<ScreenshareProfile, "width" | "height" | "framerate" | "videoBitrate">> {
@@ -218,7 +218,7 @@ function saveCustomQualityPreset(name: string, preset: QuickQualityPreset) {
 
     store.saveProfile(profile);
     store.setCurrentProfile(profile);
-    showToast(`BetterScreenshare: ${name} saved.`, Toasts.Type.SUCCESS);
+    showToast(`BetterScreenshare: ${name} saved.`, "success");
 }
 
 function updateCurrentProfile(profile: Partial<NamedScreenshareProfile>) {
@@ -281,7 +281,7 @@ function openCreateQualityPresetModal() {
     const preset = profileToQualityPreset({ ...screenshareStore.get().currentProfile, name: "" });
 
     if (!preset) {
-        showToast("Set resolution, framerate and video bitrate before saving a preset.", Toasts.Type.FAILURE);
+        showToast("Set resolution, framerate and video bitrate before saving a preset.", "failure");
         return;
     }
 

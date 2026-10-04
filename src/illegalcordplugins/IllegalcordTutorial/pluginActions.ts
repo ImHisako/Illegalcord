@@ -7,7 +7,7 @@
 import { isPluginEnabled, pluginRequiresRestart, plugins, startDependenciesRecursive, startPlugin } from "@api/PluginManager";
 import { Settings } from "@api/Settings";
 import { openPluginModal } from "@components/settings/tabs/plugins/PluginModal";
-import { SettingsRouter, showToast, Toasts } from "@webpack/common";
+import { SettingsRouter, showToast } from "@webpack/common";
 
 import { type Language, RECOMMENDED_PLUGIN_NAMES, type RecommendedPluginName, UI_COPY } from "./data";
 
@@ -42,7 +42,7 @@ export function openSettingsPanel(panel: string | undefined) {
 export function openRecommendedPluginSettings(pluginName: RecommendedPluginName, language: Language) {
     const plugin = plugins[pluginName];
     if (!plugin) {
-        showToast(UI_COPY[language].missing, Toasts.Type.MESSAGE);
+        showToast(UI_COPY[language].missing, "message");
         return;
     }
 
@@ -81,7 +81,7 @@ export function enableSelectedRecommendations(selected: RecommendationState, lan
     const copy = UI_COPY[language];
 
     if (!results.length) {
-        showToast(copy.noSelection, Toasts.Type.MESSAGE);
+        showToast(copy.noSelection, "message");
         return;
     }
 
@@ -91,19 +91,19 @@ export function enableSelectedRecommendations(selected: RecommendationState, lan
     const failed = results.filter(result => result === "failed").length;
 
     if (failed) {
-        showToast(copy.failed, Toasts.Type.FAILURE);
+        showToast(copy.failed, "failure");
         return;
     }
 
     if (restart) {
-        showToast(copy.restart(enabled + restart), Toasts.Type.MESSAGE);
+        showToast(copy.restart(enabled + restart), "message");
         return;
     }
 
     if (missing) {
-        showToast(copy.missing, Toasts.Type.MESSAGE);
+        showToast(copy.missing, "message");
         return;
     }
 
-    showToast(copy.enabled(enabled), Toasts.Type.SUCCESS);
+    showToast(copy.enabled(enabled), "success");
 }

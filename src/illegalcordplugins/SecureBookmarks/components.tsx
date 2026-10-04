@@ -10,7 +10,7 @@ import { classNameFactory } from "@utils/css";
 import { copyWithToast, openImageModal } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import type { RenderModalProps } from "@vencord/discord-types";
-import { Alerts, Button, Clickable, closeModal, Menu, Modal, NavigationRouter, openModal, Parser, showToast, TextInput, Toasts, useEffect, useState } from "@webpack/common";
+import { Alerts, Button, Clickable, closeModal, Menu, Modal, NavigationRouter, openModal, Parser, showToast, TextInput, useEffect, useState } from "@webpack/common";
 import type { ReactNode } from "react";
 
 import { PASSWORD_KEYS, settings } from "./settings";
@@ -162,7 +162,7 @@ function BookmarksList({ password }: BookmarksListProps) {
     const remove = (id: string) => {
         void removeBookmark(id)
             .then(reload)
-            .then(() => showToast("Bookmark removed.", Toasts.Type.SUCCESS));
+            .then(() => showToast("Bookmark removed.", "success"));
     };
 
     const confirmClear = () => {
@@ -175,7 +175,7 @@ function BookmarksList({ password }: BookmarksListProps) {
             onConfirm: () => {
                 void clearBookmarks()
                     .then(reload)
-                    .then(() => showToast("Bookmarks cleared.", Toasts.Type.SUCCESS));
+                    .then(() => showToast("Bookmarks cleared.", "success"));
             }
         });
     };
@@ -300,7 +300,7 @@ export function renderSecureBookmarksToolboxMenu() {
                     void cleanupExpiredBookmarks()
                         .then(store => {
                             setCount(store.records.length);
-                            showToast("Expired bookmarks cleared.", Toasts.Type.SUCCESS);
+                            showToast("Expired bookmarks cleared.", "success");
                         });
                 }}
             />

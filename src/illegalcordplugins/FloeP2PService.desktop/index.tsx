@@ -17,7 +17,7 @@ import { Logger } from "@utils/Logger";
 import { Margins } from "@utils/margins";
 import definePlugin, { type PluginNative, ReporterTestable } from "@utils/types";
 import type { CommandArgument, CommandContext, RenderModalProps } from "@vencord/discord-types";
-import { Button, MaskedLink, Menu, Modal, openModal, showToast, TextInput, Toasts, useState } from "@webpack/common";
+import { Button, MaskedLink, Menu, Modal, openModal, showToast, TextInput, useState } from "@webpack/common";
 
 import type { FloeCommandResult, FloeSession, NativeResult } from "./native";
 
@@ -49,7 +49,7 @@ const SafeFloeP2PSettingsAbout = ErrorBoundary.wrap(FloeP2PSettingsAbout, { noop
 async function runNativeAction<T>(action: FloeAction<T>, fallbackError: string): Promise<T | null> {
     const native = Native;
     if (!native) {
-        showToast("Floe native helper is not available. Restart Discord.", Toasts.Type.FAILURE);
+        showToast("Floe native helper is not available. Restart Discord.", "failure");
         return null;
     }
 
@@ -62,7 +62,7 @@ async function runNativeAction<T>(action: FloeAction<T>, fallbackError: string):
 
         if (!result.success || !result.data) {
             logger.warn(formatNativeActionLog("Floe native action failed.", fallbackError, result));
-            showToast(result.error ?? fallbackError, Toasts.Type.FAILURE);
+            showToast(result.error ?? fallbackError, "failure");
             return null;
         }
 
@@ -70,7 +70,7 @@ async function runNativeAction<T>(action: FloeAction<T>, fallbackError: string):
         return result.data;
     } catch (error) {
         logger.error(fallbackError, error);
-        showToast(fallbackError, Toasts.Type.FAILURE);
+        showToast(fallbackError, "failure");
         return null;
     }
 }
@@ -99,11 +99,11 @@ function publishSendSession(session: FloeSession): void {
     const shareText = getShareText(session);
     if (shareText) {
         insertTextIntoChatInputBox(shareText + " ");
-        showToast("Floe link inserted in chat.", Toasts.Type.SUCCESS);
+        showToast("Floe link inserted in chat.", "success");
         return;
     }
 
-    showToast("Floe started, but no code or link was printed yet.", Toasts.Type.MESSAGE);
+    showToast("Floe started, but no code or link was printed yet.", "message");
 }
 
 async function sendFiles(): Promise<void> {
@@ -120,21 +120,21 @@ async function installFloe(): Promise<void> {
     const result = await runNativeAction(native => native.installFloe(), "Could not install Floe.");
     if (!result) return;
 
-    showToast("Floe install finished.", Toasts.Type.SUCCESS);
+    showToast("Floe install finished.", "success");
 }
 
 async function updateFloe(): Promise<void> {
     const result = await runNativeAction(native => native.updateFloe(), "Could not update Floe.");
     if (!result) return;
 
-    showToast("Floe update finished.", Toasts.Type.SUCCESS);
+    showToast("Floe update finished.", "success");
 }
 
 async function cancelLatestSession(): Promise<void> {
     const session = await runNativeAction(native => native.cancelLatestSession(), "Could not cancel the Floe session.");
     if (!session) return;
 
-    showToast("Floe session cancelled.", Toasts.Type.SUCCESS);
+    showToast("Floe session cancelled.", "success");
 }
 
 function formatSession(session: FloeSession): string {
@@ -185,7 +185,7 @@ function ReceiveModal({ modalProps }: { modalProps: RenderModalProps; }) {
 
     async function receive(): Promise<void> {
         if (!locator.trim()) {
-            showToast("Enter a Floe code or link.", Toasts.Type.FAILURE);
+            showToast("Enter a Floe code or link.", "failure");
             return;
         }
 
@@ -194,7 +194,7 @@ function ReceiveModal({ modalProps }: { modalProps: RenderModalProps; }) {
             const session = await runNativeAction(native => native.startReceive(locator, outputDir), "Could not start Floe receive.");
             if (!session) return;
 
-            showToast("Floe receive session started.", Toasts.Type.SUCCESS);
+            showToast("Floe receive session started.", "success");
             modalProps.onClose();
         } finally {
             setBusy(false);

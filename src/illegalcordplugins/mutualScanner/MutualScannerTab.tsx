@@ -19,7 +19,8 @@ import { Switch } from "@components/Switch";
 import { classNameFactory } from "@utils/css";
 import { openUserProfile } from "@utils/discord";
 import { Margins } from "@utils/margins";
-import { Alerts, GuildMemberCountStore, GuildMemberStore, GuildStore, React, Toasts, useStateFromStores } from "@webpack/common";
+import type { ToastType } from "@vencord/discord-types";
+import { Alerts, GuildMemberCountStore, GuildMemberStore, GuildStore, React, showToast as showDiscordToast, useStateFromStores } from "@webpack/common";
 
 import { BRAND_ICON_DATA_URL, BRAND_NAME } from "../_kamidereCompat/branding";
 import {
@@ -95,15 +96,8 @@ type LiveRuntimeMatch = {
     exiting: boolean;
 };
 
-function showToast(message: string, type: typeof Toasts.Type[keyof typeof Toasts.Type]) {
-    Toasts.show({
-        message,
-        type,
-        id: Toasts.genId(),
-        options: {
-            position: Toasts.Position.BOTTOM,
-        },
-    });
+function showToast(message: string, type: ToastType) {
+    showDiscordToast(message, type, { position: 1 });
 }
 
 function clampNumber(value: number, min: number, max: number) {
@@ -311,7 +305,7 @@ function MatchRow({ match, compact = false }: { match: MutualScannerMatch; compa
                         className={cl("match-profile-trigger")}
                         onClick={() => {
                             void openUserProfile(match.userId).catch(() => {
-                                showToast("Could not open that profile.", Toasts.Type.FAILURE);
+                                showToast("Could not open that profile.", "failure");
                             });
                         }}
                     >
@@ -909,7 +903,7 @@ function MutualScannerTab() {
             cancelText: "Cancel",
             async onConfirm() {
                 await clearMutualScannerRuns(currentUserId);
-                showToast("Cleared local Mutual Scanner history.", Toasts.Type.SUCCESS);
+                showToast("Cleared local Mutual Scanner history.", "success");
             },
         });
     }, [currentUserId]);
@@ -923,7 +917,7 @@ function MutualScannerTab() {
             async onConfirm() {
                 await clearHydratedGuildSnapshots(currentUserId);
                 await refreshHydrationSnapshots();
-                showToast("Cleared local hydration cache.", Toasts.Type.SUCCESS);
+                showToast("Cleared local hydration cache.", "success");
             },
         });
     }, [currentUserId, refreshHydrationSnapshots]);
@@ -931,13 +925,13 @@ function MutualScannerTab() {
     const clearHydrationCacheEntry = React.useCallback(async (guildId: string) => {
         await clearHydratedGuildSnapshot(currentUserId, guildId);
         await refreshHydrationSnapshots();
-        showToast("Removed guild hydration snapshot.", Toasts.Type.SUCCESS);
+        showToast("Removed guild hydration snapshot.", "success");
     }, [currentUserId, refreshHydrationSnapshots]);
 
     const startWarmupForGuildIds = React.useCallback((guildIds: string[], successLabel: string, failureLabel: string) => {
         if (!currentUserId) return;
         if (guildIds.length === 0) {
-            showToast(failureLabel, Toasts.Type.FAILURE);
+            showToast(failureLabel, "failure");
             return;
         }
 
@@ -948,11 +942,11 @@ function MutualScannerTab() {
         });
 
         if (!started) {
-            showToast("Manual cache warmup could not start.", Toasts.Type.FAILURE);
+            showToast("Manual cache warmup could not start.", "failure");
             return;
         }
 
-        showToast(successLabel, Toasts.Type.SUCCESS);
+        showToast(successLabel, "success");
     }, [currentUserId, data.config.warmupMemberBudget, data.config.warmupTimeoutMs]);
 
     const retryWeakGuilds = React.useCallback(() => {
@@ -980,7 +974,7 @@ function MutualScannerTab() {
 
         if (!currentUserId) return;
         if (data.config.selectedGuildIds.length === 0) {
-            showToast("Select at least one server before warming the cache.", Toasts.Type.FAILURE);
+            showToast("Select at least one server before warming the cache.", "failure");
             return;
         }
 
@@ -991,14 +985,14 @@ function MutualScannerTab() {
         });
 
         if (!started) {
-            showToast("Manual cache warmup could not start.", Toasts.Type.FAILURE);
+            showToast("Manual cache warmup could not start.", "failure");
         }
     }, [currentUserId, data.config.selectedGuildIds, data.config.warmupMemberBudget, data.config.warmupTimeoutMs, isManualWarmupRunning]);
 
     const startRun = React.useCallback(() => {
         if (!currentUserId) return;
         if (data.config.selectedGuildIds.length === 0) {
-            showToast("Select at least one server before starting the scan.", Toasts.Type.FAILURE);
+            showToast("Select at least one server before starting the scan.", "failure");
             return;
         }
 
@@ -1010,7 +1004,7 @@ function MutualScannerTab() {
 
         const started = startMutualScannerRun(currentUserId, data.config);
         if (!started) {
-            showToast("Mutual scan could not start.", Toasts.Type.FAILURE);
+            showToast("Mutual scan could not start.", "failure");
         }
     }, [clearScanStatusTimers, currentUserId, data.config]);
     const runDuration = React.useMemo(() => {

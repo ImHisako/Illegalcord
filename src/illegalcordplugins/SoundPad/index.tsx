@@ -17,7 +17,7 @@ import { Logger } from "@utils/Logger";
 import definePlugin, { makeRange, OptionType } from "@utils/types";
 import { chooseFile } from "@utils/web";
 import type { AudioDevice, RenderModalProps } from "@vencord/discord-types";
-import { MediaEngineStore, Modal, openModal, React, SearchableSelect, Toasts } from "@webpack/common";
+import { MediaEngineStore, Modal, openModal, React, SearchableSelect,showToast } from "@webpack/common";
 
 import {
     addSound,
@@ -97,10 +97,6 @@ function getDeviceOptions(devices: AudioDevice[], defaultLabel: string) {
     return options;
 }
 
-function showToast(message: string, type: typeof Toasts.Type[keyof typeof Toasts.Type]) {
-    Toasts.show({ message, type, id: Toasts.genId() });
-}
-
 function formatSize(size: number) {
     return size < 1024 * 1024
         ? `${Math.ceil(size / 1024)} KB`
@@ -112,7 +108,7 @@ async function addAudioFile() {
     if (!file) return;
 
     if (!file.type.startsWith("audio/") && !/\.(?:mp3|wav|ogg|flac|m4a|aac|opus|webm)$/i.test(file.name)) {
-        showToast("The selected file does not appear to be audio.", Toasts.Type.FAILURE);
+        showToast("The selected file does not appear to be audio.", "failure");
         return;
     }
 
@@ -129,7 +125,7 @@ async function startSound(sound: SoundPadSound) {
         );
     } catch (error) {
         logger.error("Could not route the selected audio file.", error);
-        showToast("Could not play audio through the selected device.", Toasts.Type.FAILURE);
+        showToast("Could not play audio through the selected device.", "failure");
     }
 }
 
@@ -140,7 +136,7 @@ async function toggleMicrophone(enabled: boolean) {
     }
 
     if (settings.store.outputDeviceId === "default") {
-        showToast("Select a virtual audio cable as the output first.", Toasts.Type.FAILURE);
+        showToast("Select a virtual audio cable as the output first.", "failure");
         return;
     }
 
@@ -150,10 +146,10 @@ async function toggleMicrophone(enabled: boolean) {
             settings.store.outputDeviceId,
             settings.store.microphoneVolume
         );
-        showToast("Physical microphone added to the mix.", Toasts.Type.SUCCESS);
+        showToast("Physical microphone added to the mix.", "success");
     } catch (error) {
         logger.error("Could not route the physical microphone.", error);
-        showToast("Could not connect the physical microphone.", Toasts.Type.FAILURE);
+        showToast("Could not connect the physical microphone.", "failure");
     }
 }
 

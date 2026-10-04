@@ -10,7 +10,7 @@ import { AttachmentIcon, LogsIcon } from "@components/Icons";
 import { copyWithToast, openUserProfile } from "@utils/discord";
 import { parseUrl } from "@utils/misc";
 import type { RenderModalProps } from "@vencord/discord-types";
-import { Alerts, ChannelStore, GuildStore, lodash, MaskedLink, Modal, NavigationRouter, openModal, Parser, ScrollerThin, showToast, TextInput, Toasts, useEffect, useMemo, useRef, useState } from "@webpack/common";
+import { Alerts, ChannelStore, GuildStore, lodash, MaskedLink, Modal, NavigationRouter, openModal, Parser, ScrollerThin, showToast, TextInput, useEffect, useMemo, useRef, useState } from "@webpack/common";
 
 import { getLogPage, getLogStats, runMaintenance, setLogProtected, setLogsProtected } from "./db";
 import { clearAllLogs, deleteLog, deleteManyLogs, flushQueuedLogs } from "./engine";
@@ -249,7 +249,7 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
             if (reload) refresh();
         } catch (error) {
             if (error instanceof DOMException && error.name === "AbortError") return;
-            showToast(error instanceof Error ? error.message : "The log action failed. Please try again.", Toasts.Type.FAILURE);
+            showToast(error instanceof Error ? error.message : "The log action failed. Please try again.", "failure");
         } finally {
             setBusy(false);
         }
@@ -282,7 +282,7 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
         await runAction(async () => {
             await flushQueuedLogs();
             const count = await exportLogs();
-            showToast(`Exported ${count} message logs.`, Toasts.Type.SUCCESS);
+            showToast(`Exported ${count} message logs.`, "success");
         }, false);
     }
 
@@ -290,7 +290,7 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
         await runAction(async () => {
             const count = await importLogs();
             if (count == null) return;
-            showToast(`Imported ${count} message logs.`, Toasts.Type.SUCCESS);
+            showToast(`Imported ${count} message logs.`, "success");
         });
     }
 
@@ -410,7 +410,7 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
                                 settings.store.messageLimit = limit;
                                 await flushQueuedLogs();
                                 await runMaintenance(limit, 0);
-                                showToast("Saved message limit applied.", Toasts.Type.SUCCESS);
+                                showToast("Saved message limit applied.", "success");
                             })}>Apply limit</Button>
                         </div>
                         <p id="illegal-ml-message-limit-help">Use a whole number of 0 or greater. 0 means no limit. Applying a limit removes the oldest unprotected logs. Protected logs are always kept, even above the limit.</p>

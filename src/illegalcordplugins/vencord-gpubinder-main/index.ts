@@ -8,7 +8,7 @@ import { definePluginSettings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
 import { useAwaiter } from "@utils/react";
 import definePlugin, { OptionType, type PluginNative } from "@utils/types";
-import { Forms, React, Select, Toasts, useState } from "@webpack/common";
+import { Forms, React, Select, showToast, useState } from "@webpack/common";
 
 import type { GpuInfo, GpuState } from "./native";
 
@@ -91,19 +91,13 @@ const settings = definePluginSettings({
             try {
                 const result = await Native.applyGpuPreference(String(newValue));
                 if (result.changed) {
-                    Toasts.show({
-                        message: result.selectedGpu
+                    showToast(result.selectedGpu
                             ? `Discord pinned to ${result.selectedGpu.name}. Fully close Discord with Alt+F4 or tray Quit, then reopen it.`
-                            : "Discord GPU preference updated. Fully close Discord with Alt+F4 or tray Quit, then reopen it.",
-                        type: Toasts.Type.SUCCESS,
-                    });
+                            : "Discord GPU preference updated. Fully close Discord with Alt+F4 or tray Quit, then reopen it.", "success");
                 }
             } catch (err) {
                 console.error("[GpuBinder] Failed to update GPU preference:", err);
-                Toasts.show({
-                    message: "Failed to update Discord GPU preference. Check the console for details.",
-                    type: Toasts.Type.FAILURE,
-                });
+                showToast("Failed to update Discord GPU preference. Check the console for details.", "failure");
             }
         },
     },

@@ -15,7 +15,7 @@ import { EquicordDevs } from "@utils/constants";
 import { sendMessage } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
-import { ChannelStore, showToast, Toasts, UserStore } from "@webpack/common";
+import { ChannelStore, showToast, UserStore } from "@webpack/common";
 
 import { buildDecryptModal } from "./decryptModal";
 import { buildModal } from "./modal";
@@ -565,7 +565,7 @@ async function signMessage(text: string): Promise<string> {
             privateKey = privateKeyObj;
         }
     } catch (e) {
-        showToast("Cannot read your private key", Toasts.Type.FAILURE);
+        showToast("Cannot read your private key", "failure");
         throw e;
     }
 
@@ -760,7 +760,7 @@ export default definePlugin({
                         const decrypted = await decryptMessage(message.content, message.author.id);
                         buildDecryptModal(decrypted.data, decrypted.verified);
                     } catch (error) {
-                        showToast(formatError(error), Toasts.Type.FAILURE);
+                        showToast(formatError(error), "failure");
                     }
                 }
             };

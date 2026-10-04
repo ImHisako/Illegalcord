@@ -12,7 +12,7 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { IconComponent, OptionType } from "@utils/types";
 import type { Channel, Message } from "@vencord/discord-types";
-import { ApplicationStreamingStore, Menu, React, showToast, StreamerModeStore, Toasts, useEffect, UserStore, useState, useStateFromStores } from "@webpack/common";
+import { ApplicationStreamingStore, Menu, React, showToast, StreamerModeStore, useEffect, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 import style from "./styles.css?managed";
 
@@ -212,7 +212,7 @@ function syncStyle() {
 function showStateToast(active: boolean) {
     if (!settings.store.showToasts) return;
 
-    showToast(active ? "StreamProof enabled." : "StreamProof disabled.", active ? Toasts.Type.SUCCESS : Toasts.Type.MESSAGE);
+    showToast(active ? "StreamProof enabled." : "StreamProof disabled.", active ? "success" : "message");
 }
 
 function applyStreamProof(showFeedback = false) {

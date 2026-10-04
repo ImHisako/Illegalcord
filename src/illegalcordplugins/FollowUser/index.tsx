@@ -19,7 +19,7 @@ import {
     PermissionsBits,
     PermissionStore,
     SelectedChannelStore,
-    Toasts,
+    showToast,
     UserStore,
     VoiceStateStore
 } from "@webpack/common";
@@ -139,55 +139,27 @@ function triggerFollow(userChannelId: string | null = VoiceStateStore.getVoiceSt
                 if (channel.type === 1 || PermissionStore.can(PermissionsBits.CONNECT, channel)) {
                     if (channel.userLimit > 0 && !PermissionStore.can(PermissionsBits.MOVE_MEMBERS, channel)
                         && Object.keys(VoiceStateStore.getVoiceStatesForChannel(userChannelId)).length >= channel.userLimit) {
-                        Toasts.show({
-                            message: "Channel is full",
-                            id: Toasts.genId(),
-                            type: Toasts.Type.FAILURE
-                        });
+                        showToast("Channel is full", "failure");
                         return;
                     }
                     ChannelActions.selectVoiceChannel(userChannelId);
-                    Toasts.show({
-                        message: "Followed user into a new voice channel",
-                        id: Toasts.genId(),
-                        type: Toasts.Type.SUCCESS
-                    });
+                    showToast("Followed user into a new voice channel", "success");
                 } else {
-                    Toasts.show({
-                        message: "Insufficient permissions to enter in the voice channel",
-                        id: Toasts.genId(),
-                        type: Toasts.Type.FAILURE
-                    });
+                    showToast("Insufficient permissions to enter in the voice channel", "failure");
                 }
             } else {
-                Toasts.show({
-                    message: "You are already in the same channel",
-                    id: Toasts.genId(),
-                    type: Toasts.Type.FAILURE
-                });
+                showToast("You are already in the same channel", "failure");
             }
         } else if (myChanId) {
             // if not in a voice channel and the setting is on disconnect
             if (settings.store.followLeave) {
                 ChannelActions.selectVoiceChannel(null);
-                Toasts.show({
-                    message: "Followed user left, disconnected",
-                    id: Toasts.genId(),
-                    type: Toasts.Type.SUCCESS
-                });
+                showToast("Followed user left, disconnected", "success");
             } else {
-                Toasts.show({
-                    message: "Followed user left, but not following disconnect",
-                    id: Toasts.genId(),
-                    type: Toasts.Type.FAILURE
-                });
+                showToast("Followed user left, but not following disconnect", "failure");
             }
         } else {
-            Toasts.show({
-                message: "Followed user is not in a voice channel",
-                id: Toasts.genId(),
-                type: Toasts.Type.FAILURE
-            });
+            showToast("Followed user is not in a voice channel", "failure");
         }
     }
 }

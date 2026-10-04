@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { GuildMemberCountStore, GuildStore, React, Toasts } from "@webpack/common";
+import type { ToastType } from "@vencord/discord-types";
+import { GuildMemberCountStore, GuildStore, React, showToast as showDiscordToast } from "@webpack/common";
 
 import {
     removeKamidereRuntimeTask,
@@ -34,15 +35,8 @@ import {
 const SCAN_TASK_ID = "kamidere-mutual-scanner:scan";
 const WARMUP_TASK_ID = "kamidere-mutual-scanner:warmup";
 
-function showToast(message: string, type: typeof Toasts.Type[keyof typeof Toasts.Type]) {
-    Toasts.show({
-        message,
-        type,
-        id: Toasts.genId(),
-        options: {
-            position: Toasts.Position.BOTTOM,
-        },
-    });
+function showToast(message: string, type: ToastType) {
+    showDiscordToast(message, type, { position: 1 });
 }
 
 function clampNumber(value: number, min: number, max: number) {
@@ -295,13 +289,13 @@ export function resetMutualScannerRuntime() {
 export function cancelMutualScannerRun() {
     if (!scanController) return;
     scanController.cancel();
-    showToast("Mutual scan cancellation requested.", Toasts.Type.MESSAGE);
+    showToast("Mutual scan cancellation requested.", "message");
 }
 
 export function cancelMutualScannerWarmup() {
     if (!warmupController) return;
     warmupController.cancel();
-    showToast("Manual cache warmup cancellation requested.", Toasts.Type.MESSAGE);
+    showToast("Manual cache warmup cancellation requested.", "message");
 }
 
 export function startMutualScannerRun(ownerId: string | null, config: MutualScannerConfig) {
@@ -400,11 +394,11 @@ export function startMutualScannerRun(ownerId: string | null, config: MutualScan
         scanController = null;
 
         if (result.status === "completed") {
-            showToast(`Mutual scan finished with ${result.matches.length} match${result.matches.length === 1 ? "" : "es"}.`, Toasts.Type.SUCCESS);
+            showToast(`Mutual scan finished with ${result.matches.length} match${result.matches.length === 1 ? "" : "es"}.`, "success");
         } else if (result.status === "cancelled") {
-            showToast(`Mutual scan cancelled after ${result.stats.scannedCount} profile${result.stats.scannedCount === 1 ? "" : "s"}.`, Toasts.Type.MESSAGE);
+            showToast(`Mutual scan cancelled after ${result.stats.scannedCount} profile${result.stats.scannedCount === 1 ? "" : "s"}.`, "message");
         } else {
-            showToast(result.error ?? "Mutual scan failed.", Toasts.Type.FAILURE);
+            showToast(result.error ?? "Mutual scan failed.", "failure");
         }
     })();
 
@@ -497,7 +491,7 @@ export function startMutualScannerWarmup(
                         progress: current.warmup.progress ? { ...current.warmup.progress, state: "cancelled" } : current.warmup.progress,
                     },
                 }));
-                showToast("Manual cache warmup cancelled.", Toasts.Type.MESSAGE);
+                showToast("Manual cache warmup cancelled.", "message");
                 return;
             }
 
@@ -534,12 +528,12 @@ export function startMutualScannerWarmup(
             if (!meaningfulHydration) {
                 showToast(
                     "Manual cache warmup finished without receiving any additional member chunks from Discord.",
-                    Toasts.Type.FAILURE,
+                    "failure",
                 );
             } else {
                 showToast(
                     `Cache warmup finished for ${completedGuilds} server${completedGuilds === 1 ? "" : "s"} with ${hydratedMembers} additional member${hydratedMembers === 1 ? "" : "s"} hydrated.`,
-                    Toasts.Type.SUCCESS,
+                    "success",
                 );
             }
         } catch (error) {
@@ -552,7 +546,7 @@ export function startMutualScannerWarmup(
                     progress: current.warmup.progress ? { ...current.warmup.progress, state: "failed" } : current.warmup.progress,
                 },
             }));
-            showToast(message, Toasts.Type.FAILURE);
+            showToast(message, "failure");
         } finally {
             finishWarmup();
             warmupController = null;

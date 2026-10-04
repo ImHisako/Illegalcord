@@ -21,7 +21,7 @@ import {
     IconUtils,
     PermissionsBits,
     React,
-    Toasts,
+    showToast,
     UserStore,
     useStateFromStores,
     VoiceStateStore,
@@ -130,11 +130,7 @@ function AudioUploadButton({ label, dataKey }: { label: string; dataKey: AudioDa
             settings.store[nameKey] = file.name;
             setFilename(file.name);
         } catch (error) {
-            Toasts.show({
-                message: "Could not load that audio file.",
-                id: Toasts.genId(),
-                type: Toasts.Type.FAILURE,
-            });
+            showToast("Could not load that audio file.", "failure");
             if (settings.store.enableLogs) logger.error("StaffDetector: audio upload failed:", error);
         }
     }
@@ -603,7 +599,7 @@ function getChannelContext(channelId: string): string {
 
 function notify(title: string, body: string, icon?: string): void {
     if (settings.store.showToasts)
-        Toasts.show({ message: `${title}  ${body}`, id: Toasts.genId(), type: Toasts.Type.MESSAGE });
+        showToast(`${title}  ${body}`, "message");
     if (settings.store.showNotifications)
         showNotification({ title, body, icon, permanent: false, onClick: () => { } });
 }

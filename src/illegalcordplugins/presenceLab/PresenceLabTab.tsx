@@ -17,7 +17,7 @@ import { SpecialCard } from "@components/settings/SpecialCard";
 import { Switch } from "@components/Switch";
 import { classNameFactory } from "@utils/css";
 import { Margins } from "@utils/margins";
-import { Alerts, React, Select, showToast,Toasts, UserStore, UserUtils } from "@webpack/common";
+import { Alerts, React, Select, showToast,UserStore, UserUtils } from "@webpack/common";
 
 import { BRAND_ICON_DATA_URL, BRAND_NAME } from "../_kamidereCompat/branding";
 import {
@@ -371,7 +371,7 @@ function PresenceLabTab() {
             source: "current",
         });
 
-        showToast("Added the current account as a local operator.", Toasts.Type.SUCCESS);
+        showToast("Added the current account as a local operator.", "success");
     }, [currentUser, currentUserId]);
 
     const addOperator = React.useCallback(async () => {
@@ -379,7 +379,7 @@ function PresenceLabTab() {
 
         const discordUserId = normalizeUserId(operatorUserId);
         if (!/^\d{5,24}$/.test(discordUserId)) {
-            showToast("Enter a numeric Discord user ID for the operator.", Toasts.Type.FAILURE);
+            showToast("Enter a numeric Discord user ID for the operator.", "failure");
             return;
         }
 
@@ -400,7 +400,7 @@ function PresenceLabTab() {
         setOperatorUserId("");
         setOperatorAlias("");
         setOperatorNotes("");
-        showToast("Saved operator profile locally.", Toasts.Type.SUCCESS);
+        showToast("Saved operator profile locally.", "success");
     }, [currentUser?.id, currentUserId, operatorAlias, operatorNotes, operatorUserId]);
 
     const addTarget = React.useCallback(async () => {
@@ -408,7 +408,7 @@ function PresenceLabTab() {
 
         const discordUserId = normalizeUserId(targetUserId);
         if (!/^\d{5,24}$/.test(discordUserId)) {
-            showToast("Enter a numeric Discord user ID for the target.", Toasts.Type.FAILURE);
+            showToast("Enter a numeric Discord user ID for the target.", "failure");
             return;
         }
 
@@ -430,7 +430,7 @@ function PresenceLabTab() {
         setTargetUserId("");
         setTargetAlias("");
         setTargetNotes("");
-        showToast("Saved target profile locally.", Toasts.Type.SUCCESS);
+        showToast("Saved target profile locally.", "success");
     }, [currentUserId, targetAlias, targetNotes, targetUserId]);
 
     const saveSession = React.useCallback(async () => {
@@ -440,7 +440,7 @@ function PresenceLabTab() {
         const target = data.targets.find(entry => entry.id === sessionTargetId);
 
         if (!operator || !target) {
-            showToast("Choose one operator and one target before saving a session.", Toasts.Type.FAILURE);
+            showToast("Choose one operator and one target before saving a session.", "failure");
             return;
         }
 
@@ -469,7 +469,7 @@ function PresenceLabTab() {
         setSessionNotes("");
         setSessionStartedAt(formatInputDateTime(Date.now()));
         setSessionDurationMinutes(String(data.config.dwellMinutes || 15));
-        showToast("Recorded a local Presence Lab session.", Toasts.Type.SUCCESS);
+        showToast("Recorded a local Presence Lab session.", "success");
     }, [
         currentUserId,
         data.config.dwellMinutes,
@@ -493,7 +493,7 @@ function PresenceLabTab() {
             cancelText: "Cancel",
             async onConfirm() {
                 await clearPresenceLabData(currentUserId);
-                showToast("Cleared local Presence Lab data.", Toasts.Type.SUCCESS);
+                showToast("Cleared local Presence Lab data.", "success");
             },
         });
     }, [currentUserId]);

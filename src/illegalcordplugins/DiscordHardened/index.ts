@@ -14,7 +14,7 @@ import { Logger } from "@utils/Logger";
 import { removeFromArray } from "@utils/misc";
 import definePlugin, { OptionType, type PluginNative } from "@utils/types";
 import type { Embed, VoiceState } from "@vencord/discord-types";
-import { SettingsRouter, showToast, Toasts, UserStore } from "@webpack/common";
+import { SettingsRouter, showToast, UserStore } from "@webpack/common";
 
 import { refreshAttachmentWarnings, startAttachmentWarnings, stopAttachmentWarnings } from "./AttachmentWarnings";
 import { BrowserSettings } from "./BrowserSettings";
@@ -526,8 +526,8 @@ export default definePlugin({
         if (!this.useExternalBrowser() || !/^https?:\/\//i.test(url)) return false;
         if (!Native) return false;
         void Native.openInBrowser(settings.store.externalBrowser, url).then(opened => {
-            if (!opened) showToast("Could not open the selected browser. Check DiscordHardened settings.", Toasts.Type.FAILURE);
-        }).catch(() => showToast("Could not open the selected browser.", Toasts.Type.FAILURE));
+            if (!opened) showToast("Could not open the selected browser. Check DiscordHardened settings.", "failure");
+        }).catch(() => showToast("Could not open the selected browser.", "failure"));
         return true;
     },
     toolboxActions: {

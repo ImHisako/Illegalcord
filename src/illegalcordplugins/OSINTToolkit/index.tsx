@@ -23,7 +23,7 @@ import { classes, parseUrl, removeFromArray } from "@utils/misc";
 import { formatDurationVerbose, makeCodeblock } from "@utils/text";
 import definePlugin, { OptionType, type PluginNative } from "@utils/types";
 import type { CommandArgument, CommandContext, User } from "@vencord/discord-types";
-import { IconUtils, MaskedLink, Menu, SelectedChannelStore, SettingsRouter, showToast, Toasts } from "@webpack/common";
+import { IconUtils, MaskedLink, Menu, SelectedChannelStore, SettingsRouter, showToast } from "@webpack/common";
 import type { ComponentProps } from "react";
 
 interface DomainInfo {
@@ -781,12 +781,12 @@ async function handleGeoImage(imageUrl: string) {
 
     const parsedUrl = parseUrl(imageUrl);
     if (!parsedUrl || (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:")) {
-        showToast("This image does not have a public URL that GeoSeeer can analyze.", Toasts.Type.FAILURE);
+        showToast("This image does not have a public URL that GeoSeeer can analyze.", "failure");
         return;
     }
 
     const channelId = SelectedChannelStore.getChannelId();
-    showToast("Geo Osint analysis started.", Toasts.Type.MESSAGE);
+    showToast("Geo Osint analysis started.", "message");
     debug("Starting Geo Osint analysis");
 
     try {

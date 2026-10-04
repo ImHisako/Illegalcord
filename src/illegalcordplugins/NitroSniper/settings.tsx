@@ -7,7 +7,7 @@
 import { definePluginSettings } from "@api/Settings";
 import { Notice } from "@components/Notice";
 import { OptionType } from "@utils/types";
-import { Button, showToast, Toasts } from "@webpack/common";
+import { Button, showToast } from "@webpack/common";
 
 import { SniperLegalWarning } from "../_legalWarnings";
 import { sendTestWebhook } from "./webhook";
@@ -28,10 +28,10 @@ function TestWebhookButton() {
             onClick={() => {
                 void sendTestWebhook(webhookUrl)
                     .then(() => {
-                        showToast("Test webhook sent successfully.", Toasts.Type.SUCCESS);
+                        showToast("Test webhook sent successfully.", "success");
                     })
                     .catch((error: unknown) => {
-                        showToast(getToastErrorMessage(error), Toasts.Type.FAILURE);
+                        showToast(getToastErrorMessage(error), "failure");
                     });
             }}
         >

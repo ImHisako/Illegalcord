@@ -7,7 +7,7 @@
 import { definePluginSettings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType, type PluginNative, ReporterTestable } from "@utils/types";
-import { ChannelStore, DraftType, FluxDispatcher, SelectedChannelStore, showToast, Toasts, UploadHandler } from "@webpack/common";
+import { ChannelStore, DraftType, FluxDispatcher, SelectedChannelStore, showToast, UploadHandler } from "@webpack/common";
 
 const Native = VencordNative?.pluginHelpers?.SecureZipper as PluginNative<typeof import("./native")> | undefined;
 const allowedFiles = new WeakSet<File>();
@@ -81,12 +81,12 @@ async function createArchiveFile(file: File, password: string): Promise<File | n
     const result = await Native?.createArchive(file.name || "file", await file.arrayBuffer(), password);
 
     if (!result?.success || !result.data || !result.fileName) {
-        showToast(result?.error ?? `Could not encrypt ${file.name}.`, Toasts.Type.FAILURE);
+        showToast(result?.error ?? `Could not encrypt ${file.name}.`, "failure");
         return null;
     }
 
     if (!isSevenZipArchive(result.data)) {
-        showToast(`Could not create a valid archive for ${file.name}.`, Toasts.Type.FAILURE);
+        showToast(`Could not create a valid archive for ${file.name}.`, "failure");
         return null;
     }
 
@@ -98,12 +98,12 @@ async function createArchiveFile(file: File, password: string): Promise<File | n
 async function uploadEncryptedFiles(files: File[], payload: UploadAddFilesEvent, password: string): Promise<void> {
     const channel = getUploadChannel(payload);
     if (!channel) {
-        showToast("Open a channel before uploading files.", Toasts.Type.FAILURE);
+        showToast("Open a channel before uploading files.", "failure");
         return;
     }
 
     const filesToEncrypt = files.filter(file => !allowedFiles.has(file) && shouldEncryptFile(file));
-    showToast(`Creating encrypted 7z archive${filesToEncrypt.length === 1 ? "" : "s"}.`, Toasts.Type.MESSAGE);
+    showToast(`Creating encrypted 7z archive${filesToEncrypt.length === 1 ? "" : "s"}.`, "message");
 
     const uploads: File[] = [];
     for (const file of files) {
@@ -142,17 +142,17 @@ function interceptUploadAddFiles(event: unknown): void {
 
     const { password } = settings.store;
     if (!password) {
-        showToast("Set a SecureZipper password before sending files.", Toasts.Type.FAILURE);
+        showToast("Set a SecureZipper password before sending files.", "failure");
         return;
     }
 
     if (!Native) {
-        showToast("SecureZipper native helper is not available. Restart Discord.", Toasts.Type.FAILURE);
+        showToast("SecureZipper native helper is not available. Restart Discord.", "failure");
         return;
     }
 
     void uploadEncryptedFiles(uniqueFiles, payload, password).catch(() => {
-        showToast("Could not encrypt the selected files.", Toasts.Type.FAILURE);
+        showToast("Could not encrypt the selected files.", "failure");
     });
 }
 

@@ -15,7 +15,7 @@ import { EquicordDevs } from "@utils/constants";
 import { copyWithToast, getCurrentChannel, insertTextIntoChatInputBox, sendMessage } from "@utils/discord";
 import definePlugin, { OptionType, type PluginNative } from "@utils/types";
 import { chooseFile } from "@utils/web";
-import { Menu, showToast, Toasts } from "@webpack/common";
+import { Menu, showToast } from "@webpack/common";
 
 const Native = VencordNative?.pluginHelpers?.AnonLi as PluginNative<typeof import("./native")> | undefined;
 const ANON_LI_URL = "https://anon.li/";
@@ -116,18 +116,18 @@ let uploadTaskId: number | undefined;
 async function uploadAnonLiDrop() {
     const apiKey = settings.store.apiKey.trim();
     if (!apiKey) {
-        showToast("Set your Anon.li API key in plugin settings first.", Toasts.Type.FAILURE);
+        showToast("Set your Anon.li API key in plugin settings first.", "failure");
         return;
     }
 
     if (!Native) {
-        showToast("AnonLi native helper is not available. Restart Discord.", Toasts.Type.FAILURE);
+        showToast("AnonLi native helper is not available. Restart Discord.", "failure");
         return;
     }
 
     const channel = getCurrentChannel();
     if (!channel) {
-        showToast("Open a channel before uploading with Anon.li Drop.", Toasts.Type.FAILURE);
+        showToast("Open a channel before uploading with Anon.li Drop.", "failure");
         return;
     }
 
@@ -135,7 +135,7 @@ async function uploadAnonLiDrop() {
     if (!file) return;
 
     if (uploadTaskId !== undefined) {
-        showToast("An Anon.li upload is already in progress.", Toasts.Type.FAILURE);
+        showToast("An Anon.li upload is already in progress.", "failure");
         return;
     }
 
@@ -143,7 +143,7 @@ async function uploadAnonLiDrop() {
     const taskId = ++nextUploadTaskId;
     uploadTaskId = taskId;
 
-    showToast(`Uploading ${file.name} to Anon.li.`, Toasts.Type.MESSAGE);
+    showToast(`Uploading ${file.name} to Anon.li.`, "message");
 
     let uploadId: string | undefined;
 
@@ -181,7 +181,7 @@ async function uploadAnonLiDrop() {
             try {
                 await copyWithToast(finishResult.url, "Anon.li link copied.");
             } catch {
-                showToast("Could not copy the Anon.li link.", Toasts.Type.FAILURE);
+                showToast("Could not copy the Anon.li link.", "failure");
             }
         }
 
@@ -190,14 +190,14 @@ async function uploadAnonLiDrop() {
                 await sendMessage(channel.id, { content: finishResult.url });
                 return;
             } catch {
-                showToast("Could not send the Anon.li link. It was added to the message box instead.", Toasts.Type.FAILURE);
+                showToast("Could not send the Anon.li link. It was added to the message box instead.", "failure");
             }
         }
 
         insertTextIntoChatInputBox(finishResult.url);
     } catch (error) {
         if (generation === lifecycleGeneration) {
-            showToast(error instanceof Error ? error.message : "Anon.li upload failed.", Toasts.Type.FAILURE);
+            showToast(error instanceof Error ? error.message : "Anon.li upload failed.", "failure");
         }
     } finally {
         if (uploadId && activeUploadIds.delete(uploadId)) await Native.abortUpload(uploadId).catch(() => undefined);
