@@ -224,8 +224,9 @@ const settings = definePluginSettings({
     },
     captureGlobalErrors: {
         type: OptionType.BOOLEAN,
-        description: "Record window errors and unhandled promise rejections separately from screen crashes.",
-        default: false
+        description: "Capturing window errors and unhandled promise rejections is currently unavailable.",
+        default: false,
+        disabled: () => true
     },
     showRecoveryToast: {
         type: OptionType.BOOLEAN,
@@ -1620,6 +1621,7 @@ export default definePlugin({
     },
 
     start() {
+        if (settings.store.captureGlobalErrors) settings.store.captureGlobalErrors = false;
         instrumentPlugins();
         installGlobalListeners();
     },
