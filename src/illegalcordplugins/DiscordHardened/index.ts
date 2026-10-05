@@ -314,7 +314,7 @@ export const settings = definePluginSettings({
     },
     allowDeviceEnumeration: {
         type: OptionType.BOOLEAN,
-        description: "Allow web content to list available media devices.",
+        description: "Allow web content to list all media devices. Permitted cameras and microphones remain visible so they can be used.",
         default: false,
     },
     allowSpeakerSelection: {

@@ -411,11 +411,18 @@ function patchMedia(settings: PrivacySettings): void {
     if (typeof mediaDevices.enumerateDevices === "function") {
         const originalEnumerateDevices = mediaDevices.enumerateDevices;
         const protectedEnumerateDevices: MediaDevices["enumerateDevices"] = function (this: MediaDevices) {
-            if (!isPermissionAllowed("allowDeviceEnumeration", settings.allowDeviceEnumeration)) {
+            if (!isPermissionAllowed("allowDeviceEnumeration", settings.allowDeviceEnumeration)
+                && !isPermissionAllowed("allowCamera", settings.allowCamera)
+                && !isPermissionAllowed("allowMicrophone", settings.allowMicrophone)) {
                 recordBlock("Device enumeration");
                 return Promise.resolve([]);
             }
-            return originalEnumerateDevices.call(this).then(devices => isPermissionAllowed("allowDeviceEnumeration", settings.allowDeviceEnumeration) ? devices : []);
+            return originalEnumerateDevices.call(this).then(devices => {
+                if (isPermissionAllowed("allowDeviceEnumeration", settings.allowDeviceEnumeration)) return devices;
+                return devices.filter(device =>
+                    device.kind === "videoinput" && isPermissionAllowed("allowCamera", settings.allowCamera)
+                    || device.kind === "audioinput" && isPermissionAllowed("allowMicrophone", settings.allowMicrophone));
+            });
         };
         patchValue(mediaDevices, "enumerateDevices", protectedEnumerateDevices);
     }

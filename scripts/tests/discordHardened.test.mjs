@@ -379,6 +379,34 @@ test("Revoking capture permissions while a prompt is pending stops every returne
     assert.equal(mediaDevices.getDisplayMedia, originalDisplay);
 });
 
+test("Camera permission exposes the selected camera without granting full device discovery", async t => {
+    const { session, advance } = await sessionFixture();
+    const devices = [
+        { kind: "videoinput", deviceId: "camera" },
+        { kind: "audioinput", deviceId: "microphone" },
+        { kind: "audiooutput", deviceId: "speaker" },
+    ];
+    const track = { kind: "video", readyState: "live", stop() { this.readyState = "ended"; } };
+    const stream = { getTracks: () => [track], getAudioTracks: () => [], getVideoTracks: () => [track] };
+    const mediaDevices = { enumerateDevices: async () => devices, getUserMedia: async () => stream };
+    const { runtime } = await runtimeFixture({ mediaDevices }, session);
+    const settings = { allowCamera: true, allowMicrophone: false, allowDeviceEnumeration: false };
+    session.startPermissionSession(() => {});
+    runtime.startHardening(settings, () => false);
+    t.after(() => { session.stopPermissionSession(); runtime.stopHardening(); });
+
+    assert.deepEqual(await mediaDevices.enumerateDevices(), [devices[0]]);
+    assert.equal(await mediaDevices.getUserMedia({ video: { deviceId: "camera" } }), stream);
+    settings.allowCamera = false;
+    assert.deepEqual(await mediaDevices.enumerateDevices(), []);
+    session.grantTemporaryPermission("allowCamera", 5);
+    assert.deepEqual(await mediaDevices.enumerateDevices(), [devices[0]]);
+    assert.equal(await mediaDevices.getUserMedia({ video: { deviceId: "camera" } }), stream);
+    advance(300_000);
+    assert.deepEqual(await mediaDevices.enumerateDevices(), []);
+    assert.equal(track.readyState, "ended");
+});
+
 test("Quest compatibility allows hCaptcha through frame and script restrictions only when enabled", () => {
     for (const questCompatibility of [undefined, true, false]) {
         for (const blockUnknownEmbeds of [undefined, true, false]) {
