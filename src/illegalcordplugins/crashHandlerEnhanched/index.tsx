@@ -20,8 +20,8 @@ import "./styles.css";
 
 import * as DataStore from "@api/DataStore";
 import { showNotification } from "@api/Notifications";
-import { isPluginEnabled, pluginRequiresRestart, plugins as Plugins, stopPlugin } from "@api/PluginManager";
-import { definePluginSettings, PlainSettings, Settings } from "@api/Settings";
+import { isPluginEnabled, pluginRequiresRestart, plugins as Plugins, startPlugin, stopPlugin } from "@api/PluginManager";
+import { definePluginSettings, PlainSettings, Settings, SettingsStore } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
 import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
@@ -39,6 +39,7 @@ import { checkForUpdates, isNewer, maybePromptToUpdate, update as updateIllegalc
 import type { RenderModalProps } from "@vencord/discord-types";
 import { filters, findBulk, proxyLazyWebpack } from "@webpack";
 import { Alerts, closeAllModals, closeModal, DraftType, ExpressionPickerStore, FluxDispatcher, Modal, NavigationRouter, openModal, React, SelectedChannelStore } from "@webpack/common";
+import { getPatchedModulePlugins } from "@webpack/patcher";
 import type { ReactNode } from "react";
 
 import { PluginMeta } from "~plugins";
@@ -50,17 +51,19 @@ const TELEGRAM_URL = "https://t.me/Illegalcord";
 const REINSTALL_URL = "https://github.com/ImHisako/IllegalcordInstaller";
 const cl = classNameFactory("vc-crash-handler-enhanced-");
 const logger = new Logger("CrashHandlerEnhanced");
-const SETTINGS_KEYS: Array<"lastCrashAt" | "crashCount" | "crashHistory" | "autoDisabledPlugins" | "safeModePlugins"> = ["lastCrashAt", "crashCount", "crashHistory", "autoDisabledPlugins", "safeModePlugins"];
+const SETTINGS_KEYS: Array<"lastCrashAt" | "crashCount" | "crashHistory" | "autoDisabledPlugins" | "safeModePlugins" | "diagnosticTest" | "diagnosticEvents"> = ["lastCrashAt", "crashCount", "crashHistory", "autoDisabledPlugins", "safeModePlugins", "diagnosticTest", "diagnosticEvents"];
+const DIAGNOSTIC_TEST_KEYS: Array<"diagnosticTest"> = ["diagnosticTest"];
 const SCREEN_SETTINGS_KEYS: Array<"lastCrashReport" | "showSupportPopup" | "detectBlankScreen"> = ["lastCrashReport", "showSupportPopup", "detectBlankScreen"];
 const PROTECTED_PLUGIN_NAMES = new Set([PLUGIN_NAME, "CrashHandler"]);
 const BREADCRUMB_LIMIT = 40;
 const BREADCRUMB_MAX_AGE = 15000;
 const BREADCRUMB_DETECTION_AGE = 5000;
 const NO_PLUGIN_DETECTED = "No plugin detected";
-const NO_PLUGIN_DETECTION_REASON = "The crash stack did not match any enabled plugin.";
+const NO_PLUGIN_DETECTION_REASON = "No recorded plugin callback threw this error, and no enabled plugin matched the stack or met the recent activity threshold.";
 const NO_PLUGIN_DISABLED = "None";
 const NO_PLUGIN_DISABLE_REASON = "No plugin was disabled.";
 const CRASH_HISTORY_LIMIT = 10;
+const DIAGNOSTIC_EVENT_LIMIT = 20;
 const CRASH_LOOP_WINDOW = 5 * 60_000;
 const MESSAGE_SEND_FORBIDDEN_RE = /^POST \/channels\/(?:\d+|xxx)\/messages \[403\]$/;
 const GUILD_VANITY_FORBIDDEN_RE = /^GET \/guilds\/(?:\d+|xxx)\/vanity-url \[403\]$/;
@@ -84,6 +87,43 @@ interface CrashSummary {
     kind: CrashKind;
     message: string;
     suspectedPlugin: string;
+    fingerprint?: string;
+    channelId?: string;
+    recentPluginNames?: string[];
+}
+
+interface PossiblePlugin {
+    name: string;
+    callbacks: number;
+    lastActivityMs: number;
+    lastSurface: string;
+}
+
+interface RecurringPlugin {
+    name: string;
+    crashes: number;
+}
+
+interface PatchedModule {
+    sourceId: string;
+    plugins: string[];
+}
+
+interface DiagnosticEvent {
+    timestamp: number;
+    kind: "start" | "plugin-change" | "test-start" | "test-result";
+    plugin?: string;
+    detail?: string;
+}
+
+interface DiagnosticTest {
+    plugin: string;
+    channelId?: string;
+    fingerprint: string;
+    startedAt: number;
+    status: "awaiting-restart" | "active" | "crashed" | "no-crash" | "inconclusive" | "restoring";
+    changedPlugins: string[];
+    baselineEnabledPlugins?: string[];
 }
 
 interface CrashBoundary {
@@ -116,6 +156,14 @@ interface CrashReport {
     suspectedPluginReason: string;
     suspectedPluginConfidence: DetectionConfidence;
     suspectedPluginSource: DetectionSource;
+    possiblePlugins: PossiblePlugin[];
+    recentPluginNames: string[];
+    fingerprint: string;
+    similarCrashes: number;
+    recurringPlugins: RecurringPlugin[];
+    patchedModules: PatchedModule[];
+    diagnosticEvents: DiagnosticEvent[];
+    diagnosticTest?: DiagnosticTest;
     disabledPlugin: string;
     disableReason: string;
     breadcrumbs: string[];
@@ -266,6 +314,18 @@ const settings = definePluginSettings({
         type: OptionType.STRING,
         description: "Stores the last ten crashes.",
         default: "[]",
+        hidden: true
+    },
+    diagnosticEvents: {
+        type: OptionType.STRING,
+        description: "Stores recent plugin changes and client starts.",
+        default: "[]",
+        hidden: true
+    },
+    diagnosticTest: {
+        type: OptionType.STRING,
+        description: "Stores the current plugin diagnostic test.",
+        default: "",
         hidden: true
     },
     autoDisabledPlugins: {
@@ -422,6 +482,40 @@ function getRecentBreadcrumbs() {
     return pluginBreadcrumbs.map(formatBreadcrumb);
 }
 
+function getPossiblePlugins(now: number) {
+    const candidates = new Map<string, PossiblePlugin>();
+
+    for (const entry of pluginBreadcrumbs) {
+        if (now - entry.timestamp > BREADCRUMB_DETECTION_AGE || !isPluginEnabled(entry.pluginName)) continue;
+
+        const candidate = candidates.get(entry.pluginName);
+        if (candidate) {
+            candidate.callbacks++;
+            candidate.lastActivityMs = now - entry.timestamp;
+            candidate.lastSurface = entry.surface;
+        } else {
+            candidates.set(entry.pluginName, {
+                name: entry.pluginName,
+                callbacks: 1,
+                lastActivityMs: now - entry.timestamp,
+                lastSurface: entry.surface
+            });
+        }
+    }
+
+    return [...candidates.values()].sort((a, b) => a.lastActivityMs - b.lastActivityMs).slice(0, 5);
+}
+
+function getPatchedModules(stack?: string, componentStack?: string): PatchedModule[] {
+    const sourceIds = new Set([...`${stack ?? ""}\n${componentStack ?? ""}`.matchAll(/WebpackModule(\d+-Source[0-9a-f]+-Factory\d+)/g)].map(match => match[1]));
+    return [...sourceIds].map(sourceId => ({ sourceId, plugins: getPatchedModulePlugins(sourceId) }))
+        .filter(({ plugins }) => plugins.length > 0);
+}
+
+function getCrashFingerprint(kind: CrashKind, message: string, stack?: string) {
+    return `${kind}\n${message}\n${stack?.split("\n").slice(1, 4).join("\n").replace(/(WebpackModule\d+-Source[0-9a-f]+)-Factory\d+/g, "$1") ?? ""}`;
+}
+
 function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
     return Boolean(value && typeof value === "object" && "then" in value && typeof value.then === "function");
 }
@@ -460,10 +554,72 @@ function readCrashHistory(): CrashSummary[] {
         return parsed.filter((item): item is CrashSummary => {
             const entry = asRecord(item);
             return typeof entry?.id === "string" && typeof entry.timestamp === "number" && Number.isFinite(entry.timestamp) && isCrashKind(entry.kind)
-                && typeof entry.message === "string" && typeof entry.suspectedPlugin === "string";
+                && typeof entry.message === "string" && typeof entry.suspectedPlugin === "string"
+                && (entry.fingerprint == null || typeof entry.fingerprint === "string")
+                && (entry.channelId == null || typeof entry.channelId === "string")
+                && (entry.recentPluginNames == null || Array.isArray(entry.recentPluginNames) && entry.recentPluginNames.every(name => typeof name === "string"));
         });
     } catch {
         return [];
+    }
+}
+
+function readDiagnosticEvents(): DiagnosticEvent[] {
+    try {
+        const parsed: unknown = JSON.parse(settings.store.diagnosticEvents);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((item): item is DiagnosticEvent => {
+            const entry = asRecord(item);
+            return typeof entry?.timestamp === "number" && Number.isFinite(entry.timestamp)
+                && (entry.kind === "start" || entry.kind === "plugin-change" || entry.kind === "test-start" || entry.kind === "test-result")
+                && (entry.plugin == null || typeof entry.plugin === "string")
+                && (entry.detail == null || typeof entry.detail === "string");
+        });
+    } catch {
+        return [];
+    }
+}
+
+function recordDiagnosticEvent(kind: DiagnosticEvent["kind"], plugin?: string, detail?: string) {
+    settings.store.diagnosticEvents = JSON.stringify([...readDiagnosticEvents(), { timestamp: Date.now(), kind, plugin, detail }].slice(-DIAGNOSTIC_EVENT_LIMIT));
+}
+
+function readDiagnosticTest(): DiagnosticTest | undefined {
+    if (!settings.store.diagnosticTest) return;
+    try {
+        const entry = asRecord(JSON.parse(settings.store.diagnosticTest));
+        if (typeof entry?.plugin !== "string" || typeof entry.fingerprint !== "string" || typeof entry.startedAt !== "number"
+            || (entry.channelId != null && typeof entry.channelId !== "string")
+            || (entry.changedPlugins != null && (!Array.isArray(entry.changedPlugins) || !entry.changedPlugins.every(name => typeof name === "string")))
+            || (entry.baselineEnabledPlugins != null && (!Array.isArray(entry.baselineEnabledPlugins) || !entry.baselineEnabledPlugins.every(name => typeof name === "string")))
+            || (entry.status !== "awaiting-restart" && entry.status !== "active" && entry.status !== "crashed" && entry.status !== "no-crash" && entry.status !== "inconclusive" && entry.status !== "restoring")) return;
+        return {
+            plugin: entry.plugin,
+            channelId: typeof entry.channelId === "string" ? entry.channelId : undefined,
+            fingerprint: entry.fingerprint,
+            startedAt: entry.startedAt,
+            status: entry.status,
+            changedPlugins: Array.isArray(entry.changedPlugins) ? entry.changedPlugins : [],
+            baselineEnabledPlugins: Array.isArray(entry.baselineEnabledPlugins) ? entry.baselineEnabledPlugins : undefined
+        };
+    } catch {
+        return;
+    }
+}
+
+function onPluginSettingChanged(_value: unknown, path: string) {
+    const match = /^plugins\.([^.]+)\.enabled$/.exec(path);
+    if (!match) return;
+    const plugin = Plugins[match[1]];
+    if (!plugin) return;
+    const { enabled } = Settings.plugins[plugin.name];
+    recordDiagnosticEvent("plugin-change", plugin.name, `${enabled ? "Enabled" : "Disabled"}${pluginRequiresRestart(plugin) ? "; restart required" : ""}.`);
+    const test = readDiagnosticTest();
+    if (enabled && test?.plugin === plugin.name) {
+        settings.store.diagnosticTest = pluginRequiresRestart(plugin) ? JSON.stringify({ ...test, status: "restoring" }) : "";
+    } else if (test && plugin.name !== test.plugin && (test.status === "awaiting-restart" || test.status === "active" || test.status === "no-crash" || test.status === "inconclusive")) {
+        settings.store.diagnosticTest = JSON.stringify({ ...test, status: "inconclusive", changedPlugins: [...new Set([...test.changedPlugins, plugin.name])] });
+        recordDiagnosticEvent("test-result", test.plugin, `Inconclusive because ${plugin.name} was also ${enabled ? "enabled" : "disabled"} during the test.`);
     }
 }
 
@@ -593,15 +749,31 @@ function createReport(errorState: CrashErrorState, kind: CrashKind = "render"): 
     const totalCrashes = Number(settings.store.crashCount || "0") + 1;
     const detection = detectSuspectedPlugin(errorState);
     const folder = detection ? PluginMeta[detection.name].folderName : "";
+    const message = getErrorMessage(errorState.error);
+    const stack = getErrorStack(errorState.error);
+    const componentStack = getComponentStack(errorState.info);
+    const channelId = getChannelId();
+    const fingerprint = getCrashFingerprint(kind, message, stack);
+    const similar = readCrashHistory().filter(entry => entry.fingerprint === fingerprint && entry.channelId === channelId);
+    const recentPluginNames = [...new Set(pluginBreadcrumbs.filter(entry => now - entry.timestamp <= BREADCRUMB_DETECTION_AGE && isPluginEnabled(entry.pluginName)).map(entry => entry.pluginName).reverse())];
+    const recurringPlugins = recentPluginNames.map(name => ({
+        name,
+        crashes: 1 + similar.filter(entry => entry.recentPluginNames?.includes(name)).length
+    })).filter(({ crashes }) => crashes > 1).sort((a, b) => b.crashes - a.crashes).slice(0, 5);
+    const test = readDiagnosticTest();
+    if ((test?.status === "active" || test?.status === "no-crash") && test.fingerprint === fingerprint && test.channelId === channelId) {
+        settings.store.diagnosticTest = JSON.stringify({ ...test, status: "crashed" });
+        recordDiagnosticEvent("test-result", test.plugin, "The same crash happened with this plugin disabled.");
+    }
 
     return {
         id: `${now}-${totalCrashes}`,
         timestamp: now,
         kind,
-        message: getErrorMessage(errorState.error),
-        stack: getErrorStack(errorState.error),
-        componentStack: getComponentStack(errorState.info),
-        channelId: getChannelId(),
+        message,
+        stack,
+        componentStack,
+        channelId,
         crashCount: totalCrashes,
         recentCrashCount: recentCrashTimes.length,
         recovered: false,
@@ -613,6 +785,14 @@ function createReport(errorState: CrashErrorState, kind: CrashKind = "render"): 
         suspectedPluginReason: detection?.reason ?? NO_PLUGIN_DETECTION_REASON,
         suspectedPluginConfidence: detection?.confidence ?? "none",
         suspectedPluginSource: detection?.source ?? "none",
+        possiblePlugins: detection ? [] : getPossiblePlugins(now),
+        recentPluginNames,
+        fingerprint,
+        similarCrashes: similar.length + 1,
+        recurringPlugins,
+        patchedModules: getPatchedModules(stack, componentStack),
+        diagnosticEvents: readDiagnosticEvents().slice(-10),
+        diagnosticTest: readDiagnosticTest(),
         disabledPlugin: NO_PLUGIN_DISABLED,
         disableReason: NO_PLUGIN_DISABLE_REASON,
         breadcrumbs: getRecentBreadcrumbs(),
@@ -634,6 +814,14 @@ function createPlaceholderReport(): CrashReport {
         suspectedPluginReason: NO_PLUGIN_DETECTION_REASON,
         suspectedPluginConfidence: "none",
         suspectedPluginSource: "none",
+        possiblePlugins: [],
+        recentPluginNames: [],
+        fingerprint: "",
+        similarCrashes: 0,
+        recurringPlugins: [],
+        patchedModules: [],
+        diagnosticEvents: readDiagnosticEvents().slice(-10),
+        diagnosticTest: readDiagnosticTest(),
         disabledPlugin: NO_PLUGIN_DISABLED,
         disableReason: NO_PLUGIN_DISABLE_REASON,
         breadcrumbs: getRecentBreadcrumbs(),
@@ -656,6 +844,7 @@ function formatReport(report: CrashReport) {
         `Detection confidence: ${report.suspectedPluginConfidence}`,
         `Detection source: ${report.suspectedPluginSource}`,
         `Suspected plugin reason: ${report.suspectedPluginReason}`,
+        `Similar crashes in this channel: ${report.similarCrashes}`,
         `Disabled plugin: ${report.disabledPlugin}`,
         `Disable reason: ${report.disableReason}`,
         `Log file: ${report.logFilePath ?? "Not written yet"}`,
@@ -664,6 +853,11 @@ function formatReport(report: CrashReport) {
         `Enabled plugins: ${report.enabledPlugins.join(", ") || "None"}`,
     ];
 
+    if (report.possiblePlugins.length) parts.push(`Plugins to check (recent activity only, not proof):\n${report.possiblePlugins.map(({ name, callbacks, lastActivityMs, lastSurface }) => `${name}: ${callbacks} callbacks, last ${lastActivityMs} ms before crash (${lastSurface})`).join("\n")}`);
+    if (report.recurringPlugins.length) parts.push(`Plugins with callbacks before similar crashes (not proof):\n${report.recurringPlugins.map(({ name, crashes }) => `${name}: ${crashes}/${report.similarCrashes} crashes`).join("\n")}`);
+    if (report.patchedModules.length) parts.push(`Patched module sources in the stack (module-level clues, not proof):\n${report.patchedModules.map(({ sourceId, plugins }) => `WebpackModule${sourceId}: ${plugins.join(", ")}`).join("\n")}`);
+    if (report.diagnosticEvents.length) parts.push(`Recent plugin changes and client starts:\n${report.diagnosticEvents.map(({ timestamp, kind, plugin, detail }) => `${new Date(timestamp).toISOString()} ${kind}${plugin ? ` ${plugin}` : ""}${detail ? `: ${detail}` : ""}`).join("\n")}`);
+    if (report.diagnosticTest) parts.push(`Plugin test: ${report.diagnosticTest.plugin} ${report.diagnosticTest.status}${report.diagnosticTest.changedPlugins.length ? `; other plugins changed: ${report.diagnosticTest.changedPlugins.join(", ")}` : ""}`);
     if (report.breadcrumbs.length) parts.push(`Recent plugin activity:\n${report.breadcrumbs.join("\n")}`);
     if (report.stack) parts.push(`Stack:\n${report.stack}`);
     if (report.componentStack) parts.push(`Component stack:\n${report.componentStack}`);
@@ -682,7 +876,10 @@ function saveReport(report: CrashReport) {
         timestamp: report.timestamp,
         kind: report.kind,
         message: report.message,
-        suspectedPlugin: report.suspectedPlugin
+        suspectedPlugin: report.suspectedPlugin,
+        fingerprint: report.fingerprint,
+        channelId: report.channelId,
+        recentPluginNames: report.recentPluginNames
     });
     settings.store.crashHistory = JSON.stringify(history.slice(0, CRASH_HISTORY_LIMIT));
 }
@@ -708,7 +905,7 @@ async function clearClientCache() {
     try {
         const result = await clearCache();
         if (!result.success) return result.error;
-        if (result.failed.length) return `Could not clear ${result.failed.join(", ")}. Restart the client and try again.`;
+        if (result.failed.length) return `Could not clear ${result.failed.join(", ")}. Quit Discord completely, including the system tray, then reopen it and try again.`;
         return `${result.client} cache cleared. Restart the client to finish.`;
     } catch (err) {
         logger.error("Failed to clear the Discord cache.", err);
@@ -769,6 +966,88 @@ function disableOptionalPlugins(closeCrashModal: () => void, report: CrashReport
             }
         }
     }), 0);
+}
+
+function beginPluginTest(name: string, crash: { fingerprint: string; channelId?: string; }, closeCrashModal?: () => void, reopenReport?: CrashReport) {
+    const plugin = Plugins[name];
+    if (!plugin || plugin.required || plugin.isDependency || PROTECTED_PLUGIN_NAMES.has(name) || !Settings.plugins[name]?.enabled || readDiagnosticTest()
+        || Object.values(Plugins).some(other => isPluginEnabled(other.name) && other.dependencies?.includes(name))) return;
+
+    closeCrashModal?.();
+    setTimeout(() => Alerts.show({
+        title: `Test without ${name}?`,
+        body: `This will disable ${name}. Open the same channel and repeat the action that caused the crash. The result will appear in CrashHandlerEnhanced settings.`,
+        confirmText: "Start test",
+        cancelText: "Cancel",
+        onCancel: reopenReport ? () => openCrashSupportModal(reopenReport) : undefined,
+        onConfirm: () => {
+            const restartNeeded = pluginRequiresRestart(plugin);
+            if (!restartNeeded && plugin.started && !stopPlugin(plugin)) {
+                showNotification({ title: `${name} could not be stopped.`, body: "Try again after restarting the client.", noPersist: true });
+                return;
+            }
+
+            Settings.plugins[name].enabled = false;
+            settings.store.diagnosticTest = JSON.stringify({
+                plugin: name,
+                channelId: crash.channelId,
+                fingerprint: crash.fingerprint,
+                startedAt: Date.now(),
+                status: restartNeeded ? "awaiting-restart" : "active",
+                changedPlugins: [],
+                baselineEnabledPlugins: getEnabledPluginSnapshot()
+            } satisfies DiagnosticTest);
+            recordDiagnosticEvent("test-start", name, restartNeeded ? "Disabled; waiting for a restart." : "Disabled; test started.");
+
+            if (restartNeeded) {
+                Alerts.show({
+                    title: "Restart required.",
+                    body: `Restart to test the client without ${name}.`,
+                    confirmText: "Restart now",
+                    cancelText: "Later",
+                    onConfirm: relaunch
+                });
+            } else {
+                showNotification({ title: `Testing without ${name}.`, body: "Repeat the action that caused the crash, then record the result in CrashHandlerEnhanced settings.", noPersist: true });
+            }
+        }
+    }), 0);
+}
+
+function markPluginTestWithoutCrash() {
+    const test = readDiagnosticTest();
+    if (test?.status !== "active") return;
+    settings.store.diagnosticTest = JSON.stringify({ ...test, status: "no-crash" });
+    recordDiagnosticEvent("test-result", test.plugin, "User reported that the same crash did not occur.");
+}
+
+function restoreTestedPlugin() {
+    const test = readDiagnosticTest();
+    if (!test) return;
+    if (test.status === "restoring") {
+        relaunch();
+        return;
+    }
+    const plugin = Plugins[test.plugin];
+    if (!plugin) {
+        settings.store.diagnosticTest = "";
+        return;
+    }
+
+    const restartNeeded = pluginRequiresRestart(plugin);
+    if (!restartNeeded && !startPlugin(plugin)) {
+        showNotification({ title: `${plugin.name} could not be started.`, body: "Restart the client and try again.", noPersist: true });
+        return;
+    }
+    Settings.plugins[plugin.name].enabled = true;
+
+    if (restartNeeded) Alerts.show({
+        title: "Restart required.",
+        body: `Restart to restore ${plugin.name}.`,
+        confirmText: "Restart now",
+        cancelText: "Later",
+        onConfirm: relaunch
+    });
 }
 
 function restoreAutoDisabledPlugin(name: string, closeCrashModal?: () => void) {
@@ -1237,12 +1516,14 @@ function triggerTestCrash() {
 }
 
 function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
+    settings.use(DIAGNOSTIC_TEST_KEYS);
     const isLooping = report.recentCrashCount >= 3;
     const [isCheckingUpdate, setIsCheckingUpdate] = React.useState(false);
     const [isClearingCache, setIsClearingCache] = React.useState(false);
     const [cacheStatus, setCacheStatus] = React.useState("");
     const safeModeActive = Boolean(settings.store.safeModePlugins);
     const canRestorePlugin = readStringList(settings.store.autoDisabledPlugins).includes(report.disabledPlugin);
+    const diagnosticTest = readDiagnosticTest();
     React.useEffect(() => {
         openSupportViews++;
         document.documentElement.classList.add(cl("scroll-locked"));
@@ -1338,7 +1619,7 @@ function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
                             <div className={cl("action-copy")}>
                                 <BaseText size="md" weight="semibold">Clear Discord cache</BaseText>
                                 <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                                    {cacheStatus || "Remove temporary cache files for this Discord client, then restart it."}
+                                    {cacheStatus || "Clear Discord's browser, code and stored caches, then restart it."}
                                 </BaseText>
                             </div>
                             <Button variant="secondary" disabled={!Native?.clearClientCache || isClearingCache} onClick={() => void runCacheCleanup()} className={cl("action-button")}>
@@ -1357,6 +1638,45 @@ function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
                                 Disable plugins
                             </Button>
                         </section>
+
+                        {!diagnosticTest && report.possiblePlugins.length > 0 && (
+                            <section className={cl("action")}>
+                                <div className={cl("action-copy")}>
+                                    <BaseText size="md" weight="semibold">Test a possible plugin</BaseText>
+                                    <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                        Disable one plugin, then repeat the action that caused the crash in the same channel. Recent activity does not prove that a plugin caused it.
+                                    </BaseText>
+                                    <Flex flexWrap="wrap" gap="8px">
+                                        {report.possiblePlugins.filter(({ name }) => Plugins[name] && !Plugins[name].required && !Plugins[name].isDependency && Settings.plugins[name]?.enabled
+                                            && !Object.values(Plugins).some(other => isPluginEnabled(other.name) && other.dependencies?.includes(name))).map(({ name }) => (
+                                            <Button key={name} size="small" variant="secondary" onClick={() => beginPluginTest(name, report, modalProps.onClose, report)}>
+                                                Test {name}
+                                            </Button>
+                                        ))}
+                                    </Flex>
+                                </div>
+                            </section>
+                        )}
+
+                        {diagnosticTest && (
+                            <section className={cl("action")}>
+                                <div className={cl("action-copy")}>
+                                    <BaseText size="md" weight="semibold">Test without {diagnosticTest.plugin}</BaseText>
+                                    <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                        {diagnosticTest.status === "awaiting-restart" ? "Restart the client before testing."
+                                            : diagnosticTest.status === "restoring" ? "Restart to finish restoring this plugin."
+                                                : diagnosticTest.status === "inconclusive" ? `The test is inconclusive because these plugins also changed: ${diagnosticTest.changedPlugins.join(", ")}.`
+                                                : diagnosticTest.status === "crashed" ? "The same crash happened with this plugin disabled."
+                                                : diagnosticTest.status === "no-crash" ? "You recorded that the same crash did not occur."
+                                                    : `Repeat the action in channel ${diagnosticTest.channelId ?? "the same channel"}, then record the result.`}
+                                    </BaseText>
+                                    <Flex flexWrap="wrap" gap="8px">
+                                        {diagnosticTest.status === "active" && <Button size="small" variant="secondary" onClick={markPluginTestWithoutCrash}>No matching crash</Button>}
+                                        <Button size="small" variant="secondary" onClick={restoreTestedPlugin}>{diagnosticTest.status === "restoring" ? "Restart now" : "Restore plugin"}</Button>
+                                    </Flex>
+                                </div>
+                            </section>
+                        )}
 
                         <section className={cl("action")}>
                             <div className={cl("action-copy")}>
@@ -1405,6 +1725,29 @@ function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
                         <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
                             Detection: {report.suspectedPluginReason}
                         </BaseText>
+                        <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                            Similar crashes in this channel: {report.similarCrashes}
+                        </BaseText>
+                        {report.recurringPlugins.length > 0 && (
+                            <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                                Callbacks before similar crashes (not proof): {report.recurringPlugins.map(({ name, crashes }) => `${name} (${crashes}/${report.similarCrashes})`).join(", ")}
+                            </BaseText>
+                        )}
+                        {report.patchedModules.length > 0 && (
+                            <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                                Plugins that patched module sources in the stack (not proof): {report.patchedModules.map(({ sourceId, plugins }) => `WebpackModule${sourceId}: ${plugins.join(", ")}`).join("; ")}
+                            </BaseText>
+                        )}
+                        {report.diagnosticTest && (
+                            <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                                Plugin test at crash: {report.diagnosticTest.plugin} ({report.diagnosticTest.status}){report.diagnosticTest.changedPlugins.length > 0 ? `; other plugins changed: ${report.diagnosticTest.changedPlugins.join(", ")}` : ""}
+                            </BaseText>
+                        )}
+                        {report.possiblePlugins.length > 0 && (
+                            <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                                Plugins to check from recent activity (not proof): {report.possiblePlugins.map(({ name, callbacks, lastActivityMs }) => `${name} (${callbacks} callbacks, ${lastActivityMs} ms before crash)`).join(", ")}
+                            </BaseText>
+                        )}
                         <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
                             Disabled plugin: {report.disabledPlugin}
                         </BaseText>
@@ -1538,9 +1881,15 @@ function CrashHandlerSettings() {
     const { crashCount, lastCrashAt, autoDisabledPlugins, safeModePlugins } = settings.use(SETTINGS_KEYS);
     const hasCrashReport = Boolean(settings.store.lastCrashReport);
     const report = latestReport ?? createPlaceholderReport();
+    const diagnosticTest = readDiagnosticTest();
     const lastCrashText = lastCrashAt ? new Date(Number(lastCrashAt)).toLocaleString() : "No crashes recorded.";
     const disabledPlugins = readStringList(autoDisabledPlugins).filter(name => Plugins[name]);
     const history = readCrashHistory();
+    const diagnosticEvents = readDiagnosticEvents().slice(-6).reverse();
+    const lastCrash = history[0];
+    const testCrash = lastCrash?.fingerprint ? { fingerprint: lastCrash.fingerprint, channelId: lastCrash.channelId } : undefined;
+    const testablePlugins = lastCrash?.recentPluginNames?.filter(name => Plugins[name] && !Plugins[name].required && !Plugins[name].isDependency && Settings.plugins[name]?.enabled
+        && !Object.values(Plugins).some(other => isPluginEnabled(other.name) && other.dependencies?.includes(name))).slice(0, 5) ?? [];
 
     return (
         <div className={cl("settings")}>
@@ -1578,6 +1927,34 @@ function CrashHandlerSettings() {
                     {safeModePlugins ? "Restore previous plugins" : "Restart in safe mode"}
                 </Button>
             </div>
+            {diagnosticTest && (
+                <div className={cl("settings-row")}>
+                    <BaseText size="sm">
+                        Test without {diagnosticTest.plugin}: {diagnosticTest.status === "awaiting-restart" ? "Restart before testing."
+                            : diagnosticTest.status === "restoring" ? "Restart to finish restoring this plugin."
+                                : diagnosticTest.status === "inconclusive" ? `Inconclusive because these plugins also changed: ${diagnosticTest.changedPlugins.join(", ")}.`
+                                : diagnosticTest.status === "crashed" ? "The same crash happened with this plugin disabled."
+                                : diagnosticTest.status === "no-crash" ? "No matching crash was reported."
+                                    : `Repeat the action in channel ${diagnosticTest.channelId ?? "the same channel"}.`}
+                    </BaseText>
+                    <Flex flexWrap="wrap" gap="8px">
+                        {diagnosticTest.status === "active" && <Button size="small" variant="secondary" onClick={markPluginTestWithoutCrash}>No matching crash</Button>}
+                        <Button size="small" variant="secondary" onClick={restoreTestedPlugin}>{diagnosticTest.status === "restoring" ? "Restart now" : "Restore plugin"}</Button>
+                    </Flex>
+                </div>
+            )}
+            {!diagnosticTest && testCrash && testablePlugins.length > 0 && (
+                <div className={cl("settings-row")}>
+                    <BaseText size="sm">Test one plugin that had callbacks before the latest crash:</BaseText>
+                    <Flex flexWrap="wrap" gap="8px">
+                        {testablePlugins.map(name => (
+                            <Button key={name} size="small" variant="secondary" onClick={() => beginPluginTest(name, testCrash)}>
+                                Test {name}
+                            </Button>
+                        ))}
+                    </Flex>
+                </div>
+            )}
             {disabledPlugins.map(name => (
                 <div key={name} className={cl("settings-row")}>
                     <BaseText size="sm">Automatically disabled: {name}</BaseText>
@@ -1586,6 +1963,14 @@ function CrashHandlerSettings() {
                     </Button>
                 </div>
             ))}
+            <div className={cl("history")}>
+                <BaseText size="sm" weight="semibold">Recent plugin changes and client starts</BaseText>
+                {diagnosticEvents.map(({ timestamp, kind, plugin, detail }) => (
+                    <BaseText tag="p" size="sm" color="text-muted" className={cl("text")} key={`${timestamp}:${kind}:${plugin ?? ""}`}>
+                        {new Date(timestamp).toLocaleString()} · {plugin ? `${plugin}: ` : ""}{detail ?? kind}
+                    </BaseText>
+                ))}
+            </div>
             <div className={cl("history")}>
                 <BaseText size="sm" weight="semibold">Recent errors</BaseText>
                 {history.length ? history.map(entry => (
@@ -1622,11 +2007,32 @@ export default definePlugin({
 
     start() {
         if (settings.store.captureGlobalErrors) settings.store.captureGlobalErrors = false;
+        recordDiagnosticEvent("start", undefined, "Client session started.");
+        const test = readDiagnosticTest();
+        const enabledPlugins = new Set(getEnabledPluginSnapshot());
+        const baseline = new Set(test?.baselineEnabledPlugins ?? []);
+        const changedPlugins = test?.baselineEnabledPlugins
+            ? [...new Set([...baseline, ...enabledPlugins])].filter(name => name !== test.plugin && baseline.has(name) !== enabledPlugins.has(name) && !test.changedPlugins.includes(name))
+            : [];
+        if (test?.status === "restoring" && Settings.plugins[test.plugin]?.enabled) {
+            settings.store.diagnosticTest = "";
+            recordDiagnosticEvent("test-result", test.plugin, "Plugin restored after the restart.");
+        } else if (test && changedPlugins.length && (test.status === "awaiting-restart" || test.status === "active" || test.status === "no-crash" || test.status === "inconclusive")) {
+            settings.store.diagnosticTest = JSON.stringify({ ...test, status: "inconclusive", changedPlugins: [...test.changedPlugins, ...changedPlugins] });
+            recordDiagnosticEvent("test-result", test.plugin, `Inconclusive because these plugins also changed: ${changedPlugins.join(", ")}.`);
+        } else if (test && Plugins[test.plugin] && Settings.plugins[test.plugin]?.enabled === false && test.status === "awaiting-restart") {
+            settings.store.diagnosticTest = JSON.stringify({ ...test, status: "active" });
+            recordDiagnosticEvent("test-start", test.plugin, "Test started after the restart.");
+        } else if (test && Settings.plugins[test.plugin]?.enabled) {
+            settings.store.diagnosticTest = "";
+        }
+        SettingsStore.addGlobalChangeListener(onPluginSettingChanged);
         instrumentPlugins();
         installGlobalListeners();
     },
 
     stop() {
+        SettingsStore.removeGlobalChangeListener(onPluginSettingChanged);
         if (recoveryTimer !== undefined) clearTimeout(recoveryTimer);
         recoveryTimer = undefined;
         queuedCrash = null;

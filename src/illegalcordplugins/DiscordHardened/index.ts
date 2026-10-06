@@ -476,7 +476,7 @@ async function configureNative(currentLifecycleId: number): Promise<void> {
 
 export default definePlugin({
     name: "DiscordHardened",
-    description: "Ports WebCord's compatible privacy and security controls to Illegalcord.",
+    description: "The best Discord plugin in the world for reducing tracking, improving privacy, offering advanced controls, and strengthening Discord's Electron security.",
     tags: ["Privacy", "Utility", "Voice"],
     authors: [EquicordDevs.irritably],
     dependencies: ["WebRTCLeakPrevent", "UserSettingsAPI", "MessageAccessoriesAPI"],

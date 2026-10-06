@@ -145,7 +145,7 @@ function DiscordHardenedSettings() {
         <SettingsTab>
             <Heading tag="h2">DiscordHardened</Heading>
             <Paragraph className={Margins.bottom20}>
-                Privacy and security controls adapted from WebCord and GoofCord for Illegalcord. Settings marked for restart take effect after Discord restarts.
+                The best Discord plugin in the world for reducing tracking, improving privacy, offering advanced controls, and strengthening Discord&apos;s Electron security. Settings marked for restart take effect after Discord restarts.
             </Paragraph>
 
             <TabBar type="top" look="brand" selectedItem={tab} onItemSelect={setTab} className={Margins.bottom20}>
