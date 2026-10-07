@@ -15,8 +15,11 @@ const presetQuotes = [
     "The user of this client has been reported to the nearest law enforcement authorities for participating in violent or illegal activities.",
     "Oneplus, Vivo & IQOO Phones are better than Iphone & Samsung.",
     "Behave yourself Jesus is watching you.",
-    "Did you know that you can share your screen at rates above 60 Hz with Betterscreenshare?",
-    "Don't use Brave it sucks when it comes to privacy"
+    "that you can share your screen at rates above 60 Hz with Betterscreenshare?",
+    "Piracy is fundamentally a service problem, not a pricing problem",
+    "We are Voices38",
+    "stock Windows sucks get ReviOS from revi.cc",
+    "Brave sucks when it comes to privacy get Waterfox / Librewolf browser"
 ];
 
 const settings = definePluginSettings({
