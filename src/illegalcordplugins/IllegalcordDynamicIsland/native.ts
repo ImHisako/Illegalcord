@@ -24,6 +24,7 @@ let owner: WebContents | undefined;
 let error: string | null = null;
 let pending = Promise.resolve();
 const players = new Map<WebSocket, Player>();
+const consumers = new Set<string>();
 
 function snapshot() {
     const active = [...players.values()].filter(player => player.name === "SoundCloud" && player.title && !player.stopped);
@@ -51,6 +52,7 @@ function closeServer(): Promise<void> {
 }
 
 function stopOnExit() {
+    consumers.clear();
     pending = pending.then(closeServer);
 }
 
@@ -84,11 +86,15 @@ function updatePlayer(player: Player, message: string) {
     }
 }
 
-export function configure(event: IpcMainInvokeEvent, enabled: unknown) {
+export function configure(event: IpcMainInvokeEvent, enabled: unknown, consumer: unknown = "island") {
     if (typeof enabled !== "boolean") return Promise.resolve({ track: null, error: "Invalid SoundCloud setting." });
+    if (consumer !== "island" && consumer !== "rpc") return Promise.resolve({ track: null, error: "Invalid SoundCloud consumer." });
 
     const result = pending.then(async () => {
-        if (!enabled) {
+        if (enabled) consumers.add(consumer);
+        else consumers.delete(consumer);
+
+        if (consumers.size === 0) {
             await closeServer();
             error = null;
         } else if (!server) {
