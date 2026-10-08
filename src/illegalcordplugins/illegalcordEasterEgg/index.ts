@@ -9,7 +9,6 @@ import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 
 const presetQuotes = [
-    "The founder of Illegalcord has a beautiful girlfriend <3",
     "Discord is spying on us",
     "Telegram is fedded",
     "The user of this client has been reported to the nearest law enforcement authorities for participating in violent or illegal activities.",
