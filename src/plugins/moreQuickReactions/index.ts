@@ -14,6 +14,7 @@ const settings = definePluginSettings({
     reactionCount: {
         description: "Number of reactions (0-42)",
         type: OptionType.NUMBER,
+        restartNeeded: true,
         default: 5
     },
     frequentEmojis: {

@@ -48,6 +48,41 @@ interface MLAttachment extends MessageAttachment {
 
 const MessageClasses = findCssClassesLazy("edited", "communicationDisabled", "isSystemMessage");
 
+function ClearHistoryIcon({ height = 24, width = 24, className }: { height?: number | string; width?: number | string; className?: string; }) {
+    return (
+        <svg
+            className={className}
+            width={width}
+            height={height}
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+        >
+            <path
+                d="M5.63606 18.3639C9.15077 21.8786 14.8493 21.8786 18.364 18.3639C21.8787 14.8492 21.8787 9.1507 18.364 5.63598C14.8493 2.12126 9.15077 2.12126 5.63606 5.63598C3.87757 7.39447 2.99889 9.6996 3.00002 12.0044L3 13.9999"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+            <path
+                d="M1 11.9999L3 13.9999L5 11.9999"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+            <path
+                d="M11 7.99994L11 12.9999L16 12.9999"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </svg>
+    );
+}
+
 // track messages where the user disabled diffs for this session
 const disabledDiffMessages = new Set<string>();
 
@@ -447,7 +482,7 @@ export default definePlugin({
     name: "MessageLogger",
     description: "Temporarily logs deleted and edited messages.",
     tags: ["Chat", "Utility"],
-    authors: [Devs.rushii, Devs.Ven, Devs.AutumnVN, Devs.Nickyux, Devs.Kyuuhachi, Devs.sadan, EquicordDevs.justjxke],
+    authors: [Devs.rushii, Devs.Ven, Devs.AutumnVN, Devs.Nickyux, Devs.Kyuuhachi, Devs.sadan, EquicordDevs.justjxke, Devs.f3tch],
     dependencies: ["MessageUpdaterAPI"],
     isModified: true,
     settings,
@@ -462,6 +497,29 @@ export default definePlugin({
 
     start() {
         addDeleteStyle();
+    },
+
+    messagePopoverButton: {
+        icon: ClearHistoryIcon,
+        render(message) {
+            const current = MessageStore.getMessage(message.channel_id, message.id) as MLMessage | undefined;
+
+            if (!current || !doesMessageHaveHistory(current))
+                return null;
+
+            return {
+                label: "Clear history",
+                icon: ClearHistoryIcon,
+                message: current,
+                channel: ChannelStore.getChannel(current.channel_id),
+                onClick: () => {
+                    const latest = MessageStore.getMessage(message.channel_id, message.id) as MLMessage | undefined;
+                    if (!latest) return;
+
+                    clearMessageHistory(latest);
+                }
+            };
+        }
     },
 
     renderEdits: ErrorBoundary.wrap(
