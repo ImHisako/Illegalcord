@@ -23,6 +23,7 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
+import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel } from "@vencord/discord-types";
@@ -286,7 +287,7 @@ function detachListeners() {
 export default definePlugin({
     name: "SilentGroupCall",
     description: "Start DM and group calls without ringing the other members — they can still see and join the call, they just don't get the incoming-call notification. Right-click the call button in a group DM to pick who gets rung.",
-    authors: [{ name: "gandhistyle", id: 0n }],
+    authors: [EquicordDevs.gandhistyle],
     settings,
 
     start() {
