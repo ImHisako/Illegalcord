@@ -10,7 +10,7 @@
     overflow: clip;
     overscroll-behavior: none;
     padding: 24px;
-    background: var(--background-primary);
+    background: var(--background-base-lowest, var(--background-primary));
 }
 
 .vc-crash-handler-enhanced-overlay > * {
@@ -19,6 +19,7 @@
 }
 
 .vc-crash-handler-enhanced-modal-scroller {
+    min-height: 0;
     overscroll-behavior: contain;
 }
 
@@ -31,12 +32,18 @@
 }
 
 .vc-crash-handler-enhanced-fallback {
-    max-width: 560px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-sizing: border-box;
+    width: 640px;
+    max-width: 100%;
+    max-height: calc(100dvh - 48px);
     padding: 24px;
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm, 8px);
-    background: var(--background-secondary);
-    color: var(--text-normal);
+    background: var(--background-surface-high, var(--background-secondary));
+    color: var(--text-default, var(--text-normal));
 }
 
 .vc-crash-handler-enhanced-header {
@@ -79,7 +86,7 @@
     padding: 12px 14px;
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm, 8px);
-    background: var(--background-secondary);
+    background: var(--background-base-low, var(--background-secondary));
 }
 
 .vc-crash-handler-enhanced-status-recovered {
@@ -103,7 +110,7 @@
     padding: 14px;
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm, 8px);
-    background: var(--background-secondary-alt);
+    background: var(--background-base-lower, var(--background-secondary-alt));
 }
 
 .vc-crash-handler-enhanced-action-copy,

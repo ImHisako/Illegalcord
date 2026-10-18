@@ -38,7 +38,7 @@ import definePlugin, { OptionType, type Plugin, type PluginNative } from "@utils
 import { checkForUpdates, isNewer, maybePromptToUpdate, update as updateIllegalcord } from "@utils/updater";
 import type { RenderModalProps } from "@vencord/discord-types";
 import { filters, findBulk, proxyLazyWebpack } from "@webpack";
-import { Alerts, closeAllModals, closeModal, DraftType, ExpressionPickerStore, FluxDispatcher, Modal, NavigationRouter, openModal, React, ScrollerThin, SelectedChannelStore } from "@webpack/common";
+import { Alerts, closeAllModals, closeModal, Dialog, DraftType, ExpressionPickerStore, FluxDispatcher, Modal, NavigationRouter, openModal, React, ScrollerThin, SelectedChannelStore } from "@webpack/common";
 import { getPatchedModulePlugins } from "@webpack/patcher";
 import type { ReactNode } from "react";
 
@@ -197,6 +197,7 @@ interface DraftTypes {
 interface CrashSupportModalProps {
     modalProps: RenderModalProps;
     report: CrashReport;
+    standalone?: boolean;
 }
 
 interface PluginDetection {
@@ -1515,7 +1516,7 @@ function triggerTestCrash() {
     );
 }
 
-function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
+function CrashSupportModal({ modalProps, report, standalone = false }: CrashSupportModalProps) {
     settings.use(DIAGNOSTIC_TEST_KEYS);
     const isLooping = report.recentCrashCount >= 3;
     const [isCheckingUpdate, setIsCheckingUpdate] = React.useState(false);
@@ -1549,250 +1550,255 @@ function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
         setIsClearingCache(false);
     };
 
-    return (
+    const title = (
+        <div className={cl("header")}>
+            <div className={cl("icon-wrap")}>
+                <WarningIcon height={28} width={28} />
+            </div>
+            <BaseText tag="span" size="lg" weight="semibold" className={cl("title")}>
+                Illegalcord caught a crash
+            </BaseText>
+        </div>
+    );
+    const subtitle = "Try reinstalling Illegalcord and check the Telegram group if the problem keeps happening.";
+    const content = (
+        <div className={cl("modal")}>
+            <div className={cl("content")}>
+                <div className={cl("status", { danger: isLooping, recovered: report.recovered })}>
+                    <BaseText size="sm" weight="semibold">
+                        {isLooping ? "Repeated crashes detected." : report.recovered ? "Client recovered." : "Crash recorded."}
+                    </BaseText>
+                    <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                        {recoveredText}
+                    </BaseText>
+                </div>
+
+                <div className={cl("actions")}>
+                    <section className={cl("action")}>
+                        <div className={cl("action-copy")}>
+                            <BaseText size="md" weight="semibold">Reinstall Illegalcord</BaseText>
+                            <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                A clean reinstall fixes broken builds, missing files, and outdated patches.
+                            </BaseText>
+                        </div>
+                        <Button onClick={() => openExternal(REINSTALL_URL)} className={cl("action-button")}>
+                            Open repository
+                            <OpenExternalIcon height={16} width={16} />
+                        </Button>
+                    </section>
+
+                    <section className={cl("action")}>
+                        <div className={cl("action-copy")}>
+                            <BaseText size="md" weight="semibold">Update Illegalcord</BaseText>
+                            <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                Check for updates and install them without opening the settings updater.
+                            </BaseText>
+                        </div>
+                        <Button variant="secondary" disabled={isCheckingUpdate} onClick={() => void runUpdate()} className={cl("action-button")}>
+                            {isCheckingUpdate ? "Checking..." : "Check updates"}
+                        </Button>
+                    </section>
+
+                    <section className={cl("action")}>
+                        <div className={cl("action-copy")}>
+                            <BaseText size="md" weight="semibold">Telegram group</BaseText>
+                            <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                Check announcements, recent fixes, and support messages from the maintainer.
+                            </BaseText>
+                        </div>
+                        <Button variant="secondary" onClick={() => openExternal(TELEGRAM_URL)} className={cl("action-button")}>
+                            Open Telegram
+                            <OpenExternalIcon height={16} width={16} />
+                        </Button>
+                    </section>
+
+                    <section className={cl("action")}>
+                        <div className={cl("action-copy")}>
+                            <BaseText size="md" weight="semibold">Clear Discord cache</BaseText>
+                            <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                {cacheStatus || "Clear Discord's browser, code and stored caches, then restart it."}
+                            </BaseText>
+                        </div>
+                        <Button variant="secondary" disabled={!Native?.clearClientCache || isClearingCache} onClick={() => void runCacheCleanup()} className={cl("action-button")}>
+                            {isClearingCache ? "Clearing..." : "Clear cache"}
+                        </Button>
+                    </section>
+
+                    <section className={cl("action")}>
+                        <div className={cl("action-copy")}>
+                            <BaseText size="md" weight="semibold">Disable optional plugins</BaseText>
+                            <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                Turn off enabled plugins while keeping the plugins active by default.
+                            </BaseText>
+                        </div>
+                        <Button variant="dangerSecondary" onClick={() => disableOptionalPlugins(modalProps.onClose, report)} className={cl("action-button")}>
+                            Disable plugins
+                        </Button>
+                    </section>
+
+                    {!diagnosticTest && report.possiblePlugins.length > 0 && (
+                        <section className={cl("action")}>
+                            <div className={cl("action-copy")}>
+                                <BaseText size="md" weight="semibold">Test a possible plugin</BaseText>
+                                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                    Disable one plugin, then repeat the action that caused the crash in the same channel. Recent activity does not prove that a plugin caused it.
+                                </BaseText>
+                                <Flex flexWrap="wrap" gap="8px">
+                                    {report.possiblePlugins.filter(({ name }) => Plugins[name] && !Plugins[name].required && !Plugins[name].isDependency && Settings.plugins[name]?.enabled
+                                        && !Object.values(Plugins).some(other => isPluginEnabled(other.name) && other.dependencies?.includes(name))).map(({ name }) => (
+                                        <Button key={name} size="small" variant="secondary" onClick={() => beginPluginTest(name, report, modalProps.onClose, report)}>
+                                            Test {name}
+                                        </Button>
+                                    ))}
+                                </Flex>
+                            </div>
+                        </section>
+                    )}
+
+                    {diagnosticTest && (
+                        <section className={cl("action")}>
+                            <div className={cl("action-copy")}>
+                                <BaseText size="md" weight="semibold">Test without {diagnosticTest.plugin}</BaseText>
+                                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                    {diagnosticTest.status === "awaiting-restart" ? "Restart the client before testing."
+                                        : diagnosticTest.status === "restoring" ? "Restart to finish restoring this plugin."
+                                            : diagnosticTest.status === "inconclusive" ? `The test is inconclusive because these plugins also changed: ${diagnosticTest.changedPlugins.join(", ")}.`
+                                            : diagnosticTest.status === "crashed" ? "The same crash happened with this plugin disabled."
+                                            : diagnosticTest.status === "no-crash" ? "You recorded that the same crash did not occur."
+                                                : `Repeat the action in channel ${diagnosticTest.channelId ?? "the same channel"}, then record the result.`}
+                                </BaseText>
+                                <Flex flexWrap="wrap" gap="8px">
+                                    {diagnosticTest.status === "active" && <Button size="small" variant="secondary" onClick={markPluginTestWithoutCrash}>No matching crash</Button>}
+                                    <Button size="small" variant="secondary" onClick={restoreTestedPlugin}>{diagnosticTest.status === "restoring" ? "Restart now" : "Restore plugin"}</Button>
+                                </Flex>
+                            </div>
+                        </section>
+                    )}
+
+                    <section className={cl("action")}>
+                        <div className={cl("action-copy")}>
+                            <BaseText size="md" weight="semibold">{safeModeActive ? "Safe mode is active" : "Start safe mode"}</BaseText>
+                            <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                {safeModeActive ? "Restore the plugins that were enabled before safe mode." : "Restart with only required plugins. Your current selection will be saved."}
+                            </BaseText>
+                        </div>
+                        <Button variant="secondary" onClick={safeModeActive ? restoreSafeMode : () => requestSafeMode(modalProps.onClose, report)} className={cl("action-button")}>
+                            {safeModeActive ? "Restore plugins" : "Start safe mode"}
+                        </Button>
+                    </section>
+
+                    {canRestorePlugin && (
+                        <section className={cl("action")}>
+                            <div className={cl("action-copy")}>
+                                <BaseText size="md" weight="semibold">{report.disabledPlugin} was disabled</BaseText>
+                                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                    Restore this plugin if it was not the cause of the crash.
+                                </BaseText>
+                            </div>
+                            <Button variant="secondary" disabled={safeModeActive} onClick={() => restoreAutoDisabledPlugin(report.disabledPlugin, modalProps.onClose)} className={cl("action-button")}>
+                                Restore plugin
+                            </Button>
+                        </section>
+                    )}
+                </div>
+
+                <div className={cl("report")}>
+                    <BaseText size="sm" weight="semibold">Last error</BaseText>
+                    <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                        Error type: {CRASH_KIND_LABELS[report.kind]}
+                    </BaseText>
+                    <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                        {report.message}
+                    </BaseText>
+                    <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                        Suspected plugin: {report.suspectedPlugin}
+                    </BaseText>
+                    <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                        Plugin category: {report.suspectedPluginCategory}
+                    </BaseText>
+                    <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                        Confidence: {report.suspectedPluginConfidence} via {report.suspectedPluginSource}
+                    </BaseText>
+                    <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                        Detection: {report.suspectedPluginReason}
+                    </BaseText>
+                    <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                        Similar crashes in this channel: {report.similarCrashes}
+                    </BaseText>
+                    {report.recurringPlugins.length > 0 && (
+                        <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                            Callbacks before similar crashes (not proof): {report.recurringPlugins.map(({ name, crashes }) => `${name} (${crashes}/${report.similarCrashes})`).join(", ")}
+                        </BaseText>
+                    )}
+                    {report.patchedModules.length > 0 && (
+                        <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                            Plugins that patched module sources in the stack (not proof): {report.patchedModules.map(({ sourceId, plugins }) => `WebpackModule${sourceId}: ${plugins.join(", ")}`).join("; ")}
+                        </BaseText>
+                    )}
+                    {report.diagnosticTest && (
+                        <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                            Plugin test at crash: {report.diagnosticTest.plugin} ({report.diagnosticTest.status}){report.diagnosticTest.changedPlugins.length > 0 ? `; other plugins changed: ${report.diagnosticTest.changedPlugins.join(", ")}` : ""}
+                        </BaseText>
+                    )}
+                    {report.possiblePlugins.length > 0 && (
+                        <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                            Plugins to check from recent activity (not proof): {report.possiblePlugins.map(({ name, callbacks, lastActivityMs }) => `${name} (${callbacks} callbacks, ${lastActivityMs} ms before crash)`).join(", ")}
+                        </BaseText>
+                    )}
+                    <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
+                        Disabled plugin: {report.disabledPlugin}
+                    </BaseText>
+                </div>
+
+                <Flex justifyContent="space-between" flexWrap="wrap" gap="8px" className={cl("footer")}>
+                    <div className={cl("footer-actions")}>
+                        <Button variant="secondary" onClick={copyLatestReport} className={cl("footer-button")}>
+                            Copy report
+                            <CopyIcon height={16} width={16} />
+                        </Button>
+                        <Button variant="secondary" disabled={!Native?.openCrashLogDir} onClick={openCrashLogsFolder}>
+                            Open logs folder
+                        </Button>
+                        <Button variant="secondary" disabled={!Native?.openProcessCrashDir} onClick={openProcessCrashFolder}>
+                            Open process dumps
+                        </Button>
+                    </div>
+                    <div className={cl("footer-actions")}>
+                        <Button variant="secondary" onClick={relaunch}>
+                            Restart client
+                        </Button>
+                        <Button onClick={modalProps.onClose}>
+                            Continue
+                        </Button>
+                    </div>
+                </Flex>
+            </div>
+        </div>
+    );
+
+    return standalone ? (
+        <Dialog className={cl("fallback")} role="alertdialog" aria-modal="true" aria-label="Illegalcord crash recovery">
+            {title}
+            <BaseText tag="p" color="text-muted" className={cl("text")}>{subtitle}</BaseText>
+            <ScrollerThin className={cl("modal-scroller")}>
+                {content}
+            </ScrollerThin>
+        </Dialog>
+    ) : (
         <Modal
             {...modalProps}
             size="md"
             listProps={{ className: cl("modal-scroller") }}
-            title={(
-                <div className={cl("header")}>
-                    <div className={cl("icon-wrap")}>
-                        <WarningIcon height={28} width={28} />
-                    </div>
-                    <BaseText tag="span" size="lg" weight="semibold" className={cl("title")}>
-                        Illegalcord caught a crash
-                    </BaseText>
-                </div>
-            )}
-            subtitle="Try reinstalling Illegalcord and check the Telegram group if the problem keeps happening."
+            title={title}
+            subtitle={subtitle}
         >
-            <div className={cl("modal")}>
-                <div className={cl("content")}>
-                    <div className={cl("status", { danger: isLooping, recovered: report.recovered })}>
-                        <BaseText size="sm" weight="semibold">
-                            {isLooping ? "Repeated crashes detected." : report.recovered ? "Client recovered." : "Crash recorded."}
-                        </BaseText>
-                        <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                            {recoveredText}
-                        </BaseText>
-                    </div>
-
-                    <div className={cl("actions")}>
-                        <section className={cl("action")}>
-                            <div className={cl("action-copy")}>
-                                <BaseText size="md" weight="semibold">Reinstall Illegalcord</BaseText>
-                                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                                    A clean reinstall fixes broken builds, missing files, and outdated patches.
-                                </BaseText>
-                            </div>
-                            <Button onClick={() => openExternal(REINSTALL_URL)} className={cl("action-button")}>
-                                Open repository
-                                <OpenExternalIcon height={16} width={16} />
-                            </Button>
-                        </section>
-
-                        <section className={cl("action")}>
-                            <div className={cl("action-copy")}>
-                                <BaseText size="md" weight="semibold">Update Illegalcord</BaseText>
-                                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                                    Check for updates and install them without opening the settings updater.
-                                </BaseText>
-                            </div>
-                            <Button variant="secondary" disabled={isCheckingUpdate} onClick={() => void runUpdate()} className={cl("action-button")}>
-                                {isCheckingUpdate ? "Checking..." : "Check updates"}
-                            </Button>
-                        </section>
-
-                        <section className={cl("action")}>
-                            <div className={cl("action-copy")}>
-                                <BaseText size="md" weight="semibold">Telegram group</BaseText>
-                                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                                    Check announcements, recent fixes, and support messages from the maintainer.
-                                </BaseText>
-                            </div>
-                            <Button variant="secondary" onClick={() => openExternal(TELEGRAM_URL)} className={cl("action-button")}>
-                                Open Telegram
-                                <OpenExternalIcon height={16} width={16} />
-                            </Button>
-                        </section>
-
-                        <section className={cl("action")}>
-                            <div className={cl("action-copy")}>
-                                <BaseText size="md" weight="semibold">Clear Discord cache</BaseText>
-                                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                                    {cacheStatus || "Clear Discord's browser, code and stored caches, then restart it."}
-                                </BaseText>
-                            </div>
-                            <Button variant="secondary" disabled={!Native?.clearClientCache || isClearingCache} onClick={() => void runCacheCleanup()} className={cl("action-button")}>
-                                {isClearingCache ? "Clearing..." : "Clear cache"}
-                            </Button>
-                        </section>
-
-                        <section className={cl("action")}>
-                            <div className={cl("action-copy")}>
-                                <BaseText size="md" weight="semibold">Disable optional plugins</BaseText>
-                                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                                    Turn off enabled plugins while keeping the plugins active by default.
-                                </BaseText>
-                            </div>
-                            <Button variant="dangerSecondary" onClick={() => disableOptionalPlugins(modalProps.onClose, report)} className={cl("action-button")}>
-                                Disable plugins
-                            </Button>
-                        </section>
-
-                        {!diagnosticTest && report.possiblePlugins.length > 0 && (
-                            <section className={cl("action")}>
-                                <div className={cl("action-copy")}>
-                                    <BaseText size="md" weight="semibold">Test a possible plugin</BaseText>
-                                    <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                                        Disable one plugin, then repeat the action that caused the crash in the same channel. Recent activity does not prove that a plugin caused it.
-                                    </BaseText>
-                                    <Flex flexWrap="wrap" gap="8px">
-                                        {report.possiblePlugins.filter(({ name }) => Plugins[name] && !Plugins[name].required && !Plugins[name].isDependency && Settings.plugins[name]?.enabled
-                                            && !Object.values(Plugins).some(other => isPluginEnabled(other.name) && other.dependencies?.includes(name))).map(({ name }) => (
-                                            <Button key={name} size="small" variant="secondary" onClick={() => beginPluginTest(name, report, modalProps.onClose, report)}>
-                                                Test {name}
-                                            </Button>
-                                        ))}
-                                    </Flex>
-                                </div>
-                            </section>
-                        )}
-
-                        {diagnosticTest && (
-                            <section className={cl("action")}>
-                                <div className={cl("action-copy")}>
-                                    <BaseText size="md" weight="semibold">Test without {diagnosticTest.plugin}</BaseText>
-                                    <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                                        {diagnosticTest.status === "awaiting-restart" ? "Restart the client before testing."
-                                            : diagnosticTest.status === "restoring" ? "Restart to finish restoring this plugin."
-                                                : diagnosticTest.status === "inconclusive" ? `The test is inconclusive because these plugins also changed: ${diagnosticTest.changedPlugins.join(", ")}.`
-                                                : diagnosticTest.status === "crashed" ? "The same crash happened with this plugin disabled."
-                                                : diagnosticTest.status === "no-crash" ? "You recorded that the same crash did not occur."
-                                                    : `Repeat the action in channel ${diagnosticTest.channelId ?? "the same channel"}, then record the result.`}
-                                    </BaseText>
-                                    <Flex flexWrap="wrap" gap="8px">
-                                        {diagnosticTest.status === "active" && <Button size="small" variant="secondary" onClick={markPluginTestWithoutCrash}>No matching crash</Button>}
-                                        <Button size="small" variant="secondary" onClick={restoreTestedPlugin}>{diagnosticTest.status === "restoring" ? "Restart now" : "Restore plugin"}</Button>
-                                    </Flex>
-                                </div>
-                            </section>
-                        )}
-
-                        <section className={cl("action")}>
-                            <div className={cl("action-copy")}>
-                                <BaseText size="md" weight="semibold">{safeModeActive ? "Safe mode is active" : "Start safe mode"}</BaseText>
-                                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                                    {safeModeActive ? "Restore the plugins that were enabled before safe mode." : "Restart with only required plugins. Your current selection will be saved."}
-                                </BaseText>
-                            </div>
-                            <Button variant="secondary" onClick={safeModeActive ? restoreSafeMode : () => requestSafeMode(modalProps.onClose, report)} className={cl("action-button")}>
-                                {safeModeActive ? "Restore plugins" : "Start safe mode"}
-                            </Button>
-                        </section>
-
-                        {canRestorePlugin && (
-                            <section className={cl("action")}>
-                                <div className={cl("action-copy")}>
-                                    <BaseText size="md" weight="semibold">{report.disabledPlugin} was disabled</BaseText>
-                                    <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                                        Restore this plugin if it was not the cause of the crash.
-                                    </BaseText>
-                                </div>
-                                <Button variant="secondary" disabled={safeModeActive} onClick={() => restoreAutoDisabledPlugin(report.disabledPlugin, modalProps.onClose)} className={cl("action-button")}>
-                                    Restore plugin
-                                </Button>
-                            </section>
-                        )}
-                    </div>
-
-                    <div className={cl("report")}>
-                        <BaseText size="sm" weight="semibold">Last error</BaseText>
-                        <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
-                            Error type: {CRASH_KIND_LABELS[report.kind]}
-                        </BaseText>
-                        <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
-                            {report.message}
-                        </BaseText>
-                        <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
-                            Suspected plugin: {report.suspectedPlugin}
-                        </BaseText>
-                        <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
-                            Plugin category: {report.suspectedPluginCategory}
-                        </BaseText>
-                        <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
-                            Confidence: {report.suspectedPluginConfidence} via {report.suspectedPluginSource}
-                        </BaseText>
-                        <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
-                            Detection: {report.suspectedPluginReason}
-                        </BaseText>
-                        <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
-                            Similar crashes in this channel: {report.similarCrashes}
-                        </BaseText>
-                        {report.recurringPlugins.length > 0 && (
-                            <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
-                                Callbacks before similar crashes (not proof): {report.recurringPlugins.map(({ name, crashes }) => `${name} (${crashes}/${report.similarCrashes})`).join(", ")}
-                            </BaseText>
-                        )}
-                        {report.patchedModules.length > 0 && (
-                            <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
-                                Plugins that patched module sources in the stack (not proof): {report.patchedModules.map(({ sourceId, plugins }) => `WebpackModule${sourceId}: ${plugins.join(", ")}`).join("; ")}
-                            </BaseText>
-                        )}
-                        {report.diagnosticTest && (
-                            <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
-                                Plugin test at crash: {report.diagnosticTest.plugin} ({report.diagnosticTest.status}){report.diagnosticTest.changedPlugins.length > 0 ? `; other plugins changed: ${report.diagnosticTest.changedPlugins.join(", ")}` : ""}
-                            </BaseText>
-                        )}
-                        {report.possiblePlugins.length > 0 && (
-                            <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
-                                Plugins to check from recent activity (not proof): {report.possiblePlugins.map(({ name, callbacks, lastActivityMs }) => `${name} (${callbacks} callbacks, ${lastActivityMs} ms before crash)`).join(", ")}
-                            </BaseText>
-                        )}
-                        <BaseText tag="p" size="sm" color="text-muted" className={cl("error")}>
-                            Disabled plugin: {report.disabledPlugin}
-                        </BaseText>
-                    </div>
-
-                    <Flex justifyContent="space-between" flexWrap="wrap" gap="8px" className={cl("footer")}>
-                        <div className={cl("footer-actions")}>
-                            <Button variant="secondary" onClick={copyLatestReport} className={cl("footer-button")}>
-                                Copy report
-                                <CopyIcon height={16} width={16} />
-                            </Button>
-                            <Button variant="secondary" disabled={!Native?.openCrashLogDir} onClick={openCrashLogsFolder}>
-                                Open logs folder
-                            </Button>
-                            <Button variant="secondary" disabled={!Native?.openProcessCrashDir} onClick={openProcessCrashFolder}>
-                                Open process dumps
-                            </Button>
-                        </div>
-                        <div className={cl("footer-actions")}>
-                            <Button variant="secondary" onClick={relaunch}>
-                                Restart client
-                            </Button>
-                            <Button onClick={modalProps.onClose}>
-                                Continue
-                            </Button>
-                        </div>
-                    </Flex>
-                </div>
-            </div>
+            {content}
         </Modal>
     );
 }
 
-function CrashSupportFallback() {
-    return (
-        <div className={cl("fallback")} role="alertdialog" aria-modal="true" aria-label="Illegalcord crash recovery">
-            <BaseText size="lg" weight="semibold">Illegalcord caught a crash</BaseText>
-            <BaseText tag="p">Discord could not display the support popup. Copy the report or restart the client.</BaseText>
-            <Flex gap="8px">
-                <Button onClick={copyLatestReport}>Copy report</Button>
-                <Button onClick={relaunch}>Restart client</Button>
-            </Flex>
-        </div>
-    );
+function CrashSupportFallback({ wrappedProps }: { wrappedProps: CrashSupportModalProps; }) {
+    return <CrashSupportModal {...wrappedProps} standalone />;
 }
 
 const SafeCrashSupportModal = ErrorBoundary.wrap(CrashSupportModal, { fallback: CrashSupportFallback });
@@ -1818,6 +1824,7 @@ function CrashSupportScreen({ empty }: { empty: boolean; }) {
     return (
         <div className={cl("overlay")}>
             <SafeCrashSupportModal
+                standalone
                 report={report}
                 modalProps={{ transitionState: 1, onClose: () => setDismissedReport(report.id) }}
             />
