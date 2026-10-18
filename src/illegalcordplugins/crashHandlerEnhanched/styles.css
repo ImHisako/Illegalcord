@@ -7,14 +7,19 @@
     height: 100%;
     display: grid;
     place-items: center;
-    overflow: auto;
-    scrollbar-width: none;
+    overflow: clip;
+    overscroll-behavior: none;
     padding: 24px;
     background: var(--background-primary);
 }
 
-.vc-crash-handler-enhanced-overlay::-webkit-scrollbar {
-    display: none;
+.vc-crash-handler-enhanced-overlay > * {
+    min-height: 0;
+    max-height: 100%;
+}
+
+.vc-crash-handler-enhanced-modal-scroller {
+    overscroll-behavior: contain;
 }
 
 .vc-crash-handler-enhanced-scroll-locked {
@@ -141,24 +146,44 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    flex-wrap: wrap;
 }
 
 .vc-crash-handler-enhanced-settings-header {
-    align-items: stretch;
-    flex-direction: column;
+    padding: 4px 0;
 }
 
 .vc-crash-handler-enhanced-settings-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
     min-width: 0;
-    width: 100%;
 }
 
+.vc-crash-handler-enhanced-settings-section,
 .vc-crash-handler-enhanced-history {
     display: grid;
     gap: 8px;
     padding: 12px;
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm, 8px);
+}
+
+.vc-crash-handler-enhanced-settings-section-copy {
+    display: grid;
+    gap: 8px;
+}
+
+.vc-crash-handler-enhanced-history-list {
+    display: grid;
+    gap: 8px;
+    max-height: 280px;
+    min-height: 0;
+    overflow-wrap: anywhere;
+}
+
+.vc-crash-handler-enhanced-settings-row > button {
+    flex-shrink: 0;
 }
 
 .vc-crash-handler-enhanced-history-entry {

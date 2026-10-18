@@ -38,7 +38,7 @@ import definePlugin, { OptionType, type Plugin, type PluginNative } from "@utils
 import { checkForUpdates, isNewer, maybePromptToUpdate, update as updateIllegalcord } from "@utils/updater";
 import type { RenderModalProps } from "@vencord/discord-types";
 import { filters, findBulk, proxyLazyWebpack } from "@webpack";
-import { Alerts, closeAllModals, closeModal, DraftType, ExpressionPickerStore, FluxDispatcher, Modal, NavigationRouter, openModal, React, SelectedChannelStore } from "@webpack/common";
+import { Alerts, closeAllModals, closeModal, DraftType, ExpressionPickerStore, FluxDispatcher, Modal, NavigationRouter, openModal, React, ScrollerThin, SelectedChannelStore } from "@webpack/common";
 import { getPatchedModulePlugins } from "@webpack/patcher";
 import type { ReactNode } from "react";
 
@@ -51,7 +51,7 @@ const TELEGRAM_URL = "https://t.me/Illegalcord";
 const REINSTALL_URL = "https://github.com/ImHisako/IllegalcordInstaller";
 const cl = classNameFactory("vc-crash-handler-enhanced-");
 const logger = new Logger("CrashHandlerEnhanced");
-const SETTINGS_KEYS: Array<"lastCrashAt" | "crashCount" | "crashHistory" | "autoDisabledPlugins" | "safeModePlugins" | "diagnosticTest" | "diagnosticEvents"> = ["lastCrashAt", "crashCount", "crashHistory", "autoDisabledPlugins", "safeModePlugins", "diagnosticTest", "diagnosticEvents"];
+const SETTINGS_KEYS: Array<"lastCrashAt" | "lastCrashReport" | "crashCount" | "crashHistory" | "autoDisabledPlugins" | "safeModePlugins" | "diagnosticTest" | "diagnosticEvents"> = ["lastCrashAt", "lastCrashReport", "crashCount", "crashHistory", "autoDisabledPlugins", "safeModePlugins", "diagnosticTest", "diagnosticEvents"];
 const DIAGNOSTIC_TEST_KEYS: Array<"diagnosticTest"> = ["diagnosticTest"];
 const SCREEN_SETTINGS_KEYS: Array<"lastCrashReport" | "showSupportPopup" | "detectBlankScreen"> = ["lastCrashReport", "showSupportPopup", "detectBlankScreen"];
 const PROTECTED_PLUGIN_NAMES = new Set([PLUGIN_NAME, "CrashHandler"]);
@@ -1553,6 +1553,7 @@ function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
         <Modal
             {...modalProps}
             size="md"
+            listProps={{ className: cl("modal-scroller") }}
             title={(
                 <div className={cl("header")}>
                     <div className={cl("icon-wrap")}>
@@ -1878,8 +1879,8 @@ function recoverCrashBoundary(boundary: CrashBoundary) {
 }
 
 function CrashHandlerSettings() {
-    const { crashCount, lastCrashAt, autoDisabledPlugins, safeModePlugins } = settings.use(SETTINGS_KEYS);
-    const hasCrashReport = Boolean(settings.store.lastCrashReport);
+    const { crashCount, lastCrashAt, lastCrashReport, autoDisabledPlugins, safeModePlugins } = settings.use(SETTINGS_KEYS);
+    const hasCrashReport = Boolean(lastCrashReport);
     const report = latestReport ?? createPlaceholderReport();
     const diagnosticTest = readDiagnosticTest();
     const lastCrashText = lastCrashAt ? new Date(Number(lastCrashAt)).toLocaleString() : "No crashes recorded.";
@@ -1900,87 +1901,120 @@ function CrashHandlerSettings() {
                         Last error: {lastCrashText}
                     </BaseText>
                 </div>
-                <Flex flexWrap="wrap" gap="8px" className={cl("settings-actions")}>
+                <div className={cl("settings-actions")}>
+                    <Button size="small" onClick={() => openCrashSupportModal(report)}>
+                        Open popup
+                    </Button>
                     <Button size="small" variant="secondary" disabled={!hasCrashReport} onClick={copyLatestReport}>
                         Copy report
                     </Button>
+                </div>
+            </div>
+            <div className={cl("settings-section")}>
+                <BaseText size="sm" weight="semibold">Reports and logs</BaseText>
+                <div className={cl("settings-actions")}>
                     <Button size="small" variant="secondary" disabled={!Native?.openCrashLogDir} onClick={openCrashLogsFolder}>
                         Open logs folder
                     </Button>
                     <Button size="small" variant="secondary" disabled={!Native?.openProcessCrashDir} onClick={openProcessCrashFolder}>
                         Open process dumps
                     </Button>
+                </div>
+            </div>
+            <div className={cl("settings-section")}>
+                <BaseText size="sm" weight="semibold">Recovery</BaseText>
+                <BaseText size="sm" color="text-muted">{safeModePlugins ? "Safe mode is active." : "Safe mode is off."}</BaseText>
+                <div className={cl("settings-actions")}>
+                    <Button size="small" variant="secondary" onClick={safeModePlugins ? restoreSafeMode : () => requestSafeMode()}>
+                        {safeModePlugins ? "Restore previous plugins" : "Restart in safe mode"}
+                    </Button>
                     <Button size="small" variant="secondary" disabled={!Native?.clearClientCache} onClick={() => void clearClientCache().then(body => showNotification({ title: "Discord cache cleanup", body, noPersist: true }))}>
                         Clear client cache
                     </Button>
+                </div>
+                {disabledPlugins.map(name => (
+                    <div key={name} className={cl("settings-row")}>
+                        <BaseText size="sm">Automatically disabled: {name}</BaseText>
+                        <Button size="small" variant="secondary" disabled={Boolean(safeModePlugins)} onClick={() => restoreAutoDisabledPlugin(name)}>
+                            Restore plugin
+                        </Button>
+                    </div>
+                ))}
+            </div>
+            <div className={cl("settings-section")}>
+                <div className={cl("settings-row")}>
+                    <BaseText size="sm" weight="semibold">Diagnostics</BaseText>
                     <Button size="small" variant="secondary" onClick={triggerTestCrash}>
                         Trigger test crash
                     </Button>
-                    <Button size="small" onClick={() => openCrashSupportModal(report)}>
-                        Open popup
-                    </Button>
-                </Flex>
-            </div>
-            <div className={cl("settings-row")}>
-                <BaseText size="sm" weight="semibold">{safeModePlugins ? "Safe mode is active." : "Safe mode is off."}</BaseText>
-                <Button size="small" variant="secondary" onClick={safeModePlugins ? restoreSafeMode : () => requestSafeMode()}>
-                    {safeModePlugins ? "Restore previous plugins" : "Restart in safe mode"}
-                </Button>
-            </div>
-            {diagnosticTest && (
-                <div className={cl("settings-row")}>
-                    <BaseText size="sm">
-                        Test without {diagnosticTest.plugin}: {diagnosticTest.status === "awaiting-restart" ? "Restart before testing."
-                            : diagnosticTest.status === "restoring" ? "Restart to finish restoring this plugin."
-                                : diagnosticTest.status === "inconclusive" ? `Inconclusive because these plugins also changed: ${diagnosticTest.changedPlugins.join(", ")}.`
-                                : diagnosticTest.status === "crashed" ? "The same crash happened with this plugin disabled."
-                                : diagnosticTest.status === "no-crash" ? "No matching crash was reported."
-                                    : `Repeat the action in channel ${diagnosticTest.channelId ?? "the same channel"}.`}
-                    </BaseText>
-                    <Flex flexWrap="wrap" gap="8px">
-                        {diagnosticTest.status === "active" && <Button size="small" variant="secondary" onClick={markPluginTestWithoutCrash}>No matching crash</Button>}
-                        <Button size="small" variant="secondary" onClick={restoreTestedPlugin}>{diagnosticTest.status === "restoring" ? "Restart now" : "Restore plugin"}</Button>
-                    </Flex>
                 </div>
-            )}
-            {!diagnosticTest && testCrash && testablePlugins.length > 0 && (
-                <div className={cl("settings-row")}>
-                    <BaseText size="sm">Test one plugin that had callbacks before the latest crash:</BaseText>
-                    <Flex flexWrap="wrap" gap="8px">
-                        {testablePlugins.map(name => (
-                            <Button key={name} size="small" variant="secondary" onClick={() => beginPluginTest(name, testCrash)}>
-                                Test {name}
-                            </Button>
-                        ))}
-                    </Flex>
-                </div>
-            )}
-            {disabledPlugins.map(name => (
-                <div key={name} className={cl("settings-row")}>
-                    <BaseText size="sm">Automatically disabled: {name}</BaseText>
-                    <Button size="small" variant="secondary" disabled={Boolean(safeModePlugins)} onClick={() => restoreAutoDisabledPlugin(name)}>
-                        Restore plugin
-                    </Button>
-                </div>
-            ))}
-            <div className={cl("history")}>
-                <BaseText size="sm" weight="semibold">Recent plugin changes and client starts</BaseText>
-                {diagnosticEvents.map(({ timestamp, kind, plugin, detail }) => (
-                    <BaseText tag="p" size="sm" color="text-muted" className={cl("text")} key={`${timestamp}:${kind}:${plugin ?? ""}`}>
-                        {new Date(timestamp).toLocaleString()} · {plugin ? `${plugin}: ` : ""}{detail ?? kind}
-                    </BaseText>
-                ))}
-            </div>
-            <div className={cl("history")}>
-                <BaseText size="sm" weight="semibold">Recent errors</BaseText>
-                {history.length ? history.map(entry => (
-                    <div key={entry.id} className={cl("history-entry")}>
-                        <BaseText size="sm" weight="semibold">{new Date(entry.timestamp).toLocaleString()} · {CRASH_KIND_LABELS[entry.kind]}</BaseText>
-                        <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                            {entry.message} · Suspected plugin: {entry.suspectedPlugin}
+                {diagnosticTest && (
+                    <div className={cl("settings-section-copy")}>
+                        <BaseText size="sm">
+                            Test without {diagnosticTest.plugin}: {diagnosticTest.status === "awaiting-restart" ? "Restart before testing."
+                                : diagnosticTest.status === "restoring" ? "Restart to finish restoring this plugin."
+                                    : diagnosticTest.status === "inconclusive" ? `Inconclusive because these plugins also changed: ${diagnosticTest.changedPlugins.join(", ")}.`
+                                    : diagnosticTest.status === "crashed" ? "The same crash happened with this plugin disabled."
+                                    : diagnosticTest.status === "no-crash" ? "No matching crash was reported."
+                                        : `Repeat the action in channel ${diagnosticTest.channelId ?? "the same channel"}.`}
                         </BaseText>
+                        <div className={cl("settings-actions")}>
+                            {diagnosticTest.status === "active" && <Button size="small" variant="secondary" onClick={markPluginTestWithoutCrash}>No matching crash</Button>}
+                            <Button size="small" variant="secondary" onClick={restoreTestedPlugin}>{diagnosticTest.status === "restoring" ? "Restart now" : "Restore plugin"}</Button>
+                        </div>
                     </div>
-                )) : <BaseText size="sm" color="text-muted">No errors recorded yet.</BaseText>}
+                )}
+                {!diagnosticTest && testCrash && testablePlugins.length > 0 && (
+                    <div className={cl("settings-section-copy")}>
+                        <BaseText size="sm">Test one plugin that had callbacks before the latest crash:</BaseText>
+                        <div className={cl("settings-actions")}>
+                            {testablePlugins.map(name => (
+                                <Button key={name} size="small" variant="secondary" onClick={() => beginPluginTest(name, testCrash)}>
+                                    Test {name}
+                                </Button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+            <div className={cl("history")}>
+                <div className={cl("settings-row")}>
+                    <BaseText tag="h3" size="sm" weight="semibold" className={cl("text")}>Recent plugin changes and client starts</BaseText>
+                    <Button size="small" variant="dangerSecondary" disabled={!diagnosticEvents.length} onClick={() => { settings.store.diagnosticEvents = "[]"; }}>
+                        Clear activity
+                    </Button>
+                </div>
+                <ScrollerThin className={cl("history-list")}>
+                    {diagnosticEvents.length ? diagnosticEvents.map(({ timestamp, kind, plugin, detail }) => (
+                        <BaseText tag="p" size="sm" color="text-muted" className={cl("text")} key={`${timestamp}:${kind}:${plugin ?? ""}`}>
+                            {new Date(timestamp).toLocaleString()} · {plugin ? `${plugin}: ` : ""}{detail ?? kind}
+                        </BaseText>
+                    )) : <BaseText size="sm" color="text-muted">No recent activity recorded.</BaseText>}
+                </ScrollerThin>
+            </div>
+            <div className={cl("history")}>
+                <div className={cl("settings-row")}>
+                    <BaseText tag="h3" size="sm" weight="semibold" className={cl("text")}>Recent errors</BaseText>
+                    <Button size="small" variant="dangerSecondary" disabled={!history.length && !hasCrashReport && !lastCrashAt && !Number(crashCount)} onClick={() => {
+                        latestReport = null;
+                        settings.store.crashHistory = "[]";
+                        settings.store.crashCount = "0";
+                        settings.store.lastCrashAt = "";
+                        settings.store.lastCrashReport = "";
+                    }}>
+                        Clear errors
+                    </Button>
+                </div>
+                <ScrollerThin className={cl("history-list")}>
+                    {history.length ? history.map(entry => (
+                        <div key={entry.id} className={cl("history-entry")}>
+                            <BaseText size="sm" weight="semibold">{new Date(entry.timestamp).toLocaleString()} · {CRASH_KIND_LABELS[entry.kind]}</BaseText>
+                            <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
+                                {entry.message} · Suspected plugin: {entry.suspectedPlugin}
+                            </BaseText>
+                        </div>
+                    )) : <BaseText size="sm" color="text-muted">No errors recorded yet.</BaseText>}
+                </ScrollerThin>
             </div>
         </div>
     );

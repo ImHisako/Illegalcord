@@ -71,7 +71,7 @@ I plugin inclusi possono essere trovati [qui](https://equicord.org/plugins).
 - **GpuBinder** | ( https://github.com/UnClide/vencord-gpubinder )
 - **StereoScreenshareAudio** | ( https://github.com/nerdwave-nick/Vencord-Stereo-Fix/blob/main/src/plugins/stereoScreenshareAudio/index.ts )
 - **DiscordLock** | ( https://github.com/vejcowski/DiscordLock/tree/main )
-- **OpSec** | ( https://github.com/ItzSolace/OpSec-Vencord/tree/main ) | (Abbiamo una versione diversa con supporto italiano)
+- **OpSec** | (Abbiamo una versione diversa con supporto italiano)
 - **PluginStars** | ( https://github.com/Nightwielder23/discord-plugin-stars )
 - **ServerBadges** | ( https://github.com/TomFront/ServerBadges )
 - **SilentGroupCall** | ( https://github.com/yahyepanna/Silent-call )
