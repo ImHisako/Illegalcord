@@ -47,6 +47,7 @@ function fixture({ active = false, mode = "suspend", snapshot, failSave = false 
     const stopped = [];
     const started = [];
     const reloads = [];
+    const styles = new Set();
     const patches = Object.keys(plugins).map(plugin => ({ plugin }));
     const dependencies = {
         "~plugins": { __esModule: true, default: plugins, PluginMeta: meta },
@@ -54,10 +55,11 @@ function fixture({ active = false, mode = "suspend", snapshot, failSave = false 
         "@webpack/patcher": { patches },
         "@api/PluginManager": {
             isPluginEnabled: name => plugins[name].required || plugins[name].isDependency || state.plugins[name].enabled,
-            stopPlugin: plugin => { stopped.push(plugin.name); plugin.stop?.call(plugin); plugin.started = false; return true; },
-            startPlugin: plugin => { started.push(plugin.name); plugin.start?.call(plugin); plugin.started = true; return true; },
+            stopPlugin: plugin => { stopped.push(plugin.name); plugin.stop?.call(plugin); plugin.started = false; styles.delete(plugin.managedStyle); return true; },
+            startPlugin: plugin => { started.push(plugin.name); plugin.start?.call(plugin); plugin.started = true; if (plugin.managedStyle) styles.add(plugin.managedStyle); return true; },
             addPatch: (patch, plugin) => patches.push({ ...patch, plugin })
         },
+        "@api/Styles": { enableStyle: style => styles.add(style), disableStyle: style => styles.delete(style), isStyleEnabled: style => styles.has(style) },
         "@api/Settings": { Settings: state, SettingsStore: {
             plain: state,
             addChangeListener(key, listener) { const set = listeners.get(key) ?? new Set(); set.add(listener); listeners.set(key, set); },
@@ -78,7 +80,7 @@ function fixture({ active = false, mode = "suspend", snapshot, failSave = false 
     }
     dependencies["./fullSuspension"] = load(fullSource);
     const install = load(source).installPluginSuspension;
-    return { plugins, state, store, data, install, saved, errors, stopped, started, reloads, patches, listeners, startPlugin: dependencies["@api/PluginManager"].startPlugin };
+    return { plugins, state, store, data, install, saved, errors, stopped, started, reloads, patches, styles, listeners, startPlugin: dependencies["@api/PluginManager"].startPlugin };
 }
 
 async function settle() {
@@ -130,6 +132,34 @@ test("Hide mode skips startup effects until exit and restores the original lifec
     assert.equal(plugin.start, start);
     assert.equal(plugin.stop, stop);
     assert.equal(f.reloads.length, 0);
+});
+
+test("Retains layout styles for loaded patches while suspending their plugins", async () => {
+    const f = fixture({ mode: "hide" });
+    const plugin = f.plugins.FakeNitro;
+    plugin.patches = [{ find: "native renderer" }];
+    plugin.managedStyle = "patched-layout";
+    f.plugins.StatusCycler.managedStyle = "style-only";
+    f.styles.add("patched-layout");
+    f.styles.add("style-only");
+    const handle = f.install();
+    handle.onReady();
+    f.store.active = true;
+    await settle();
+    assert.equal(plugin.started, false);
+    assert.equal(f.styles.has("patched-layout"), true);
+    assert.equal(f.styles.has("style-only"), false);
+    f.store.active = false;
+    await settle();
+    assert.equal(plugin.started, true);
+    assert.equal(f.styles.has("patched-layout"), true);
+    assert.equal(f.styles.has("style-only"), true);
+    f.store.active = true;
+    await settle();
+    f.state.plugins.FakeNitro.enabled = false;
+    handle.stop();
+    assert.equal(f.styles.has("patched-layout"), false);
+    assert.equal(f.listeners.size, 0);
 });
 
 test("Hide mode waits for an in-flight startup before stopping its resources", async () => {

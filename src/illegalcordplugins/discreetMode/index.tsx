@@ -26,8 +26,10 @@ import { ApplicationStreamingStore, StreamerModeStore, useStateFromStores } from
 import type { PropsWithChildren, ReactNode } from "react";
 
 import { installLarpCordPrivacy } from "./larpCord";
+import { installPinDmsPrivacy } from "./pinDms";
 import { handleKeyDown, refreshActivities, settings, toggleDiscreetMode } from "./settings";
 import { installPluginSuspension } from "./suspension";
+import { installVisualPrivacy } from "./visuals";
 
 const cl = classNameFactory("vc-discreet-mode-");
 const logger = new Logger("DiscreetMode");
@@ -48,6 +50,7 @@ const RECOGNIZABLE_PLUGINS: Record<string, string> = {
 };
 const AUDIT_KEYS: Parameters<typeof useSettings>[0] = Object.keys(RECOGNIZABLE_PLUGINS).map((name: string) => `plugins.${name}.enabled` as const);
 let restoreInterface: (() => void) | undefined;
+let restoreVisuals: (() => void) | undefined;
 let restoreSettingsLayout: (() => void) | undefined;
 let refreshProfiles: (() => void) | undefined;
 let restoreSuspension: (() => void) | undefined;
@@ -109,6 +112,8 @@ function DiscreetModeAbout() {
                 Added context menu entries and custom badges are hidden when opened in this mode.
                 Illegalcord badges on your own profile and other users' profiles are also hidden locally, including badges added by BadgeSelector.
                 LarpCord profile changes are suspended in this mode. Its email and phone replacements remain active.
+                PinDMs categories and custom ordering are hidden without deleting your pins.
+                StaffDetector name colors, CallTimer timers and BannersEverywhere banners are hidden.
                 Version details are hidden in this mode.
             </Paragraph>
             <Paragraph>
@@ -233,6 +238,7 @@ export default definePlugin({
 
     start() {
         window.addEventListener("keydown", handleKeyDown, true);
+        restoreVisuals = installVisualPrivacy(isInterfaceHidden, useInterfaceHidden);
         const { buildLayout } = SettingsPlugin;
         SettingsPlugin.buildLayout = builder => {
             if (!settings.plain.active || !settings.plain.hideSettings) return buildLayout.call(SettingsPlugin, builder);
@@ -254,18 +260,24 @@ export default definePlugin({
 
     startInterface() {
         const larpCordPrivacy = installLarpCordPrivacy(isInterfaceHidden);
-        refreshProfiles = larpCordPrivacy.refresh;
+        const pinDmsPrivacy = installPinDmsPrivacy(isInterfaceHidden);
+        refreshProfiles = () => {
+            larpCordPrivacy.refresh();
+            pinDmsPrivacy.refresh();
+        };
         const { getInfoString, makeInfoElements } = SettingsPlugin;
         const { getBadges } = BadgeAPI;
         const { renderButtons } = UserAreaAPI;
 
         SettingsPlugin.getInfoString = () => isInterfaceHidden() ? "" : getInfoString.call(SettingsPlugin);
-        SettingsPlugin.makeInfoElements = (...args: Parameters<typeof makeInfoElements>) => wrapButtons(makeInfoElements.apply(SettingsPlugin, args));
+        SettingsPlugin.makeInfoElements = (...args: Parameters<typeof makeInfoElements>) => makeInfoElements.apply(SettingsPlugin, args)
+            .map(element => <DiscreetInterface key={element.key}>{element}</DiscreetInterface>);
         BadgeAPI.getBadges = (profile: Parameters<typeof getBadges>[0]) => isInterfaceHidden() ? [] : getBadges.call(BadgeAPI, profile);
         UserAreaAPI.renderButtons = (props: Parameters<typeof renderButtons>[0]) => wrapButtons(renderButtons.call(UserAreaAPI, props));
         restoreInterface = () => {
             for (const command of commands) unregisterCommand(command.name);
             larpCordPrivacy.stop();
+            pinDmsPrivacy.stop();
             refreshProfiles = undefined;
             SettingsPlugin.getInfoString = getInfoString;
             SettingsPlugin.makeInfoElements = makeInfoElements;
@@ -282,6 +294,8 @@ export default definePlugin({
         window.removeEventListener("keydown", handleKeyDown, true);
         restoreInterface?.();
         restoreInterface = undefined;
+        restoreVisuals?.();
+        restoreVisuals = undefined;
         restoreSettingsLayout?.();
         restoreSettingsLayout = undefined;
         refreshActivities();

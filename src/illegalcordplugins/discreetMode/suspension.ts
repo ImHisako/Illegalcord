@@ -6,6 +6,7 @@
 
 import { isPluginEnabled, startPlugin, stopPlugin } from "@api/PluginManager";
 import { SettingsStore } from "@api/Settings";
+import { disableStyle, enableStyle, isStyleEnabled } from "@api/Styles";
 import { Logger } from "@utils/Logger";
 import type { Plugin } from "@utils/types";
 
@@ -32,6 +33,7 @@ export function installPluginSuspension() {
     const candidates = Object.values(Plugins).filter(plugin => !retained.has(plugin.name));
     const full = installFullSuspension(candidates);
     const paused = new Set<Plugin>();
+    const retainedStyles = new Map<Plugin, string>();
     const starting = new Set<Plugin>();
     const skipped = new Set<Plugin>();
     const restorers: Array<() => void> = [];
@@ -44,6 +46,11 @@ export function installPluginSuspension() {
         for (const plugin of paused) {
             if (skipped.has(plugin) && plugin.started) stopPlugin(plugin);
             paused.delete(plugin);
+            const style = retainedStyles.get(plugin);
+            if (style) {
+                disableStyle(style);
+                retainedStyles.delete(plugin);
+            }
             if (isPluginEnabled(plugin.name) && !plugin.started) startPlugin(plugin);
         }
     }
@@ -52,7 +59,16 @@ export function installPluginSuspension() {
         if (!ready) return;
         if (!active()) return resume();
         for (const plugin of candidates) {
-            if (plugin.started && !starting.has(plugin) && stopPlugin(plugin)) paused.add(plugin);
+            if (!plugin.started || starting.has(plugin)) continue;
+            const style = plugin.patches?.length ? plugin.managedStyle : undefined;
+            const retainStyle = style && isStyleEnabled(style);
+            if (stopPlugin(plugin)) {
+                paused.add(plugin);
+                if (retainStyle) {
+                    enableStyle(style);
+                    retainedStyles.set(plugin, style);
+                }
+            }
         }
     }
 

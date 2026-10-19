@@ -14,6 +14,7 @@ import { transformSync } from "esbuild";
 const source = readFileSync(new URL("index.tsx", import.meta.url), "utf8");
 const settingsSource = readFileSync(new URL("settings.ts", import.meta.url), "utf8");
 const larpSource = readFileSync(new URL("larpCord.ts", import.meta.url), "utf8");
+const visualsSource = readFileSync(new URL("visuals.tsx", import.meta.url), "utf8");
 const keyboardSource = readFileSync(new URL("../../equicordplugins/commandPalette/ui/keyboard.ts", import.meta.url), "utf8");
 const createElement = (type, props, ...children) => ({ type, props: { ...props, children } });
 const canonicalize = expression => new RegExp(expression.source.replaceAll("\\i", "(?:[A-Za-z_$][\\w$]*)"), expression.flags);
@@ -96,6 +97,17 @@ function fixture(active = true, donorData = {}, { deferReady = false } = {}) {
         }))
     ] };
     const userArea = { renderButtons: props => [props.nameplate ?? "User area button"] };
+    const visualCalls = [];
+    const staff = { renderVoiceName(props, children) { assert.equal(this, staff); visualCalls.push("staff"); return createElement("span", { style: { color: "red" } }, children); } };
+    const timer = {
+        renderTimer(userId) { assert.equal(this, timer); visualCalls.push(userId); return "User call timer"; },
+        renderConnectionTimer(props) { assert.equal(this, timer); visualCalls.push(props.channelId); return "Connection timer"; }
+    };
+    const banners = {
+        memberListBannerHook(user) { assert.equal(this, banners); visualCalls.push(user.id); return createElement("img", { src: "banner", className: "vc-banners-everywhere-memberlist" }); },
+        nameplate() { assert.equal(this, banners); return undefined; }
+    };
+    const originalVisuals = { staff: { ...staff }, timer: { ...timer }, banners: { ...banners } };
     const originals = { ...core, getBadges: badges.getBadges, renderButtons: userArea.renderButtons };
     const dependencies = {
         "./style.css": {},
@@ -133,6 +145,9 @@ function fixture(active = true, donorData = {}, { deferReady = false } = {}) {
         "@plugins/_api/badges": badges,
         "@plugins/_core/settings": core,
         "@illegalcordplugins/LarpCord": larp,
+        "@illegalcordplugins/StaffDetector": staff,
+        "@plugins/callTimer": timer,
+        "@equicordplugins/bannersEverywhere": banners,
         "@webpack": { findByProps: () => accounts, onceReady: { then(callback) { if (deferReady) readyCallbacks.push(callback); else callback(); return Promise.resolve(); } } },
         "@utils/constants": { EquicordDevs: { irritably: {} } },
         "@utils/css": { classNameFactory: prefix => (...parts) => parts.flatMap(part => typeof part === "string" ? [prefix + part] : Object.keys(part).filter(key => part[key]).map(key => prefix + key)).join(" ") },
@@ -157,6 +172,8 @@ function fixture(active = true, donorData = {}, { deferReady = false } = {}) {
     dependencies["@equicordplugins/commandPalette/ui/keyboard"] = load(keyboardSource);
     dependencies["./settings"] = load(settingsSource);
     dependencies["./larpCord"] = load(larpSource);
+    dependencies["./visuals"] = load(visualsSource);
+    dependencies["./pinDms"] = { installPinDmsPrivacy: () => ({ refresh() {}, stop() {} }) };
     dependencies["./suspension"] = { installPluginSuspension: () => ({ onReady() {}, stop() {} }) };
     const loaded = load(source + "\nexport const testCommands = commands;");
     const plugin = loaded.default;
@@ -165,7 +182,7 @@ function fixture(active = true, donorData = {}, { deferReady = false } = {}) {
         settings.plain.active = true;
         settings.plain.manualMode = false;
     }
-    return { plugin, state, settings: settings.store, definitions: settings.def, core, badges, userArea, originals, layout, builder, readyCallbacks, refreshed, warnings, reviewPlugins, listeners, HTMLElement, stores, accounts, larp, originalLarp, realUser, realProfile, changes, emitted, registeredCommands };
+    return { plugin, state, settings: settings.store, definitions: settings.def, core, badges, userArea, originals, layout, builder, readyCallbacks, refreshed, warnings, reviewPlugins, listeners, HTMLElement, stores, accounts, larp, originalLarp, realUser, realProfile, changes, emitted, registeredCommands, staff, timer, banners, originalVisuals, visualCalls };
 }
 
 test("Filters branded activity fields without changing ordinary activities or their source objects", () => {
@@ -267,6 +284,29 @@ test("Hides the complete Illegalcord settings section by default and restores ac
     assert.deepEqual(core.buildLayout(builder), [{ key: "native" }, otherSection]);
     plugin.stop();
     assert.equal(core.buildLayout(builder), layout);
+});
+
+test("Preserves separate version rows so enabling the plugin does not widen the settings sidebar", () => {
+    const f = fixture(false);
+    const labels = ["Equicord abc123 (Standalone)", "Electron 41.0.0", "Chromium 146.0.0.0"];
+    const elements = labels.map(text => ({ type: "span", key: text, props: { className: "version", children: [text] } }));
+    const makeInfoElements = f.core.makeInfoElements = function (Component, className) {
+        assert.equal(this, f.core);
+        assert.equal(Component, "span");
+        assert.equal(className, "version");
+        return elements;
+    };
+    f.plugin.start();
+    const rows = f.core.makeInfoElements("span", "version");
+    assert.deepEqual(rows.map(visible), labels.map(text => [text]));
+    for (let index = 0; index < elements.length; index++) assert.equal(rows[index].props.children[0], elements[index]);
+    press(f, "F6");
+    assert.deepEqual(rows.map(visible), [[], [], []]);
+    press(f, "F6");
+    assert.deepEqual(rows.map(visible), labels.map(text => [text]));
+    f.plugin.stop();
+    assert.equal(f.core.makeInfoElements, makeInfoElements);
+    assert.equal(f.core.makeInfoElements("span", "version"), elements);
 });
 
 test("Leaves native toolbar controls intact and makes injected controls reactive", () => {
@@ -673,4 +713,35 @@ test("Drops toasts during discreet mode instead of queuing them for later", () =
     f.state.enabled = false;
     show({ text: "Plugin disabled" });
     assert.equal(sent.length, 3);
+});
+
+test("F6 removes staff colors, both call timers and member banners from already rendered components", () => {
+    const f = fixture(false);
+    f.plugin.start();
+    const staffName = f.staff.renderVoiceName({ user: { id: "staff" }, guildId: "guild" }, "Staff name");
+    const userTimer = f.timer.renderTimer("user");
+    const connectionTimer = f.timer.renderConnectionTimer({ channelId: "voice" });
+    const nativePlate = { src: "native-nameplate" };
+    const banner = f.banners.memberListBannerHook({ id: "user" }, nativePlate);
+    const render = node => node.type(node.props);
+    assert.deepEqual(render(staffName).props.style, { color: "red" });
+    assert.deepEqual(visible([userTimer, connectionTimer]), ["User call timer", "Connection timer"]);
+    assert.equal(render(banner).type, "img");
+    assert.equal(f.banners.nameplate(nativePlate), undefined);
+    const count = f.visualCalls.length;
+    press(f, "F6");
+    assert.equal(render(staffName), "Staff name");
+    assert.equal(render(userTimer), null);
+    assert.equal(render(connectionTimer), null);
+    assert.equal(render(banner), null);
+    assert.equal(f.banners.nameplate(nativePlate), nativePlate);
+    assert.equal(f.visualCalls.length, count);
+    press(f, "F6");
+    assert.deepEqual(render(staffName).props.style, { color: "red" });
+    assert.deepEqual(visible([userTimer, connectionTimer]), ["User call timer", "Connection timer"]);
+    assert.equal(render(banner).type, "img");
+    f.plugin.stop();
+    for (const name of ["staff", "timer", "banners"]) {
+        for (const [key, original] of Object.entries(f.originalVisuals[name])) assert.equal(f[name][key], original);
+    }
 });
