@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { showNotification } from "@api/Notifications";
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings, migrateOldSettingToNewPlugin, migratePluginSetting, migratePluginSettings, PlainSettings, SettingsStore } from "@api/Settings";
 import { ShieldIcon } from "@components/Icons";
@@ -19,29 +20,15 @@ import { SettingsRouter, showToast, UserStore } from "@webpack/common";
 import { refreshAttachmentWarnings, startAttachmentWarnings, stopAttachmentWarnings } from "./AttachmentWarnings";
 import { BrowserSettings } from "./BrowserSettings";
 import { refreshCameraPrivacy, refreshMicrophonePrivacy, scheduleMicrophonePrivacyRefresh, startMicrophonePrivacy, stopMicrophonePrivacy } from "./microphonePrivacy";
+import { DEFAULT_ALLOWED_PATTERNS, DEFAULT_BLOCKED_PATTERNS, DEFAULT_FIREWALL_URLS } from "./network";
 import { DEFAULT_EMBED_DOMAINS, isAllowedEmbed, parseDomainList, validateDomainList } from "./policy";
 import { startHardening, stopHardening } from "./runtime";
-import { setBlockRecording, startPermissionSession, stopPermissionSession } from "./session";
+import { getTemporaryPermissions, setBlockRecording, startPermissionSession, stopPermissionSession } from "./session";
 
 const logger = new Logger("DiscordHardened");
 const Native = VencordNative?.pluginHelpers?.DiscordHardened as PluginNative<typeof import("./native")> | undefined;
 const SETTINGS_ENTRY_KEY = "illegalcord_discord_hardened";
 const DiscordHardenedSettings = LazyComponent(() => require("./SettingsPage").default);
-
-const DEFAULT_FIREWALL_URLS = [
-    "https://*/api/v*/science",
-    "https://*/api/v*/applications/detectable",
-    "https://*/api/v*/auth/location-metadata",
-    "https://*/api/v*/premium-marketing",
-    "https://*/api/v*/scheduled-maintenances/upcoming.json",
-    "https://*/error-reporting-proxy/*",
-    "https://www.youtube.com/youtubei/v*/next?*",
-    "https://www.youtube.com/s/desktop/*",
-    "https://www.youtube.com/youtubei/v*/log_event?*",
-].join("\n");
-
-const DEFAULT_BLOCKED_PATTERNS = ["sentry", "google", "tracking", "stats", "\\.spotify", "pagead", "analytics", "doubleclick"].join("\n");
-const DEFAULT_ALLOWED_PATTERNS = ["videoplayback", "discord-attachments", "googleapis", "search", "api.spotify", "discord.com/assets/sentry."].join("\n");
 
 function validateRegexList(value: string): true | string {
     try {
@@ -137,8 +124,38 @@ export const settings = definePluginSettings({
     },
     minimumPrivilege: {
         type: OptionType.BOOLEAN,
-        description: "Restrict plugin IPC to Discord main frames and enforce available Electron protections at startup. The main renderer sandbox remains limited by the Illegalcord loader.",
+        displayName: "Plugin IPC protection and minimum privilege",
+        description: "Restrict plugin IPC to Discord main frames with a trusted security origin and enforce available Electron protections. Core settings IPC and the renderer sandbox require loader changes.",
         default: true,
+        restartNeeded: true,
+        target: "DESKTOP",
+    },
+    electronPermissionControls: {
+        type: OptionType.BOOLEAN,
+        description: "Enforce browser permissions in Electron using your permission settings. Only Discord main frames can request access. Existing Discord permission checks still apply.",
+        default: true,
+        restartNeeded: true,
+        target: "DESKTOP",
+    },
+    proxyBeforeLoad: {
+        type: OptionType.BOOLEAN,
+        description: "Wait for the proxy before allowing Chromium session requests and close previous connections. Configuration failures keep requests blocked. Native Discord modules use their own networking.",
+        default: true,
+        restartNeeded: true,
+        target: "DESKTOP",
+        hidden() { return !this.store.proxy; },
+    },
+    sessionFirewall: {
+        type: OptionType.BOOLEAN,
+        description: "Apply the network filters to Chromium session requests, including workers, frames and resource loads. This can block CAPTCHA providers, embeds or plugin services.",
+        default: false,
+        restartNeeded: true,
+        target: "DESKTOP",
+    },
+    preserveMultiInstancePolicies: {
+        type: OptionType.BOOLEAN,
+        description: "Preserve original Content Security Policy and Permissions Policy headers in MultiInstance windows. Some plugins or external resources may stop working. Reopen instances after changing this setting.",
+        default: false,
         restartNeeded: true,
         target: "DESKTOP",
     },
@@ -468,6 +485,9 @@ async function configureNative(currentLifecycleId: number): Promise<void> {
             }
 
             nativeConfigured = configured;
+            const status = await Native.getSecurityStatus();
+            if (currentLifecycleId === lifecycleId && status?.proxyStatus === "Failed")
+                showNotification({ title: "Desktop proxy failed", body: "Requests remain blocked. Check the proxy settings and restart Discord." });
         } catch (error) {
             logger.warn("Could not apply desktop privacy settings.", error);
         }
@@ -550,6 +570,7 @@ export default definePlugin({
         startPermissionSession(() => {
             refreshCameraPrivacy();
             refreshMicrophonePrivacy();
+            if (Native) void Native.setTemporaryPermissions(getTemporaryPermissions()).catch(() => logger.warn("Could not update desktop temporary permissions."));
         });
         startAttachmentWarnings();
         startMicrophonePrivacy(settings.store);

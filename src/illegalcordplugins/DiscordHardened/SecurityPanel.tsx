@@ -65,6 +65,8 @@ export function SecurityPanel() {
         { name: "Renderer sandbox", active: security.sandbox },
         { name: "External navigation blocking", active: security.navigationRestricted },
         { name: "Electron webview blocking", active: security.webviewsBlocked },
+        { name: "Electron permission controls", active: security.permissionsEnforced },
+        { name: "Chromium session firewall", active: security.sessionFirewall },
     ] : [];
 
     return <section className={cl("panel")}>
@@ -122,6 +124,8 @@ export function SecurityPanel() {
                         </span>
                     </div>)}
                 </div>
+                <Paragraph>Desktop proxy: {security.proxyStatus}.</Paragraph>
+                {security.proxyStatus === "Failed" ? <Notice.Warning>The desktop proxy could not be configured. Session requests remain blocked. Check the proxy settings and restart Discord.</Notice.Warning> : null}
                 {security.sandbox === false ? <Notice.Warning>The current Illegalcord loader requires an unsandboxed renderer. The sandbox is not active.</Notice.Warning> : null}
             </> : <Paragraph>Desktop protections could not be verified in this window.</Paragraph>}
         </section>
@@ -145,7 +149,23 @@ export function SecurityPanel() {
                     <span id="vc-discord-hardened-duration">Duration</span>
                     <Select options={DURATION_OPTIONS} isSelected={(value: number) => value === minutes} select={setMinutes} serialize={(value: number) => String(value)} />
                 </div>
-                <Button disabled={options[permission]} onClick={() => { setGrantFailed(!grantTemporaryPermission(permission, minutes)); forceUpdate(); }}>Allow temporarily</Button>
+                <Button disabled={options[permission]} onClick={async () => {
+                    try {
+                        if (Native && !await Native.setTemporaryPermissions([
+                            ...getTemporaryPermissions().filter(grant => grant.permission !== permission),
+                            { permission, expiresAt: Date.now() + minutes * 60_000 },
+                        ])) {
+                            setGrantFailed(true);
+                            return;
+                        }
+                        const granted = grantTemporaryPermission(permission, minutes);
+                        setGrantFailed(!granted);
+                        if (!granted && Native) await Native.setTemporaryPermissions(getTemporaryPermissions());
+                        forceUpdate();
+                    } catch {
+                        setGrantFailed(true);
+                    }
+                }}>Allow temporarily</Button>
             </div>
             {options[permission] ? <Notice.Info>This capability is already allowed in your saved preferences. Disable it in the Settings tab to use temporary grants.</Notice.Info> : null}
             {grantFailed ? <Notice.Warning role="alert">The temporary permission could not be granted. Enable DiscordHardened first.</Notice.Warning> : null}

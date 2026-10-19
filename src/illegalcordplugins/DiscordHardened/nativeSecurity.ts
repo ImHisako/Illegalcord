@@ -22,7 +22,8 @@ export function isTrustedSender(event: Pick<IpcMainInvokeEvent, "sender" | "send
     return !event.sender.isDestroyed()
         && event.senderFrame !== null
         && event.senderFrame === event.sender.mainFrame
-        && isDiscordAppUrl(event.senderFrame.url);
+        && isDiscordAppUrl(event.senderFrame.url)
+        && (!("origin" in event.senderFrame) || event.senderFrame.origin === new URL(event.senderFrame.url).origin);
 }
 
 export function restrictWebPreferences(preferences: WebPreferences): void {

@@ -27,9 +27,9 @@ import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
 import { CopyIcon, OpenExternalIcon, WarningIcon } from "@components/Icons";
+import { copyToClipboard } from "@utils/clipboard";
 import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
-import { copyWithToast } from "@utils/discord";
 import { SYM_LAZY_GET } from "@utils/lazy";
 import { Logger } from "@utils/Logger";
 import { relaunch } from "@utils/native";
@@ -38,13 +38,14 @@ import definePlugin, { OptionType, type Plugin, type PluginNative } from "@utils
 import { checkForUpdates, isNewer, maybePromptToUpdate, update as updateIllegalcord } from "@utils/updater";
 import type { RenderModalProps } from "@vencord/discord-types";
 import { filters, findBulk, proxyLazyWebpack } from "@webpack";
-import { Alerts, closeAllModals, closeModal, Dialog, DraftType, ExpressionPickerStore, FluxDispatcher, Modal, NavigationRouter, openModal, React, ScrollerThin, SelectedChannelStore } from "@webpack/common";
+import { closeAllModals, DraftType, ExpressionPickerStore, FluxDispatcher, NavigationRouter, React, ScrollerThin, SelectedChannelStore } from "@webpack/common";
 import { getPatchedModulePlugins } from "@webpack/patcher";
 import type { ReactNode } from "react";
 
 import { PluginMeta } from "~plugins";
 
 import type * as NativeModule from "./native";
+import { closeSupportPopup, openSupportPopup, showSupportAlert } from "./support";
 
 const PLUGIN_NAME = "CrashHandlerEnhanced";
 const TELEGRAM_URL = "https://t.me/Illegalcord";
@@ -52,8 +53,7 @@ const REINSTALL_URL = "https://github.com/ImHisako/IllegalcordInstaller";
 const cl = classNameFactory("vc-crash-handler-enhanced-");
 const logger = new Logger("CrashHandlerEnhanced");
 const SETTINGS_KEYS: Array<"lastCrashAt" | "lastCrashReport" | "crashCount" | "crashHistory" | "autoDisabledPlugins" | "safeModePlugins" | "diagnosticTest" | "diagnosticEvents"> = ["lastCrashAt", "lastCrashReport", "crashCount", "crashHistory", "autoDisabledPlugins", "safeModePlugins", "diagnosticTest", "diagnosticEvents"];
-const DIAGNOSTIC_TEST_KEYS: Array<"diagnosticTest"> = ["diagnosticTest"];
-const SCREEN_SETTINGS_KEYS: Array<"lastCrashReport" | "showSupportPopup" | "detectBlankScreen"> = ["lastCrashReport", "showSupportPopup", "detectBlankScreen"];
+const SCREEN_SETTINGS_KEYS: Array<"detectBlankScreen"> = ["detectBlankScreen"];
 const PROTECTED_PLUGIN_NAMES = new Set([PLUGIN_NAME, "CrashHandler"]);
 const BREADCRUMB_LIMIT = 40;
 const BREADCRUMB_MAX_AGE = 15000;
@@ -197,7 +197,6 @@ interface DraftTypes {
 interface CrashSupportModalProps {
     modalProps: RenderModalProps;
     report: CrashReport;
-    standalone?: boolean;
 }
 
 interface PluginDetection {
@@ -273,9 +272,8 @@ const settings = definePluginSettings({
     },
     captureGlobalErrors: {
         type: OptionType.BOOLEAN,
-        description: "Capturing window errors and unhandled promise rejections is currently unavailable.",
-        default: false,
-        disabled: () => true
+        description: "Capture window errors and unhandled promise rejections, and show the crash popup.",
+        default: true
     },
     showRecoveryToast: {
         type: OptionType.BOOLEAN,
@@ -345,7 +343,6 @@ const settings = definePluginSettings({
 
 let hasPromptedForUpdate = false;
 let isRecovering = false;
-let crashModalOpen = false;
 let latestReport: CrashReport | null = null;
 let queuedCrash: PendingCrash | null = null;
 let pluginErrorOrigins = new WeakMap<object, PluginDetection>();
@@ -354,8 +351,7 @@ const notifiedPluginNames = new Set<string>();
 let crashLogWriteQueue: Promise<void> = Promise.resolve();
 let globalListenersInstalled = false;
 let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
-let supportScreenMounted = false;
-let openSupportViews = 0;
+let renderFailureTimer: ReturnType<typeof setTimeout> | undefined;
 const breadcrumbWrappedFunctions = new WeakSet<object>();
 const instrumentedMethods: InstrumentedMethod[] = [];
 
@@ -885,14 +881,14 @@ function saveReport(report: CrashReport) {
     settings.store.crashHistory = JSON.stringify(history.slice(0, CRASH_HISTORY_LIMIT));
 }
 
-function copyLatestReport() {
-    const report = settings.store.lastCrashReport;
-    if (!report) {
-        copyWithToast("No crash report available.", "No crash report available.");
-        return;
+async function copyLatestReport() {
+    try {
+        await copyToClipboard(settings.store.lastCrashReport || "No crash report available.");
+        showSupportAlert({ title: "Crash report copied.", body: "You can paste the report into a support message." });
+    } catch (error) {
+        logger.error("Failed to copy the crash report.", error);
+        showSupportAlert({ title: "Could not copy the crash report.", body: "Try opening the logs folder to read the saved report." });
     }
-
-    copyWithToast(report, "Crash report copied.");
 }
 
 function openExternal(url: string) {
@@ -914,23 +910,21 @@ async function clearClientCache() {
     }
 }
 
-function disableOptionalPlugins(closeCrashModal: () => void, report: CrashReport) {
+function disableOptionalPlugins() {
     const candidates = Object.values(Plugins).filter(plugin =>
         !plugin.required && !plugin.enabledByDefault && !plugin.isDependency && Settings.plugins[plugin.name]?.enabled
     );
 
     if (!candidates.length) {
-        showNotification({ title: "No optional plugins are enabled.", body: "There is nothing to disable.", noPersist: true });
+        showSupportAlert({ title: "No optional plugins are enabled.", body: "There is nothing to disable." });
         return;
     }
 
-    closeCrashModal();
-    setTimeout(() => Alerts.show({
+    showSupportAlert({
         title: "Disable optional plugins?",
         body: `This will disable ${candidates.length} enabled plugins. Plugins enabled by default, required plugins, and their dependencies will stay on.`,
         confirmText: "Disable plugins",
         cancelText: "Cancel",
-        onCancel: () => openCrashSupportModal(report),
         onConfirm: () => {
             let restartNeeded = false;
             const failed: string[] = [];
@@ -949,7 +943,7 @@ function disableOptionalPlugins(closeCrashModal: () => void, report: CrashReport
             if (failed.length) logger.error(`Failed to stop plugins: ${failed.join(", ")}`);
 
             if (restartNeeded) {
-                Alerts.show({
+                showSupportAlert({
                     title: "Restart required.",
                     body: failed.length
                         ? `Some plugins need a restart to turn off. These plugins could not be stopped: ${failed.join(", ")}.`
@@ -959,32 +953,29 @@ function disableOptionalPlugins(closeCrashModal: () => void, report: CrashReport
                     onConfirm: relaunch
                 });
             } else {
-                showNotification({
+                showSupportAlert({
                     title: failed.length ? "Some plugins could not be disabled." : "Optional plugins disabled.",
                     body: failed.length ? `Could not stop ${failed.join(", ")}.` : `${candidates.length} plugins were disabled.`,
-                    noPersist: true
                 });
             }
         }
-    }), 0);
+    });
 }
 
-function beginPluginTest(name: string, crash: { fingerprint: string; channelId?: string; }, closeCrashModal?: () => void, reopenReport?: CrashReport) {
+function beginPluginTest(name: string, crash: { fingerprint: string; channelId?: string; }) {
     const plugin = Plugins[name];
     if (!plugin || plugin.required || plugin.isDependency || PROTECTED_PLUGIN_NAMES.has(name) || !Settings.plugins[name]?.enabled || readDiagnosticTest()
         || Object.values(Plugins).some(other => isPluginEnabled(other.name) && other.dependencies?.includes(name))) return;
 
-    closeCrashModal?.();
-    setTimeout(() => Alerts.show({
+    showSupportAlert({
         title: `Test without ${name}?`,
         body: `This will disable ${name}. Open the same channel and repeat the action that caused the crash. The result will appear in CrashHandlerEnhanced settings.`,
         confirmText: "Start test",
         cancelText: "Cancel",
-        onCancel: reopenReport ? () => openCrashSupportModal(reopenReport) : undefined,
         onConfirm: () => {
             const restartNeeded = pluginRequiresRestart(plugin);
             if (!restartNeeded && plugin.started && !stopPlugin(plugin)) {
-                showNotification({ title: `${name} could not be stopped.`, body: "Try again after restarting the client.", noPersist: true });
+                showSupportAlert({ title: `${name} could not be stopped.`, body: "Try again after restarting the client." });
                 return;
             }
 
@@ -1001,7 +992,7 @@ function beginPluginTest(name: string, crash: { fingerprint: string; channelId?:
             recordDiagnosticEvent("test-start", name, restartNeeded ? "Disabled; waiting for a restart." : "Disabled; test started.");
 
             if (restartNeeded) {
-                Alerts.show({
+                showSupportAlert({
                     title: "Restart required.",
                     body: `Restart to test the client without ${name}.`,
                     confirmText: "Restart now",
@@ -1009,10 +1000,10 @@ function beginPluginTest(name: string, crash: { fingerprint: string; channelId?:
                     onConfirm: relaunch
                 });
             } else {
-                showNotification({ title: `Testing without ${name}.`, body: "Repeat the action that caused the crash, then record the result in CrashHandlerEnhanced settings.", noPersist: true });
+                showSupportAlert({ title: `Testing without ${name}.`, body: "Repeat the action that caused the crash, then record the result in CrashHandlerEnhanced settings." });
             }
         }
-    }), 0);
+    });
 }
 
 function markPluginTestWithoutCrash() {
@@ -1037,12 +1028,12 @@ function restoreTestedPlugin() {
 
     const restartNeeded = pluginRequiresRestart(plugin);
     if (!restartNeeded && !startPlugin(plugin)) {
-        showNotification({ title: `${plugin.name} could not be started.`, body: "Restart the client and try again.", noPersist: true });
+        showSupportAlert({ title: `${plugin.name} could not be started.`, body: "Restart the client and try again." });
         return;
     }
     Settings.plugins[plugin.name].enabled = true;
 
-    if (restartNeeded) Alerts.show({
+    if (restartNeeded) showSupportAlert({
         title: "Restart required.",
         body: `Restart to restore ${plugin.name}.`,
         confirmText: "Restart now",
@@ -1051,32 +1042,29 @@ function restoreTestedPlugin() {
     });
 }
 
-function restoreAutoDisabledPlugin(name: string, closeCrashModal?: () => void) {
+function restoreAutoDisabledPlugin(name: string) {
     const disabled = readStringList(settings.store.autoDisabledPlugins);
     if (!Plugins[name] || !disabled.includes(name)) return;
 
     Settings.plugins[name].enabled = true;
     settings.store.autoDisabledPlugins = JSON.stringify(disabled.filter(plugin => plugin !== name));
-    closeCrashModal?.();
-    setTimeout(() => Alerts.show({
+    showSupportAlert({
         title: `${name} restored.`,
         body: "Restart the client to load the plugin again.",
         confirmText: "Restart now",
         cancelText: "Later",
         onConfirm: relaunch
-    }), 0);
+    });
 }
 
-function requestSafeMode(closeCrashModal?: () => void, report?: CrashReport) {
+function requestSafeMode() {
     if (settings.store.safeModePlugins) return;
 
-    closeCrashModal?.();
-    setTimeout(() => Alerts.show({
+    showSupportAlert({
         title: "Restart in safe mode?",
         body: "Only required plugins will remain enabled. Your current plugin selection will be saved so you can restore it later.",
         confirmText: "Restart in safe mode",
         cancelText: "Cancel",
-        onCancel: report ? () => openCrashSupportModal(report) : undefined,
         onConfirm: async () => {
             const enabled = Object.values(Plugins)
                 .filter(plugin => !plugin.required && Settings.plugins[plugin.name]?.enabled)
@@ -1095,10 +1083,10 @@ function requestSafeMode(closeCrashModal?: () => void, report?: CrashReport) {
                 }
                 settings.store.safeModePlugins = "";
                 logger.error("Failed to save safe mode settings.", error);
-                showNotification({ title: "Safe mode was not saved.", body: "Try again before restarting the client.", noPersist: true });
+                showSupportAlert({ title: "Safe mode was not saved.", body: "Try again before restarting the client." });
             }
         }
-    }), 0);
+    });
 }
 
 async function restoreSafeMode() {
@@ -1122,17 +1110,15 @@ async function restoreSafeMode() {
         }
         settings.store.safeModePlugins = savedPlugins;
         logger.error("Failed to restore safe mode settings.", error);
-        showNotification({ title: "Previous plugins were not saved.", body: "Try restoring them again before restarting the client.", noPersist: true });
+        showSupportAlert({ title: "Previous plugins were not saved.", body: "Try restoring them again before restarting the client." });
     }
 }
 
 async function checkAndUpdateIllegalcord() {
     if (IS_WEB || IS_UPDATER_DISABLED) {
-        showNotification({
-            color: "#f23f43",
+        showSupportAlert({
             title: "Illegalcord updater is not available.",
             body: "Use the installer or repository to update this build.",
-            noPersist: true
         });
         return;
     }
@@ -1141,27 +1127,24 @@ async function checkAndUpdateIllegalcord() {
         const outdated = await checkForUpdates();
 
         if (!outdated) {
-            showNotification({
+            showSupportAlert({
                 title: "Illegalcord is already up to date.",
                 body: "No updates were found.",
-                noPersist: true
             });
             return;
         }
 
         if (isNewer) {
-            showNotification({
-                color: "#f23f43",
+            showSupportAlert({
                 title: "Illegalcord cannot update automatically.",
                 body: "Your local copy has newer commits than the remote.",
-                noPersist: true
             });
             return;
         }
 
         if (!await updateIllegalcord()) return;
 
-        Alerts.show({
+        showSupportAlert({
             title: "Illegalcord updated.",
             body: "Restart the client to apply the update.",
             confirmText: "Restart now",
@@ -1170,11 +1153,9 @@ async function checkAndUpdateIllegalcord() {
         });
     } catch (err) {
         logger.error("Failed to update Illegalcord from the crash popup.", err);
-        showNotification({
-            color: "#f23f43",
+        showSupportAlert({
             title: "Illegalcord update failed.",
             body: "Try the Updater settings tab or reinstall from the repository.",
-            noPersist: true
         });
     }
 }
@@ -1332,11 +1313,9 @@ function rememberCrashNotification(report: CrashReport) {
 
 function openCrashLogsFolder() {
     if (!Native?.openCrashLogDir) {
-        showNotification({
-            color: "#f23f43",
+        showSupportAlert({
             title: "Crash logs are not available.",
             body: "The native helper is not available in this client.",
-            noPersist: true
         });
         return;
     }
@@ -1363,6 +1342,7 @@ function handleCrash(boundary: CrashBoundary, errorState: CrashErrorState) {
 
     saveReport(report);
     writeCrashLog(report);
+    if (settings.store.showSupportPopup) openCrashSupportModal(report);
     boundary.setState(errorState);
 
     if (isRecovering) {
@@ -1409,7 +1389,7 @@ function handleCrash(boundary: CrashBoundary, errorState: CrashErrorState) {
             rememberCrashNotification(latestCrash.report);
         }
 
-        if (settings.store.showSupportPopup && !supportScreenMounted) {
+        if (settings.store.showSupportPopup) {
             openCrashSupportModal(latestCrash.report);
         }
     }, 50);
@@ -1464,6 +1444,7 @@ function handleGlobalError(event: ErrorEvent) {
     const report = createReport({ error }, "window-error");
     saveReport(report);
     writeCrashLog(report);
+    if (settings.store.showSupportPopup) openCrashSupportModal(report);
 }
 
 function reportScreenFailure(error: unknown) {
@@ -1473,7 +1454,7 @@ function reportScreenFailure(error: unknown) {
     maybeDisableSuspectedPlugin(report);
     saveReport(report);
     writeCrashLog(report);
-    if (settings.store.showSupportPopup && !supportScreenMounted) openCrashSupportModal(report);
+    if (settings.store.showSupportPopup) openCrashSupportModal(report);
 }
 
 function handleUnhandledRejection(event: PromiseRejectionEvent) {
@@ -1486,6 +1467,7 @@ function handleUnhandledRejection(event: PromiseRejectionEvent) {
     const report = createReport({ error }, "unhandled-rejection");
     saveReport(report);
     writeCrashLog(report);
+    if (settings.store.showSupportPopup) openCrashSupportModal(report);
 }
 
 function installGlobalListeners() {
@@ -1516,26 +1498,9 @@ function triggerTestCrash() {
     );
 }
 
-function CrashSupportModal({ modalProps, report, standalone = false }: CrashSupportModalProps) {
-    settings.use(DIAGNOSTIC_TEST_KEYS);
+function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
     const isLooping = report.recentCrashCount >= 3;
     const [isCheckingUpdate, setIsCheckingUpdate] = React.useState(false);
-    const [isClearingCache, setIsClearingCache] = React.useState(false);
-    const [cacheStatus, setCacheStatus] = React.useState("");
-    const safeModeActive = Boolean(settings.store.safeModePlugins);
-    const canRestorePlugin = readStringList(settings.store.autoDisabledPlugins).includes(report.disabledPlugin);
-    const diagnosticTest = readDiagnosticTest();
-    React.useEffect(() => {
-        openSupportViews++;
-        document.documentElement.classList.add(cl("scroll-locked"));
-        document.body.classList.add(cl("scroll-locked"));
-        return () => {
-            if (--openSupportViews === 0) {
-                document.documentElement.classList.remove(cl("scroll-locked"));
-                document.body.classList.remove(cl("scroll-locked"));
-            }
-        };
-    }, []);
     const recoveredText = report.recovered
         ? "Illegalcord recovered the screen, but the crash can happen again if the install or a plugin is broken."
         : "Illegalcord could not confirm a clean recovery. Restart or reinstall the client before continuing.";
@@ -1543,11 +1508,6 @@ function CrashSupportModal({ modalProps, report, standalone = false }: CrashSupp
         setIsCheckingUpdate(true);
         await checkAndUpdateIllegalcord();
         setIsCheckingUpdate(false);
-    };
-    const runCacheCleanup = async () => {
-        setIsClearingCache(true);
-        setCacheStatus(await clearClientCache());
-        setIsClearingCache(false);
     };
 
     const title = (
@@ -1614,92 +1574,15 @@ function CrashSupportModal({ modalProps, report, standalone = false }: CrashSupp
 
                     <section className={cl("action")}>
                         <div className={cl("action-copy")}>
-                            <BaseText size="md" weight="semibold">Clear Discord cache</BaseText>
-                            <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                                {cacheStatus || "Clear Discord's browser, code and stored caches, then restart it."}
-                            </BaseText>
-                        </div>
-                        <Button variant="secondary" disabled={!Native?.clearClientCache || isClearingCache} onClick={() => void runCacheCleanup()} className={cl("action-button")}>
-                            {isClearingCache ? "Clearing..." : "Clear cache"}
-                        </Button>
-                    </section>
-
-                    <section className={cl("action")}>
-                        <div className={cl("action-copy")}>
                             <BaseText size="md" weight="semibold">Disable optional plugins</BaseText>
                             <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
                                 Turn off enabled plugins while keeping the plugins active by default.
                             </BaseText>
                         </div>
-                        <Button variant="dangerSecondary" onClick={() => disableOptionalPlugins(modalProps.onClose, report)} className={cl("action-button")}>
+                        <Button variant="dangerSecondary" onClick={disableOptionalPlugins} className={cl("action-button")}>
                             Disable plugins
                         </Button>
                     </section>
-
-                    {!diagnosticTest && report.possiblePlugins.length > 0 && (
-                        <section className={cl("action")}>
-                            <div className={cl("action-copy")}>
-                                <BaseText size="md" weight="semibold">Test a possible plugin</BaseText>
-                                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                                    Disable one plugin, then repeat the action that caused the crash in the same channel. Recent activity does not prove that a plugin caused it.
-                                </BaseText>
-                                <Flex flexWrap="wrap" gap="8px">
-                                    {report.possiblePlugins.filter(({ name }) => Plugins[name] && !Plugins[name].required && !Plugins[name].isDependency && Settings.plugins[name]?.enabled
-                                        && !Object.values(Plugins).some(other => isPluginEnabled(other.name) && other.dependencies?.includes(name))).map(({ name }) => (
-                                        <Button key={name} size="small" variant="secondary" onClick={() => beginPluginTest(name, report, modalProps.onClose, report)}>
-                                            Test {name}
-                                        </Button>
-                                    ))}
-                                </Flex>
-                            </div>
-                        </section>
-                    )}
-
-                    {diagnosticTest && (
-                        <section className={cl("action")}>
-                            <div className={cl("action-copy")}>
-                                <BaseText size="md" weight="semibold">Test without {diagnosticTest.plugin}</BaseText>
-                                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                                    {diagnosticTest.status === "awaiting-restart" ? "Restart the client before testing."
-                                        : diagnosticTest.status === "restoring" ? "Restart to finish restoring this plugin."
-                                            : diagnosticTest.status === "inconclusive" ? `The test is inconclusive because these plugins also changed: ${diagnosticTest.changedPlugins.join(", ")}.`
-                                            : diagnosticTest.status === "crashed" ? "The same crash happened with this plugin disabled."
-                                            : diagnosticTest.status === "no-crash" ? "You recorded that the same crash did not occur."
-                                                : `Repeat the action in channel ${diagnosticTest.channelId ?? "the same channel"}, then record the result.`}
-                                </BaseText>
-                                <Flex flexWrap="wrap" gap="8px">
-                                    {diagnosticTest.status === "active" && <Button size="small" variant="secondary" onClick={markPluginTestWithoutCrash}>No matching crash</Button>}
-                                    <Button size="small" variant="secondary" onClick={restoreTestedPlugin}>{diagnosticTest.status === "restoring" ? "Restart now" : "Restore plugin"}</Button>
-                                </Flex>
-                            </div>
-                        </section>
-                    )}
-
-                    <section className={cl("action")}>
-                        <div className={cl("action-copy")}>
-                            <BaseText size="md" weight="semibold">{safeModeActive ? "Safe mode is active" : "Start safe mode"}</BaseText>
-                            <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                                {safeModeActive ? "Restore the plugins that were enabled before safe mode." : "Restart with only required plugins. Your current selection will be saved."}
-                            </BaseText>
-                        </div>
-                        <Button variant="secondary" onClick={safeModeActive ? restoreSafeMode : () => requestSafeMode(modalProps.onClose, report)} className={cl("action-button")}>
-                            {safeModeActive ? "Restore plugins" : "Start safe mode"}
-                        </Button>
-                    </section>
-
-                    {canRestorePlugin && (
-                        <section className={cl("action")}>
-                            <div className={cl("action-copy")}>
-                                <BaseText size="md" weight="semibold">{report.disabledPlugin} was disabled</BaseText>
-                                <BaseText tag="p" size="sm" color="text-muted" className={cl("text")}>
-                                    Restore this plugin if it was not the cause of the crash.
-                                </BaseText>
-                            </div>
-                            <Button variant="secondary" disabled={safeModeActive} onClick={() => restoreAutoDisabledPlugin(report.disabledPlugin, modalProps.onClose)} className={cl("action-button")}>
-                                Restore plugin
-                            </Button>
-                        </section>
-                    )}
                 </div>
 
                 <div className={cl("report")}>
@@ -1750,17 +1633,13 @@ function CrashSupportModal({ modalProps, report, standalone = false }: CrashSupp
                     </BaseText>
                 </div>
 
+                <SafeCrashHandlerSettings inPopup />
+
                 <Flex justifyContent="space-between" flexWrap="wrap" gap="8px" className={cl("footer")}>
                     <div className={cl("footer-actions")}>
                         <Button variant="secondary" onClick={copyLatestReport} className={cl("footer-button")}>
                             Copy report
                             <CopyIcon height={16} width={16} />
-                        </Button>
-                        <Button variant="secondary" disabled={!Native?.openCrashLogDir} onClick={openCrashLogsFolder}>
-                            Open logs folder
-                        </Button>
-                        <Button variant="secondary" disabled={!Native?.openProcessCrashDir} onClick={openProcessCrashFolder}>
-                            Open process dumps
                         </Button>
                     </div>
                     <div className={cl("footer-actions")}>
@@ -1776,83 +1655,33 @@ function CrashSupportModal({ modalProps, report, standalone = false }: CrashSupp
         </div>
     );
 
-    return standalone ? (
-        <Dialog className={cl("fallback")} role="alertdialog" aria-modal="true" aria-label="Illegalcord crash recovery">
+    return (
+        <section className={cl("fallback")}>
             {title}
             <BaseText tag="p" color="text-muted" className={cl("text")}>{subtitle}</BaseText>
-            <ScrollerThin className={cl("modal-scroller")}>
+            <div className={cl("modal-scroller")}>
                 {content}
-            </ScrollerThin>
-        </Dialog>
-    ) : (
-        <Modal
-            {...modalProps}
-            size="md"
-            listProps={{ className: cl("modal-scroller") }}
-            title={title}
-            subtitle={subtitle}
-        >
-            {content}
-        </Modal>
+            </div>
+        </section>
     );
 }
 
-function CrashSupportFallback({ wrappedProps }: { wrappedProps: CrashSupportModalProps; }) {
-    return <CrashSupportModal {...wrappedProps} standalone />;
-}
-
-const SafeCrashSupportModal = ErrorBoundary.wrap(CrashSupportModal, { fallback: CrashSupportFallback });
+const SafeCrashSupportModal = ErrorBoundary.wrap(CrashSupportModal, { noop: true });
 
 function CrashSupportScreen({ empty }: { empty: boolean; }) {
-    const { showSupportPopup, detectBlankScreen } = settings.use(SCREEN_SETTINGS_KEYS);
-    const [dismissedReport, setDismissedReport] = React.useState<string>();
-
-    React.useEffect(() => {
-        supportScreenMounted = true;
-        return () => { supportScreenMounted = false; };
-    }, []);
-
+    const { detectBlankScreen } = settings.use(SCREEN_SETTINGS_KEYS);
     React.useEffect(() => {
         if (!empty || !detectBlankScreen) return;
         const timer = setTimeout(() => reportScreenFailure(new Error("Discord rendered an empty screen.")), 1500);
         return () => clearTimeout(timer);
     }, [empty, detectBlankScreen]);
-
-    const report = latestReport;
-    if (!showSupportPopup || !report || report.id === dismissedReport) return null;
-
-    return (
-        <div className={cl("overlay")}>
-            <SafeCrashSupportModal
-                standalone
-                report={report}
-                modalProps={{ transitionState: 1, onClose: () => setDismissedReport(report.id) }}
-            />
-        </div>
-    );
+    return null;
 }
 
 const SafeCrashSupportScreen = ErrorBoundary.wrap(CrashSupportScreen, { noop: true });
 
 function openCrashSupportModal(report: CrashReport) {
-    if (crashModalOpen) return;
-
-    crashModalOpen = true;
-    const modalKey = openModal(modalProps => {
-        const onClose = () => {
-            crashModalOpen = false;
-            modalProps.onClose();
-        };
-
-        return (
-            <ErrorBoundary noop onError={() => {
-                crashModalOpen = false;
-                closeModal(modalKey);
-            }}>
-                <SafeCrashSupportModal modalProps={{ ...modalProps, onClose }} report={report} />
-            </ErrorBoundary>
-        );
-    });
+    openSupportPopup(onClose => <SafeCrashSupportModal key={report.id} report={report} modalProps={{ transitionState: 1, onClose }} />);
 }
 
 function clearDrafts() {
@@ -1885,8 +1714,16 @@ function recoverCrashBoundary(boundary: CrashBoundary) {
     return stateRecovered;
 }
 
-function CrashHandlerSettings() {
+function CrashHandlerSettings({ inPopup = false }: { inPopup?: boolean; }) {
     const { crashCount, lastCrashAt, lastCrashReport, autoDisabledPlugins, safeModePlugins } = settings.use(SETTINGS_KEYS);
+    const Scroller = inPopup ? "div" : ScrollerThin;
+    const [isClearingCache, setIsClearingCache] = React.useState(false);
+    const [cacheStatus, setCacheStatus] = React.useState("");
+    const runCacheCleanup = async () => {
+        setIsClearingCache(true);
+        setCacheStatus(await clearClientCache());
+        setIsClearingCache(false);
+    };
     const hasCrashReport = Boolean(lastCrashReport);
     const report = latestReport ?? createPlaceholderReport();
     const diagnosticTest = readDiagnosticTest();
@@ -1909,9 +1746,7 @@ function CrashHandlerSettings() {
                     </BaseText>
                 </div>
                 <div className={cl("settings-actions")}>
-                    <Button size="small" onClick={() => openCrashSupportModal(report)}>
-                        Open popup
-                    </Button>
+                    {!inPopup && <Button size="small" onClick={() => openCrashSupportModal(report)}>Open popup</Button>}
                     <Button size="small" variant="secondary" disabled={!hasCrashReport} onClick={copyLatestReport}>
                         Copy report
                     </Button>
@@ -1932,13 +1767,14 @@ function CrashHandlerSettings() {
                 <BaseText size="sm" weight="semibold">Recovery</BaseText>
                 <BaseText size="sm" color="text-muted">{safeModePlugins ? "Safe mode is active." : "Safe mode is off."}</BaseText>
                 <div className={cl("settings-actions")}>
-                    <Button size="small" variant="secondary" onClick={safeModePlugins ? restoreSafeMode : () => requestSafeMode()}>
+                    <Button size="small" variant="secondary" onClick={safeModePlugins ? restoreSafeMode : requestSafeMode}>
                         {safeModePlugins ? "Restore previous plugins" : "Restart in safe mode"}
                     </Button>
-                    <Button size="small" variant="secondary" disabled={!Native?.clearClientCache} onClick={() => void clearClientCache().then(body => showNotification({ title: "Discord cache cleanup", body, noPersist: true }))}>
-                        Clear client cache
+                    <Button size="small" variant="secondary" disabled={!Native?.clearClientCache || isClearingCache} onClick={() => void runCacheCleanup()}>
+                        {isClearingCache ? "Clearing..." : "Clear client cache"}
                     </Button>
                 </div>
+                {cacheStatus && <BaseText size="sm" color="text-muted">{cacheStatus}</BaseText>}
                 {disabledPlugins.map(name => (
                     <div key={name} className={cl("settings-row")}>
                         <BaseText size="sm">Automatically disabled: {name}</BaseText>
@@ -1991,13 +1827,13 @@ function CrashHandlerSettings() {
                         Clear activity
                     </Button>
                 </div>
-                <ScrollerThin className={cl("history-list")}>
+                <Scroller className={cl("history-list")}>
                     {diagnosticEvents.length ? diagnosticEvents.map(({ timestamp, kind, plugin, detail }) => (
                         <BaseText tag="p" size="sm" color="text-muted" className={cl("text")} key={`${timestamp}:${kind}:${plugin ?? ""}`}>
                             {new Date(timestamp).toLocaleString()} · {plugin ? `${plugin}: ` : ""}{detail ?? kind}
                         </BaseText>
                     )) : <BaseText size="sm" color="text-muted">No recent activity recorded.</BaseText>}
-                </ScrollerThin>
+                </Scroller>
             </div>
             <div className={cl("history")}>
                 <div className={cl("settings-row")}>
@@ -2012,7 +1848,7 @@ function CrashHandlerSettings() {
                         Clear errors
                     </Button>
                 </div>
-                <ScrollerThin className={cl("history-list")}>
+                <Scroller className={cl("history-list")}>
                     {history.length ? history.map(entry => (
                         <div key={entry.id} className={cl("history-entry")}>
                             <BaseText size="sm" weight="semibold">{new Date(entry.timestamp).toLocaleString()} · {CRASH_KIND_LABELS[entry.kind]}</BaseText>
@@ -2021,7 +1857,7 @@ function CrashHandlerSettings() {
                             </BaseText>
                         </div>
                     )) : <BaseText size="sm" color="text-muted">No errors recorded yet.</BaseText>}
-                </ScrollerThin>
+                </Scroller>
             </div>
         </div>
     );
@@ -2047,7 +1883,6 @@ export default definePlugin({
     },
 
     start() {
-        if (settings.store.captureGlobalErrors) settings.store.captureGlobalErrors = false;
         recordDiagnosticEvent("start", undefined, "Client session started.");
         const test = readDiagnosticTest();
         const enabledPlugins = new Set(getEnabledPluginSnapshot());
@@ -2073,6 +1908,9 @@ export default definePlugin({
     },
 
     stop() {
+        closeSupportPopup();
+        if (renderFailureTimer !== undefined) clearTimeout(renderFailureTimer);
+        renderFailureTimer = undefined;
         SettingsStore.removeGlobalChangeListener(onPluginSettingChanged);
         if (recoveryTimer !== undefined) clearTimeout(recoveryTimer);
         recoveryTimer = undefined;
@@ -2096,13 +1934,22 @@ export default definePlugin({
             find: "#{intl::ERRORS_UNEXPECTED_CRASH}",
             replacement: {
                 match: /render\(\)\{(?=.{0,150}?this\.state)/,
-                replace: "render(){return $self.renderRoot(this.vcCrashHandlerRender())}vcCrashHandlerRender(){"
+                replace: "render(){return $self.renderRoot(()=>this.vcCrashHandlerRender())}vcCrashHandlerRender(){"
             }
         }
     ],
 
     handleCrash,
-    renderRoot(children: ReactNode) {
-        return <>{children}<SafeCrashSupportScreen empty={children == null || typeof children === "boolean" || children === "" || (Array.isArray(children) && children.length === 0)} /></>;
+    renderRoot(render: () => ReactNode) {
+        try {
+            const children = render();
+            return <>{children}<SafeCrashSupportScreen empty={children == null || typeof children === "boolean" || children === "" || (Array.isArray(children) && children.length === 0)} /></>;
+        } catch (error) {
+            if (renderFailureTimer === undefined) renderFailureTimer = setTimeout(() => {
+                renderFailureTimer = undefined;
+                reportScreenFailure(error);
+            }, 0);
+            return null;
+        }
     }
 });

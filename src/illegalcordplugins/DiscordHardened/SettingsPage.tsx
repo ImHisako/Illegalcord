@@ -42,6 +42,7 @@ const SETTINGS_GROUPS = [
             "blockTypingIndicator",
             "blockFingerprinting",
             "goofCordFirewall",
+            "sessionFirewall",
             "customFirewallRules",
             "firewallBlocklist",
             "firewallBlockedPatterns",
@@ -102,13 +103,13 @@ const SETTINGS_GROUPS = [
     },
     {
         title: "Electron security",
-        description: "Adds protection in the desktop main process after the plugin starts. Updating Discord is still required for Electron and Chromium security fixes.",
-        keys: ["minimumPrivilege", "restrictElectronNavigation", "blockElectronWebviews", "browserSelection"],
+        description: "Adds desktop permission and plugin IPC controls. Core settings IPC and the renderer sandbox still require loader changes. Updating Discord is required for Electron and Chromium security fixes.",
+        keys: ["minimumPrivilege", "electronPermissionControls", "preserveMultiInstancePolicies", "restrictElectronNavigation", "blockElectronWebviews", "browserSelection"],
     },
     {
         title: "Desktop proxy",
-        description: "Optionally routes the desktop client through a credential-free Electron proxy.",
-        keys: ["proxy", "proxyRules", "proxyBypassRules"],
+        description: "Optionally routes Chromium session traffic through a credential-free Electron proxy. Native Discord modules use their own networking. A proxy configuration failure blocks requests until recovery or restart.",
+        keys: ["proxy", "proxyBeforeLoad", "proxyRules", "proxyBypassRules"],
     },
 ] satisfies readonly SettingsGroup[];
 

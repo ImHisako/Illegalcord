@@ -7,7 +7,11 @@
 import type { Event, IpcMainInvokeEvent, Session, WebContents, WebPreferences } from "electron";
 
 import { launchBrowser, listInstalledBrowsers } from "./browsers";
+import { clearTemporaryPermissions } from "./nativePermissions";
 import { isDiscordAppUrl, isTrustedSender, restrictWebPreferences } from "./nativeSecurity";
+import { configureSessionProxy, getSessionStatus, prepareSession, releaseSession } from "./nativeSession";
+
+export { setTemporaryPermissions } from "./nativePermissions";
 
 interface AppliedState {
     sender: WebContents;
@@ -15,7 +19,6 @@ interface AppliedState {
     userAgent: string;
     userAgentApplied: boolean;
     questIdentityApplied: boolean;
-    proxyApplied: boolean;
     restrictElectronNavigation: boolean;
     blockElectronWebviews: boolean;
     navigationListener: (event: Event, url: string) => void;
@@ -72,7 +75,6 @@ async function restoreState(state: AppliedState): Promise<boolean> {
 
     if (state.userAgentApplied && senderAvailable) state.sender.setUserAgent(state.userAgent);
     if (state.questIdentityApplied) state.session.webRequest.onBeforeSendHeaders(null);
-    if (state.proxyApplied) await state.session.setProxy({ mode: "system" });
     return senderAvailable;
 }
 
@@ -120,7 +122,6 @@ export async function configure(
         userAgent: event.sender.getUserAgent(),
         userAgentApplied: false,
         questIdentityApplied: false,
-        proxyApplied: false,
         restrictElectronNavigation,
         blockElectronWebviews,
         navigationListener: (navigationEvent: Event, url: string) => {
@@ -145,6 +146,7 @@ export async function configure(
         destroyedListener: () => {
             if (appliedStates.get(event.sender.id) !== state) return;
             appliedStates.delete(event.sender.id);
+            clearTemporaryPermissions(event.sender.id);
             void restoreState(state).catch(() => false);
         },
     };
@@ -181,9 +183,9 @@ export async function configure(
             state.questIdentityApplied = true;
         }
 
+        prepareSession(event.sender.session);
         if (proxy) {
-            await event.sender.session.setProxy({ proxyRules, proxyBypassRules });
-            state.proxyApplied = true;
+            await configureSessionProxy(event.sender.session, proxyRules, proxyBypassRules);
             if (!isTrustedSender(event)) {
                 await restoreState(state);
                 return false;
@@ -206,8 +208,12 @@ export async function restore(event: IpcMainInvokeEvent): Promise<boolean> {
     if (!state) return false;
 
     appliedStates.delete(event.sender.id);
+    clearTemporaryPermissions(event.sender.id);
     try {
-        return await restoreState(state);
+        const restored = await restoreState(state);
+        if (!Array.from(appliedStates.values()).some(active => active.session === state.session))
+            return await releaseSession(state.session) && restored;
+        return restored;
     } catch {
         return false;
     }
@@ -231,6 +237,7 @@ export function getSecurityStatus(event: IpcMainInvokeEvent) {
     if (typeof preferences !== "object" || preferences === null) return null;
     const state = appliedStates.get(event.sender.id);
     return {
+        ...getSessionStatus(event.sender.session),
         nodeIntegration: "nodeIntegration" in preferences && typeof preferences.nodeIntegration === "boolean" ? preferences.nodeIntegration : null,
         contextIsolation: "contextIsolation" in preferences && typeof preferences.contextIsolation === "boolean" ? preferences.contextIsolation : null,
         sandbox: "sandbox" in preferences && typeof preferences.sandbox === "boolean" ? preferences.sandbox : null,

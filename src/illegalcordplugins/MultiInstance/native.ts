@@ -5,6 +5,7 @@
  */
 
 import { restrictWebPreferences } from "@illegalcordplugins/DiscordHardened/nativeSecurity";
+import { prepareSession } from "@illegalcordplugins/DiscordHardened/nativeSession";
 import { addContentPolicy } from "@illegalcordplugins/DiscordHardened/policy";
 import { RendererSettings } from "@main/settings";
 import { app, BrowserWindow, nativeImage, session, shell } from "electron";
@@ -169,6 +170,8 @@ function isAllowedExternalUrl(url: string) {
 
 function removeBlockingHeaders(responseHeaders: Record<string, string[]> | undefined) {
     const headers = { ...(responseHeaders ?? {}) };
+    const hardening = RendererSettings.store.plugins?.DiscordHardened;
+    if (hardening?.enabled && hardening.preserveMultiInstancePolicies) return headers;
 
     for (const key of Object.keys(headers)) {
         const normalized = key.toLowerCase();
@@ -297,6 +300,8 @@ export async function openInstance(
             ? savedPartition
             : `illegalcord-mi-${profileId}-${Date.now()}`;
         const ses = session.fromPartition(partition, { cache: !blockExternalTokenAccess });
+        if (!await prepareSession(ses).ready)
+            return { ok: false, error: "The desktop proxy could not be configured. Check DiscordHardened settings and restart Discord." };
         configureSession(partition, ses);
 
         const webPreferences: Electron.WebPreferences = {

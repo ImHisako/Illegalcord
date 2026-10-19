@@ -5,12 +5,19 @@
     box-sizing: border-box;
     width: 100%;
     height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    border: 0;
     display: grid;
     place-items: center;
     overflow: clip;
     overscroll-behavior: none;
     padding: 24px;
-    background: var(--background-base-lowest, var(--background-primary));
+    background: var(--background-base-lowest, var(--background-primary, #1e1f22));
+    color: var(--text-default, var(--text-normal, #f2f3f5));
+    font-family: var(--font-primary, system-ui);
+    color-scheme: dark;
 }
 
 .vc-crash-handler-enhanced-overlay > * {
@@ -18,13 +25,31 @@
     max-height: 100%;
 }
 
-.vc-crash-handler-enhanced-modal-scroller {
-    min-height: 0;
-    overscroll-behavior: contain;
+.vc-crash-handler-enhanced-overlay > div {
+    max-width: 100%;
 }
 
-.vc-crash-handler-enhanced-scroll-locked {
-    overflow: hidden;
+.vc-crash-handler-enhanced-overlay .vc-btn-base {
+    background-color: var(--control-secondary-background-default, #383a40);
+    border-color: var(--control-secondary-border-default, #41434a);
+    color: var(--control-secondary-text-default, #f2f3f5);
+}
+
+.vc-crash-handler-enhanced-overlay .vc-btn-primary {
+    background-color: var(--control-primary-background-default, #5865f2);
+    border-color: var(--control-primary-border-default, transparent);
+    color: var(--control-primary-text-default, #fff);
+}
+
+.vc-crash-handler-enhanced-overlay .vc-btn-dangerSecondary {
+    color: var(--control-critical-secondary-text-default, #f23f43);
+}
+
+.vc-crash-handler-enhanced-modal-scroller {
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
 }
 
 .vc-crash-handler-enhanced-modal {
@@ -40,10 +65,10 @@
     max-width: 100%;
     max-height: calc(100dvh - 48px);
     padding: 24px;
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--border-subtle, #41434a);
     border-radius: var(--radius-sm, 8px);
-    background: var(--background-surface-high, var(--background-secondary));
-    color: var(--text-default, var(--text-normal));
+    background: var(--background-surface-high, var(--background-secondary, #2b2d31));
+    color: var(--text-default, var(--text-normal, #f2f3f5));
 }
 
 .vc-crash-handler-enhanced-header {
@@ -86,7 +111,7 @@
     padding: 12px 14px;
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm, 8px);
-    background: var(--background-base-low, var(--background-secondary));
+    background: var(--background-base-low, var(--background-secondary, #2b2d31));
 }
 
 .vc-crash-handler-enhanced-status-recovered {
@@ -110,7 +135,7 @@
     padding: 14px;
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm, 8px);
-    background: var(--background-base-lower, var(--background-secondary-alt));
+    background: var(--background-base-lower, var(--background-secondary-alt, #232428));
 }
 
 .vc-crash-handler-enhanced-action-copy,
@@ -186,7 +211,9 @@
     gap: 8px;
     max-height: 280px;
     min-height: 0;
+    overflow: auto;
     overflow-wrap: anywhere;
+    scrollbar-width: thin;
 }
 
 .vc-crash-handler-enhanced-settings-row > button {
