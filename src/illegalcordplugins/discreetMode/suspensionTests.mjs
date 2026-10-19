@@ -18,6 +18,7 @@ function fixture({ active = false, mode = "suspend", snapshot, failSave = false 
     const plugins = {
         DiscreetMode: { name: "DiscreetMode", dependencies: ["CommandsAPI"] },
         LarpCord: { name: "LarpCord", dependencies: ["HeaderBarAPI"] },
+        ClientDiagnostics: { name: "ClientDiagnostics", started: true },
         CommandsAPI: { name: "CommandsAPI", required: true },
         HeaderBarAPI: { name: "HeaderBarAPI" },
         Settings: { name: "Settings", required: true },
@@ -134,6 +135,31 @@ test("Hide mode skips startup effects until exit and restores the original lifec
     assert.equal(f.reloads.length, 0);
 });
 
+test("Keeps Client Diagnostics running across repeated hide cycles and when starting in discreet mode", async () => {
+    for (const active of [false, true]) {
+        const f = fixture({ mode: "hide", active });
+        const plugin = f.plugins.ClientDiagnostics;
+        const start = plugin.start = () => assert.fail("Client Diagnostics must not restart.");
+        const stop = plugin.stop = () => assert.fail("Client Diagnostics must not stop.");
+        const handle = f.install();
+        handle.onReady();
+        for (let cycle = 0; cycle < 8; cycle++) {
+            f.store.active = true;
+            await settle();
+            assert.equal(plugin.started, true);
+            assert.equal(f.state.plugins.ClientDiagnostics.enabled, true);
+            f.store.active = false;
+            await settle();
+            assert.equal(plugin.started, true);
+            assert.equal(plugin.start, start);
+            assert.equal(plugin.stop, stop);
+        }
+        handle.stop();
+        assert.equal(plugin.started, true);
+        assert.equal(f.listeners.size, 0);
+    }
+});
+
 test("Retains layout styles for loaded patches while suspending their plugins", async () => {
     const f = fixture({ mode: "hide" });
     const plugin = f.plugins.FakeNitro;
@@ -220,6 +246,9 @@ test("Suspends plugin automations and notifications, saves enabled choices and r
     assert.equal(f.plugins.Announcements.required, false);
     assert.deepEqual(f.stopped.sort(), ["Announcements", "FakeNitro", "StaffDetector", "StatusCycler"]);
     assert.equal(f.state.plugins.LarpCord.enabled, true);
+    assert.equal(f.state.plugins.ClientDiagnostics.enabled, true);
+    assert.equal(f.plugins.ClientDiagnostics.started, true);
+    assert.equal(f.store.suspendedPlugins.plugins.ClientDiagnostics, undefined);
     assert.equal(f.state.plugins.DiscreetMode.enabled, true);
     assert.equal(f.state.plugins.CommandsAPI.enabled, true);
     assert.equal(f.state.cloud.settingsSync, false);
@@ -247,7 +276,7 @@ test("Prunes feature patches at boot, retains infrastructure and restores a prev
     handle.onReady();
     await settle();
     assert.equal(f.reloads.length, 0);
-    assert.deepEqual(f.patches.map(patch => patch.plugin), ["DiscreetMode", "LarpCord", "CommandsAPI", "HeaderBarAPI", "Settings"]);
+    assert.deepEqual(f.patches.map(patch => patch.plugin), ["DiscreetMode", "LarpCord", "ClientDiagnostics", "CommandsAPI", "HeaderBarAPI", "Settings"]);
     assert.equal(f.store.suspendedPlugins.plugins.StaffDetector, true);
     f.store.active = false;
     await settle();

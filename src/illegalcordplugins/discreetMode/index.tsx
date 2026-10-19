@@ -104,7 +104,8 @@ function DiscreetModeAbout() {
                 Hide mode hides plugin controls, blocks toasts and pauses running plugin features, including StaffDetector alerts, without reloading Discord.
                 Already applied patches can continue to affect messages and other screens in hide mode.
                 Suspend mode reloads Discord to remove feature patches and restores your plugin choices with another reload when you leave it.
-                Core components, APIs and LarpCord contact replacements remain available. Your enabled plugin choices stay unchanged.
+                Core components, APIs, Client Diagnostics and LarpCord contact replacements remain available. Your enabled plugin choices stay unchanged.
+                Client Diagnostics keeps collecting measurements without sending performance notifications during discreet mode.
             </Paragraph>
             <Paragraph>
                 Chat bar, header and user area plugin buttons are hidden, including Dynamic Island.

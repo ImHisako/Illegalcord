@@ -15,6 +15,7 @@ const source = readFileSync(new URL("index.tsx", import.meta.url), "utf8");
 const settingsSource = readFileSync(new URL("settings.ts", import.meta.url), "utf8");
 const larpSource = readFileSync(new URL("larpCord.ts", import.meta.url), "utf8");
 const visualsSource = readFileSync(new URL("visuals.tsx", import.meta.url), "utf8");
+const diagnosticsSource = readFileSync(new URL("../ClientDiagnostics/index.tsx", import.meta.url), "utf8");
 const keyboardSource = readFileSync(new URL("../../equicordplugins/commandPalette/ui/keyboard.ts", import.meta.url), "utf8");
 const createElement = (type, props, ...children) => ({ type, props: { ...props, children } });
 const canonicalize = expression => new RegExp(expression.source.replaceAll("\\i", "(?:[A-Za-z_$][\\w$]*)"), expression.flags);
@@ -268,6 +269,8 @@ test("Restores all runtime overrides and preserves original layouts, settings an
 test("Hides the complete Illegalcord settings section by default and restores access independently of sharing", () => {
     const { plugin, settings, state, core, layout, builder } = fixture();
     const otherSection = { key: "discord_other" };
+    const diagnosticsEntry = { key: "illegalcord_client_diagnostics" };
+    layout[1].buildLayout = () => [diagnosticsEntry];
     layout.push(otherSection);
     plugin.start();
     assert.equal(settings.hideSettings, true);
@@ -278,12 +281,49 @@ test("Hides the complete Illegalcord settings section by default and restores ac
     assert.ok(command);
     command.execute();
     assert.equal(core.buildLayout(builder), layout);
+    assert.deepEqual(core.buildLayout(builder)[1].buildLayout(), [diagnosticsEntry]);
     state.stream = { streamKey: "own stream" };
     assert.equal(core.buildLayout(builder), layout);
     command.execute();
     assert.deepEqual(core.buildLayout(builder), [{ key: "native" }, otherSection]);
     plugin.stop();
     assert.equal(core.buildLayout(builder), layout);
+});
+
+test("Silences Client Diagnostics notifications during discreet mode and preserves the notification preference", () => {
+    const f = fixture(false);
+    const settings = { store: { lagNotifications: true } };
+    const notifications = [];
+    const cooldowns = new Map();
+    let checks = 0;
+    const notificationSource = diagnosticsSource.slice(diagnosticsSource.indexOf("function maybeSendLagNotification()"), diagnosticsSource.indexOf("\nfunction startLagNotifications()"));
+    const check = compileFunction(`${notificationSource};return maybeSendLagNotification;`, [
+        "settings", "isPluginEnabled", "discreetSettings", "startedAt", "LAG_NOTIFICATION_MIN_COLLECTION_MS",
+        "LAG_NOTIFICATION_COOLDOWN_MS", "lagNotificationTimes", "getLagNotificationCandidates", "showNotification", "openClientDiagnosticsSettings"
+    ])(settings, () => f.state.enabled, { plain: f.settings }, Date.now() - 60_000, 30_000, 600_000, cooldowns, () => {
+        checks++;
+        return [{ row: { name: "HeavyPlugin", impact: 1000 }, reasons: [] }];
+    }, notification => notifications.push(notification), () => {});
+
+    f.settings.active = true;
+    for (let cycle = 0; cycle < 8; cycle++) check();
+    assert.equal(checks, 0);
+    assert.equal(notifications.length, 0);
+    assert.equal(cooldowns.size, 0);
+    assert.equal(settings.store.lagNotifications, true);
+    f.settings.active = false;
+    check();
+    assert.equal(notifications.length, 1);
+    cooldowns.clear();
+    f.settings.active = true;
+    f.state.enabled = false;
+    check();
+    assert.equal(notifications.length, 2);
+    cooldowns.clear();
+    settings.store.lagNotifications = false;
+    check();
+    assert.equal(notifications.length, 2);
+    assert.equal(checks, 2);
 });
 
 test("Preserves separate version rows so enabling the plugin does not widen the settings sidebar", () => {

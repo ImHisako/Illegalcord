@@ -251,6 +251,9 @@ const patchUserContext: NavContextMenuPatchCallback = (children, { user }: UserC
 
     const stalked = targets.includes(user.id);
     const group = findGroupChildrenByChildId("apps", children) ?? children;
+    for (let index = group.length - 1; index >= 0; index--) {
+        if (group[index]?.props?.id === "vc-st-stalk") group.splice(index, 1);
+    }
     let id = group.findLastIndex(child => child?.props?.id && child.props.id === "ignore");
     if (id < 0) id = group.length - 1;
 
