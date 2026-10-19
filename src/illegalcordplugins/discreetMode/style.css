@@ -1,0 +1,13 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+.vc-discreet-mode-chatbar {
+    display: contents;
+}
+
+.vc-discreet-mode-chatbar.vc-discreet-mode-hidden .vc-chatbar-button {
+    display: none;
+}
