@@ -38,13 +38,14 @@ function visible(node) {
     return typeof node.type === "function" ? visible(node.type(node.props)) : visible(node.props.children);
 }
 
-function fixture(active = true, donorData = {}) {
+function fixture(active = true, donorData = {}, { deferReady = false } = {}) {
     const state = { enabled: true, stream: null, streamerMode: false };
     const settings = {};
     const refreshed = [];
     const warnings = [];
     const listeners = new Map();
     const registeredCommands = new Map();
+    const readyCallbacks = [];
     const window = {
         addEventListener(type, listener, capture) { assert.equal(capture, true); assert.ok(!listeners.has(type)); listeners.set(type, listener); },
         removeEventListener(type, listener, capture) { assert.equal(capture, true); assert.equal(listeners.get(type), listener); listeners.delete(type); }
@@ -78,6 +79,7 @@ function fixture(active = true, donorData = {}) {
     };
     const originalLarp = { ...larp };
     const layout = [{ key: "native" }, { key: "equicord_section" }];
+    const builder = { key: "$Root", buildLayout: () => layout };
     const core = {
         marker: "Mod version",
         buildLayout() { assert.equal(this, core); return layout; },
@@ -105,7 +107,7 @@ function fixture(active = true, donorData = {}) {
         "@api/PluginManager": { isPluginEnabled: name => name === "DiscreetMode" ? state.enabled : reviewPlugins.has(name) },
         "@api/Settings": {
             definePluginSettings: definitions => {
-                const plain = Object.fromEntries(Object.entries(definitions).map(([key, definition]) => [key, definition.default]));
+                const plain = Object.fromEntries(Object.entries(definitions).map(([key, definition]) => [key, definition.default ?? definition.options?.find(option => option.default)?.value]));
                 const store = new Proxy(plain, {
                     set(target, key, value) {
                         if (target[key] === value) return true;
@@ -131,12 +133,12 @@ function fixture(active = true, donorData = {}) {
         "@plugins/_api/badges": badges,
         "@plugins/_core/settings": core,
         "@illegalcordplugins/LarpCord": larp,
-        "@webpack": { findByProps: () => accounts, onceReady: { then(callback) { callback(); return Promise.resolve(); } } },
+        "@webpack": { findByProps: () => accounts, onceReady: { then(callback) { if (deferReady) readyCallbacks.push(callback); else callback(); return Promise.resolve(); } } },
         "@utils/constants": { EquicordDevs: { irritably: {} } },
         "@utils/css": { classNameFactory: prefix => (...parts) => parts.flatMap(part => typeof part === "string" ? [prefix + part] : Object.keys(part).filter(key => part[key]).map(key => prefix + key)).join(" ") },
         "@utils/Logger": { Logger: class { warn(...args) { warnings.push(args); } } },
         "@utils/lazy": { SYM_LAZY_GET: Symbol.for("vencord.lazy.get") },
-        "@utils/types": { __esModule: true, default: plugin => plugin, OptionType: { BOOLEAN: 1, STRING: 2 }, StartAt: { Init: 0 } },
+        "@utils/types": { __esModule: true, default: plugin => plugin, OptionType: { BOOLEAN: 1, STRING: 2, SELECT: 3 }, StartAt: { Init: 0 } },
         "@webpack/common": {
             ...stores,
             ApplicationStreamingStore: { getCurrentUserActiveStream: () => state.stream },
@@ -163,7 +165,7 @@ function fixture(active = true, donorData = {}) {
         settings.plain.active = true;
         settings.plain.manualMode = false;
     }
-    return { plugin, state, settings: settings.store, definitions: settings.def, core, badges, userArea, originals, layout, refreshed, warnings, reviewPlugins, listeners, HTMLElement, stores, accounts, larp, originalLarp, realUser, realProfile, changes, emitted, registeredCommands };
+    return { plugin, state, settings: settings.store, definitions: settings.def, core, badges, userArea, originals, layout, builder, readyCallbacks, refreshed, warnings, reviewPlugins, listeners, HTMLElement, stores, accounts, larp, originalLarp, realUser, realProfile, changes, emitted, registeredCommands };
 }
 
 test("Filters branded activity fields without changing ordinary activities or their source objects", () => {
@@ -219,19 +221,19 @@ test("Restores all runtime overrides and preserves original layouts, settings an
         f.settings.active = true;
         f.settings.manualMode = false;
         f.plugin.start();
-        assert.equal(f.core.buildLayout({}), f.layout);
+        assert.equal(f.core.buildLayout(f.builder), f.layout);
         const version = f.core.makeInfoElements();
         assert.deepEqual(visible(version), ["Mod version"]);
         f.settings.manualMode = true;
         f.settings.hideSettings = true;
-        assert.deepEqual(f.core.buildLayout({}), [{ key: "native" }]);
+        assert.deepEqual(f.core.buildLayout(f.builder), [{ key: "native" }]);
         assert.equal(f.layout.length, 2);
         assert.equal(f.core.getInfoString(), "");
         assert.deepEqual(f.badges.getBadges({ userId: "123" }), []);
         assert.deepEqual(visible(version), []);
         assert.deepEqual(visible(f.userArea.renderButtons({})), []);
         f.plugin.commands[1].execute();
-        assert.equal(f.core.buildLayout({}), f.layout);
+        assert.equal(f.core.buildLayout(f.builder), f.layout);
         f.plugin.commands[0].execute();
         assert.deepEqual(visible(version), ["Mod version"]);
         assert.deepEqual(f.badges.getBadges({ userId: "123" }), [{ id: "custom", userId: "123" }]);
@@ -247,24 +249,24 @@ test("Restores all runtime overrides and preserves original layouts, settings an
 });
 
 test("Hides the complete Illegalcord settings section by default and restores access independently of sharing", () => {
-    const { plugin, settings, state, core, layout } = fixture();
+    const { plugin, settings, state, core, layout, builder } = fixture();
     const otherSection = { key: "discord_other" };
     layout.push(otherSection);
     plugin.start();
     assert.equal(settings.hideSettings, true);
     assert.equal(plugin.isInterfaceHidden(), false);
-    assert.deepEqual(core.buildLayout({}), [{ key: "native" }, otherSection]);
+    assert.deepEqual(core.buildLayout(builder), [{ key: "native" }, otherSection]);
     assert.deepEqual(layout.map(section => section.key), ["native", "equicord_section", "discord_other"]);
     const command = plugin.commands.find(command => command.name === "discreet-settings");
     assert.ok(command);
     command.execute();
-    assert.equal(core.buildLayout({}), layout);
+    assert.equal(core.buildLayout(builder), layout);
     state.stream = { streamKey: "own stream" };
-    assert.equal(core.buildLayout({}), layout);
+    assert.equal(core.buildLayout(builder), layout);
     command.execute();
-    assert.deepEqual(core.buildLayout({}), [{ key: "native" }, otherSection]);
+    assert.deepEqual(core.buildLayout(builder), [{ key: "native" }, otherSection]);
     plugin.stop();
-    assert.equal(core.buildLayout({}), layout);
+    assert.equal(core.buildLayout(builder), layout);
 });
 
 test("Leaves native toolbar controls intact and makes injected controls reactive", () => {
@@ -280,6 +282,35 @@ test("Leaves native toolbar controls intact and makes injected controls reactive
     assert.deepEqual(visible(span), ["Original chat buttons"]);
     settings.manualMode = false;
     assert.deepEqual(visible(toolbar), ["Native button", "Plugin toolbar button"]);
+});
+
+test("Keeps Illegalcord entries out of the initial native sidebar layout before webpack is ready", () => {
+    for (const mode of ["hide", "suspend"]) {
+        const f = fixture(true, {}, { deferReady: true });
+        f.settings.mode = mode;
+        const nativeEntry = { key: "user_section", buildLayout: () => [{ key: "account" }] };
+        const nativeLayout = [nativeEntry];
+        const builder = { key: "$Root", buildLayout() { assert.equal(this, builder); return nativeLayout; } };
+        let injections = 0;
+        const buildLayout = f.core.buildLayout = function (builder) {
+            assert.equal(this, f.core);
+            injections++;
+            const layout = builder.buildLayout();
+            layout.push({ key: "equicord_section", title: "Kamidere Mutual Scanner" });
+            return layout;
+        };
+        f.plugin.start();
+        assert.equal(f.registeredCommands.size, 0);
+        assert.deepEqual(f.core.buildLayout(builder), [nativeEntry]);
+        assert.equal(injections, 0);
+        assert.deepEqual(nativeLayout, [nativeEntry]);
+        assert.equal(f.core.buildLayout(builder)[0], nativeEntry);
+        f.plugin.stop();
+        assert.equal(f.core.buildLayout, buildLayout);
+        for (const callback of f.readyCallbacks) callback();
+        assert.equal(f.core.buildLayout, buildLayout);
+        assert.equal(f.listeners.size, 0);
+    }
 });
 
 test("Filters activities before publication and skips menu additions without changing Discord's menu props", () => {
@@ -350,24 +381,26 @@ test("F6 toggles all discreet effects and restores the interface even while stre
     const f = fixture(false);
     assert.equal(f.settings.active, false);
     assert.equal(f.settings.keybind, "F6");
+    assert.equal(f.settings.mode, "hide");
+    assert.deepEqual(f.definitions.mode.options.map(option => option.value), ["hide", "suspend"]);
     f.settings.manualMode = false;
     f.plugin.start();
     const buttons = f.userArea.renderButtons({});
     const branded = { name: "Illegalcord", type: 0, flags: 0 };
-    assert.equal(f.core.buildLayout({}), f.layout);
+    assert.equal(f.core.buildLayout(f.builder), f.layout);
     assert.equal(f.plugin.isActivityAllowed(branded), true);
     const event = press(f, "F6");
     assert.equal(event.defaultPrevented, true);
     assert.equal(event.stopped, true);
     assert.equal(f.plugin.isInterfaceHidden(), true);
     assert.deepEqual(visible(buttons), []);
-    assert.deepEqual(f.core.buildLayout({}), [{ key: "native" }]);
+    assert.deepEqual(f.core.buildLayout(f.builder), [{ key: "native" }]);
     assert.equal(f.plugin.isActivityAllowed(branded), false);
     f.state.stream = { streamKey: "own stream" };
     press(f, "F6");
     assert.equal(f.plugin.isInterfaceHidden(), false);
     assert.deepEqual(visible(buttons), ["User area button"]);
-    assert.equal(f.core.buildLayout({}), f.layout);
+    assert.equal(f.core.buildLayout(f.builder), f.layout);
     assert.equal(f.plugin.isActivityAllowed(branded), true);
     assert.deepEqual(f.badges.getBadges({ userId: "123" }), [{ id: "custom", userId: "123" }]);
     f.plugin.stop();

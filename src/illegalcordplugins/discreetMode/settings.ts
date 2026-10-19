@@ -23,9 +23,17 @@ export function refreshActivities() {
 export const settings = definePluginSettings({
     active: {
         type: OptionType.BOOLEAN,
-        description: "Suspend plugin features and reload Discord. Press the shortcut again to restore your plugins and reload.",
+        description: "Enable discreet mode using the selected mode. Press the shortcut again to restore Illegalcord.",
         default: false,
         onChange: refreshActivities
+    },
+    mode: {
+        type: OptionType.SELECT,
+        description: "Choose whether to hide the interface without reloading or suspend all plugin features with a reload.",
+        options: [
+            { label: "Hide interface without reloading", value: "hide", default: true },
+            { label: "Suspend plugins and reload", value: "suspend" }
+        ]
     },
     keybind: {
         type: OptionType.STRING,

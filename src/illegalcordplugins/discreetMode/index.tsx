@@ -48,6 +48,7 @@ const RECOGNIZABLE_PLUGINS: Record<string, string> = {
 };
 const AUDIT_KEYS: Parameters<typeof useSettings>[0] = Object.keys(RECOGNIZABLE_PLUGINS).map((name: string) => `plugins.${name}.enabled` as const);
 let restoreInterface: (() => void) | undefined;
+let restoreSettingsLayout: (() => void) | undefined;
 let refreshProfiles: (() => void) | undefined;
 let restoreSuspension: (() => void) | undefined;
 const commands: VencordCommand[] = [
@@ -97,9 +98,10 @@ function DiscreetModeAbout() {
         <>
             <Paragraph>{active ? "The discreet interface is active." : "The discreet interface is visible."}</Paragraph>
             <Paragraph>
-                Discreet mode suspends plugin features, automations and message changes, including StaffDetector alerts.
-                Discord reloads when entering or leaving this mode so plugin patches are removed or restored.
-                Core components, APIs and LarpCord contact replacements remain available. Your plugin choices are backed up and restored.
+                Hide mode hides plugin controls, blocks toasts and pauses running plugin features, including StaffDetector alerts, without reloading Discord.
+                Already applied patches can continue to affect messages and other screens in hide mode.
+                Suspend mode reloads Discord to remove feature patches and restores your plugin choices with another reload when you leave it.
+                Core components, APIs and LarpCord contact replacements remain available. Your enabled plugin choices stay unchanged.
             </Paragraph>
             <Paragraph>
                 Chat bar, header and user area plugin buttons are hidden, including Dynamic Island.
@@ -231,6 +233,12 @@ export default definePlugin({
 
     start() {
         window.addEventListener("keydown", handleKeyDown, true);
+        const { buildLayout } = SettingsPlugin;
+        SettingsPlugin.buildLayout = builder => {
+            if (!settings.plain.active || !settings.plain.hideSettings) return buildLayout.call(SettingsPlugin, builder);
+            return builder.buildLayout().filter(node => node.key !== "equicord_section");
+        };
+        restoreSettingsLayout = () => { SettingsPlugin.buildLayout = buildLayout; };
         const suspension = installPluginSuspension();
         let cancelled = false;
         restoreSuspension = () => {
@@ -247,14 +255,10 @@ export default definePlugin({
     startInterface() {
         const larpCordPrivacy = installLarpCordPrivacy(isInterfaceHidden);
         refreshProfiles = larpCordPrivacy.refresh;
-        const { buildLayout, getInfoString, makeInfoElements } = SettingsPlugin;
+        const { getInfoString, makeInfoElements } = SettingsPlugin;
         const { getBadges } = BadgeAPI;
         const { renderButtons } = UserAreaAPI;
 
-        SettingsPlugin.buildLayout = (builder: Parameters<typeof buildLayout>[0]) => {
-            const layout = buildLayout.call(SettingsPlugin, builder);
-            return settings.plain.active && settings.plain.hideSettings ? layout.filter((node: { key?: string; }) => node.key !== "equicord_section") : layout;
-        };
         SettingsPlugin.getInfoString = () => isInterfaceHidden() ? "" : getInfoString.call(SettingsPlugin);
         SettingsPlugin.makeInfoElements = (...args: Parameters<typeof makeInfoElements>) => wrapButtons(makeInfoElements.apply(SettingsPlugin, args));
         BadgeAPI.getBadges = (profile: Parameters<typeof getBadges>[0]) => isInterfaceHidden() ? [] : getBadges.call(BadgeAPI, profile);
@@ -263,7 +267,6 @@ export default definePlugin({
             for (const command of commands) unregisterCommand(command.name);
             larpCordPrivacy.stop();
             refreshProfiles = undefined;
-            SettingsPlugin.buildLayout = buildLayout;
             SettingsPlugin.getInfoString = getInfoString;
             SettingsPlugin.makeInfoElements = makeInfoElements;
             BadgeAPI.getBadges = getBadges;
@@ -279,6 +282,8 @@ export default definePlugin({
         window.removeEventListener("keydown", handleKeyDown, true);
         restoreInterface?.();
         restoreInterface = undefined;
+        restoreSettingsLayout?.();
+        restoreSettingsLayout = undefined;
         refreshActivities();
     },
 

@@ -12,8 +12,9 @@ import { compileFunction } from "node:vm";
 import { transformSync } from "esbuild";
 
 const source = transformSync(readFileSync(new URL("suspension.ts", import.meta.url), "utf8"), { loader: "ts", format: "cjs" }).code;
+const fullSource = transformSync(readFileSync(new URL("fullSuspension.ts", import.meta.url), "utf8"), { loader: "ts", format: "cjs" }).code;
 
-function fixture({ active = false, snapshot, failSave = false } = {}) {
+function fixture({ active = false, mode = "suspend", snapshot, failSave = false } = {}) {
     const plugins = {
         DiscreetMode: { name: "DiscreetMode", dependencies: ["CommandsAPI"] },
         LarpCord: { name: "LarpCord", dependencies: ["HeaderBarAPI"] },
@@ -31,12 +32,12 @@ function fixture({ active = false, snapshot, failSave = false } = {}) {
         plugins: Object.fromEntries(Object.keys(plugins).map(name => [name, { enabled: name !== "InitiallyOff" && name !== "Announcements" }])),
         cloud: { settingsSync: true }
     };
-    const data = { active, suspendedPlugins: snapshot };
+    const data = { active, mode, suspendedPlugins: snapshot };
     const listeners = new Map();
     const store = new Proxy(data, { set(target, key, value) {
         const changed = target[key] !== value;
         target[key] = value;
-        if (changed) listeners.get(`plugins.DiscreetMode.${key}`)?.();
+        if (changed) for (const listener of listeners.get(`plugins.DiscreetMode.${key}`) ?? []) listener();
         return true;
     } });
     state.plugins.DiscreetMode = store;
@@ -44,6 +45,7 @@ function fixture({ active = false, snapshot, failSave = false } = {}) {
     const saved = [];
     const errors = [];
     const stopped = [];
+    const started = [];
     const reloads = [];
     const patches = Object.keys(plugins).map(plugin => ({ plugin }));
     const dependencies = {
@@ -52,30 +54,129 @@ function fixture({ active = false, snapshot, failSave = false } = {}) {
         "@webpack/patcher": { patches },
         "@api/PluginManager": {
             isPluginEnabled: name => plugins[name].required || plugins[name].isDependency || state.plugins[name].enabled,
-            stopPlugin: plugin => { stopped.push(plugin.name); plugin.started = false; }
+            stopPlugin: plugin => { stopped.push(plugin.name); plugin.stop?.call(plugin); plugin.started = false; return true; },
+            startPlugin: plugin => { started.push(plugin.name); plugin.start?.call(plugin); plugin.started = true; return true; },
+            addPatch: (patch, plugin) => patches.push({ ...patch, plugin })
         },
         "@api/Settings": { Settings: state, SettingsStore: {
             plain: state,
-            addChangeListener(key, listener) { listeners.set(key, listener); },
-            removeChangeListener(key, listener) { assert.equal(listeners.get(key), listener); listeners.delete(key); }
+            addChangeListener(key, listener) { const set = listeners.get(key) ?? new Set(); set.add(listener); listeners.set(key, set); },
+            removeChangeListener(key, listener) { const set = listeners.get(key); assert.ok(set.delete(listener)); if (set.size === 0) listeners.delete(key); }
         } },
         "@utils/Logger": { Logger: class { error(...args) { errors.push(args); } } }
     };
-    const module = { exports: {} };
-    compileFunction(source, ["require", "module", "exports", "VencordNative", "location"])(name => {
-        assert.ok(Object.hasOwn(dependencies, name), name);
-        return dependencies[name];
-    }, module, module.exports, { settings: { async set(value) {
-        if (failSave) throw new Error("Write failed");
-        saved.push(structuredClone({ ...value, plugins: { ...value.plugins, DiscreetMode: data } }));
-    } } }, { reload: () => reloads.push(true) });
-    const install = module.exports.installPluginSuspension;
-    return { plugins, state, store, data, install, saved, errors, stopped, reloads, patches, listeners };
+    function load(source) {
+        const module = { exports: {} };
+        compileFunction(source, ["require", "module", "exports", "VencordNative", "location"])(name => {
+            assert.ok(Object.hasOwn(dependencies, name), name);
+            return dependencies[name];
+        }, module, module.exports, { settings: { async set(value) {
+            if (failSave) throw new Error("Write failed");
+            saved.push(structuredClone({ ...value, plugins: { ...value.plugins, DiscreetMode: data } }));
+        } } }, { reload: () => reloads.push(true) });
+        return module.exports;
+    }
+    dependencies["./fullSuspension"] = load(fullSource);
+    const install = load(source).installPluginSuspension;
+    return { plugins, state, store, data, install, saved, errors, stopped, started, reloads, patches, listeners, startPlugin: dependencies["@api/PluginManager"].startPlugin };
 }
 
 async function settle() {
     await new Promise(resolve => setImmediate(resolve));
 }
+
+test("Hide mode pauses running features and restores them without changing enabled choices or reloading", async () => {
+    const f = fixture({ mode: "hide" });
+    const handle = f.install();
+    handle.onReady();
+    f.store.active = true;
+    await settle();
+    assert.deepEqual(f.stopped.sort(), ["Announcements", "FakeNitro", "StaffDetector", "StatusCycler"]);
+    assert.equal(f.state.plugins.StaffDetector.enabled, true);
+    assert.equal(f.plugins.Announcements.required, true);
+    assert.equal(f.state.cloud.settingsSync, true);
+    assert.equal(f.store.suspendedPlugins, undefined);
+    assert.equal(f.patches.length, Object.keys(f.plugins).length);
+    f.store.active = false;
+    await settle();
+    assert.deepEqual(f.started.sort(), ["Announcements", "FakeNitro", "StaffDetector", "StatusCycler"]);
+    assert.equal(f.reloads.length, 0);
+    assert.equal(f.saved.length, 0);
+    handle.stop();
+    assert.equal(f.listeners.size, 0);
+});
+
+test("Hide mode skips startup effects until exit and restores the original lifecycle methods", async () => {
+    const f = fixture({ mode: "hide", active: true });
+    let starts = 0;
+    let stops = 0;
+    const plugin = f.plugins.StaffDetector;
+    const start = plugin.start = () => { starts++; };
+    const stop = plugin.stop = () => { stops++; };
+    plugin.started = false;
+    const handle = f.install();
+    f.startPlugin(plugin);
+    handle.onReady();
+    await settle();
+    assert.equal(starts, 0);
+    assert.equal(stops, 0);
+    assert.equal(plugin.started, false);
+    f.store.active = false;
+    await settle();
+    assert.equal(starts, 1);
+    assert.equal(stops, 0);
+    assert.equal(plugin.started, true);
+    handle.stop();
+    assert.equal(plugin.start, start);
+    assert.equal(plugin.stop, stop);
+    assert.equal(f.reloads.length, 0);
+});
+
+test("Hide mode waits for an in-flight startup before stopping its resources", async () => {
+    const f = fixture({ mode: "hide" });
+    const plugin = f.plugins.StaffDetector;
+    let finish;
+    let resources = false;
+    plugin.start = async () => { await new Promise(resolve => { finish = resolve; }); resources = true; };
+    plugin.stop = () => { assert.equal(resources, true); resources = false; };
+    plugin.started = false;
+    const handle = f.install();
+    handle.onReady();
+    f.startPlugin(plugin);
+    f.store.active = true;
+    await settle();
+    assert.equal(f.stopped.includes(plugin.name), false);
+    finish();
+    await settle();
+    assert.equal(resources, false);
+    assert.equal(plugin.started, false);
+    handle.stop();
+    await settle();
+    assert.equal(f.reloads.length, 0);
+});
+
+test("Changing from hide mode to full suspension reloads and preserves the enabled selection", async () => {
+    const f = fixture({ mode: "hide", active: true });
+    const handle = f.install();
+    handle.onReady();
+    await settle();
+    assert.equal(f.reloads.length, 0);
+    f.store.mode = "suspend";
+    await settle();
+    assert.equal(f.reloads.length, 1);
+    assert.equal(f.store.suspendedPlugins.plugins.StaffDetector, true);
+    assert.equal(f.state.plugins.StaffDetector.enabled, false);
+    assert.equal(f.started.length, 0);
+    f.store.mode = "hide";
+    await settle();
+    assert.equal(f.reloads.length, 2);
+    assert.equal(f.state.plugins.StaffDetector.enabled, true);
+    assert.equal(f.store.suspendedPlugins, undefined);
+    f.store.active = false;
+    await settle();
+    assert.equal(f.reloads.length, 2);
+    handle.stop();
+});
 
 test("Suspends plugin automations and notifications, saves enabled choices and restores them before reloading", async () => {
     const f = fixture();
@@ -168,7 +269,7 @@ test("Recovers plugins if the active flag was cleared while a saved suspension w
     await settle();
     assert.equal(f.state.plugins.StaffDetector.enabled, true);
     assert.equal(f.store.suspendedPlugins, undefined);
-    assert.equal(f.reloads.length, 1);
+    assert.equal(f.reloads.length, 0);
     handle.stop();
 });
 
