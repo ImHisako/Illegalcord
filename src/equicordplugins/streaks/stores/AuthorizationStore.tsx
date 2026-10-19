@@ -19,6 +19,7 @@ interface AuthorizationState {
     authorize: () => Promise<void>;
     setToken: (token: string) => void;
     remove: (id: string) => void;
+    expireToken: (token: string) => void;
     isAuthorized: () => boolean;
 }
 const indexedDBStorage = {
@@ -50,6 +51,17 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
                 set({ tokens: newTokens });
                 init();
             },
+            expireToken: (token: string) => {
+                if (get().token !== token) return;
+                const id = UserStore.getCurrentUser()?.id;
+                if (!id) return;
+                get().remove(id);
+                useStreaksStore.getState().clear();
+                showToast({
+                    text: "Streaks authorization expired. Reauthorize in the Streaks plugin settings.",
+                    variant: "critical"
+                });
+            },
             async authorize() {
                 return new Promise((resolve, reject) => {
                     let hasCallbackStarted = false;
@@ -78,7 +90,7 @@ export const useAuthorizationStore = proxyLazy(() => zustandCreate(
                                     resolve(void 0);
                                 } catch (e) {
                                     if (e instanceof Error) {
-                                        showToast(`Failed to authorize: ${e.message}`, "failure");
+                                        showToast({ text: `Failed to authorize: ${e.message}`, variant: "critical" });
                                         new Logger("Streaks").error("Failed to authorize", e);
                                         reject(e);
                                     }

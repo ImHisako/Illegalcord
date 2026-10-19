@@ -36,10 +36,10 @@ import { Logger } from "@utils/Logger";
 import { Margins } from "@utils/margins";
 import { classes } from "@utils/misc";
 import { PluginTarget } from "@utils/pluginTargets";
+import { promptToRestart } from "@utils/promptToRestart";
 import { useAwaiter, useCleanupEffect, useIntersection } from "@utils/react";
 import { PluginTag, PluginTags } from "@utils/types";
-import { ToastPosition } from "@vencord/discord-types/enums";
-import { Alerts, ConfirmModal, lodash, openModal, Parser, React, SearchableSelect, Select, showToast,TextInput, Tooltip, useCallback, useMemo, useRef, useState } from "@webpack/common";
+import { Alerts, lodash, Parser, React, SearchableSelect, Select, showToast, TextInput, Tooltip, useCallback, useMemo, useRef, useState } from "@webpack/common";
 import { JSX } from "react";
 
 import Plugins, { ExcludedPlugins, PluginMeta } from "~plugins";
@@ -53,9 +53,11 @@ export const cl = classNameFactory("vc-plugins-");
 export const logger = new Logger("PluginSettings", "#a6d189");
 
 function showErrorToast(message: string) {
-    showToast(message, "failure", {
-            position: ToastPosition.BOTTOM
-        });
+    showToast({
+        text: message,
+        variant: "critical",
+        position: "bottom"
+    });
 }
 
 function ReloadRequiredCard({ required, enabledPlugins, openWarningModal, resetCheckAndDo }) {
@@ -80,9 +82,9 @@ function ReloadRequiredCard({ required, enabledPlugins, openWarningModal, resetC
             )}
             {enabledPlugins.length > 0 && !required && (
                 <Button
-                    variant="secondary"
+                    variant="dangerPrimary"
                     size="small"
-                    className={"vc-plugins-disable-warning vc-modal-align-reset"}
+                    className={"vc-modal-align-reset"}
                     onClick={() => {
                         return openWarningModal(null, undefined, false, enabledPlugins.length, resetCheckAndDo);
                     }}
@@ -157,29 +159,20 @@ export default function PluginSettings() {
             const displayed = pluginNames.slice(0, maxDisplay);
             const remainingCount = pluginNames.length - displayed.length;
 
-            openModal(props => (
-                <ConfirmModal
-                    {...props}
-                    title="Restart required"
-                    confirmText="Restart now"
-                    cancelText="Later!"
-                    variant="primary"
-                    onConfirm={() => location.reload()}
-                >
-                    <>
-                        <p>The following plugins require a restart:</p>
-                        <div>
-                            {displayed.map((s, i) => (
-                                <React.Fragment key={i}>
-                                    {i > 0 && ", "}
-                                    {Parser.parse("`" + s + "`")}
-                                </React.Fragment>
-                            ))}
-                            {remainingCount > 0 && <span> and {remainingCount} more</span>}
-                        </div>
-                    </>
-                </ConfirmModal>
-            ));
+            promptToRestart("reload", {
+                children: <>
+                    <p>The following plugins require a restart:</p>
+                    <div>
+                        {displayed.map((s, i) => (
+                            <React.Fragment key={i}>
+                                {i > 0 && ", "}
+                                {Parser.parse("`" + s + "`")}
+                            </React.Fragment>
+                        ))}
+                        {remainingCount > 0 && <span> and {remainingCount} more</span>}
+                    </div>
+                </>
+            });
         };
     }, []);
 
