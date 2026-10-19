@@ -42,7 +42,7 @@ export function openSettingsPanel(panel: string | undefined) {
 export function openRecommendedPluginSettings(pluginName: RecommendedPluginName, language: Language) {
     const plugin = plugins[pluginName];
     if (!plugin) {
-        showToast(UI_COPY[language].missing, "message");
+        showToast({ text: UI_COPY[language].missing });
         return;
     }
 
@@ -81,7 +81,7 @@ export function enableSelectedRecommendations(selected: RecommendationState, lan
     const copy = UI_COPY[language];
 
     if (!results.length) {
-        showToast(copy.noSelection, "message");
+        showToast({ text: copy.noSelection });
         return;
     }
 
@@ -91,19 +91,19 @@ export function enableSelectedRecommendations(selected: RecommendationState, lan
     const failed = results.filter(result => result === "failed").length;
 
     if (failed) {
-        showToast(copy.failed, "failure");
+        showToast({ text: copy.failed, variant: "critical" });
         return;
     }
 
     if (restart) {
-        showToast(copy.restart(enabled + restart), "message");
+        showToast({ text: copy.restart(enabled + restart) });
         return;
     }
 
     if (missing) {
-        showToast(copy.missing, "message");
+        showToast({ text: copy.missing });
         return;
     }
 
-    showToast(copy.enabled(enabled), "success");
+    showToast({ text: copy.enabled(enabled), variant: "success" });
 }

@@ -195,7 +195,7 @@ function StereoInstallerPanel() {
 
             if (!result.success) {
                 setStatus(result.error);
-                showToast(result.error, "failure");
+                showToast({ text: result.error, variant: "critical" });
                 return null;
             }
 
@@ -227,7 +227,7 @@ function StereoInstallerPanel() {
         settings.store.logRestartCount = 0;
         setLogs([]);
         setStatus("Logs cleared.");
-        showToast("StereoInstaller logs cleared.", "success");
+        showToast({ text: "StereoInstaller logs cleared.", variant: "success" });
     }
 
     async function browse(): Promise<void> {
@@ -243,7 +243,7 @@ function StereoInstallerPanel() {
     async function runAction(kind: "patch" | "revert" | "method2Index"): Promise<void> {
         if (!root.trim()) {
             setStatus("Choose a Discord install folder first.");
-            showToast("Choose a Discord install folder first.", "failure");
+            showToast({ text: "Choose a Discord install folder first.", variant: "critical" });
             return;
         }
 
@@ -259,7 +259,7 @@ function StereoInstallerPanel() {
         settings.store.logRestartCount = 0;
         setInfo(result);
         setStatus("Discord will close now. Check the StereoInstaller log if it does not reopen.");
-        showToast("Discord will close now to finish StereoInstaller.", "success");
+        showToast({ text: "Discord will close now to finish StereoInstaller.", variant: "success" });
     }
 
     function confirmPatch(): void {
@@ -320,7 +320,7 @@ function StereoInstallerPanel() {
     function selectInstallerMethod(value: InstallerMethod): void {
         if (value === "method2" && voicePlaygroundUnavailable) {
             setStatus("Voice Playground Method is only available on Windows. Linux support is handled by Discord Audio Collective Method.");
-            showToast("Voice Playground Method is only available on Windows.", "failure");
+            showToast({ text: "Voice Playground Method is only available on Windows.", variant: "critical" });
             return;
         }
 

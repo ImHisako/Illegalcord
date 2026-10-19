@@ -34,7 +34,7 @@ async function update(starting: boolean, current: number) {
         const state = starting ? await Native.configure(true, "rpc") : await Native.getState();
         if (!active || current !== generation) return;
         if (state.error) {
-            showToast(state.error, "failure");
+            showToast({ text: state.error, variant: "critical" });
             return;
         }
 
@@ -66,7 +66,7 @@ async function update(starting: boolean, current: number) {
     } catch {
         if (!active || current !== generation) return;
         logger.error("Could not read SoundCloud playback from WebNowPlaying.");
-        showToast("Could not connect to WebNowPlaying. Restart Discord and try again.", "failure");
+        showToast({ text: "Could not connect to WebNowPlaying. Restart Discord and try again.", variant: "critical" });
         return;
     }
     if (active && current === generation) timeoutId = window.setTimeout(() => void update(false, current), 1000);
@@ -94,7 +94,7 @@ export default definePlugin({
 
     start() {
         if (!Native) {
-            showToast("Restart Discord completely to load SoundCloud support.", "failure");
+            showToast({ text: "Restart Discord completely to load SoundCloud support.", variant: "critical" });
             return;
         }
         active = true;

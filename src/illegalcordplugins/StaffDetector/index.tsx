@@ -130,7 +130,7 @@ function AudioUploadButton({ label, dataKey }: { label: string; dataKey: AudioDa
             settings.store[nameKey] = file.name;
             setFilename(file.name);
         } catch (error) {
-            showToast("Could not load that audio file.", "failure");
+            showToast({ text: "Could not load that audio file.", variant: "critical" });
             if (settings.store.enableLogs) logger.error("StaffDetector: audio upload failed:", error);
         }
     }
@@ -599,7 +599,7 @@ function getChannelContext(channelId: string): string {
 
 function notify(title: string, body: string, icon?: string): void {
     if (settings.store.showToasts)
-        showToast(`${title}  ${body}`, "message");
+        showToast({ text: `${title}  ${body}` });
     if (settings.store.showNotifications)
         showNotification({ title, body, icon, permanent: false, onClick: () => { } });
 }

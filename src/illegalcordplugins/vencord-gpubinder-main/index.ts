@@ -91,13 +91,16 @@ const settings = definePluginSettings({
             try {
                 const result = await Native.applyGpuPreference(String(newValue));
                 if (result.changed) {
-                    showToast(result.selectedGpu
+                    showToast({
+                        text: result.selectedGpu
                             ? `Discord pinned to ${result.selectedGpu.name}. Fully close Discord with Alt+F4 or tray Quit, then reopen it.`
-                            : "Discord GPU preference updated. Fully close Discord with Alt+F4 or tray Quit, then reopen it.", "success");
+                            : "Discord GPU preference updated. Fully close Discord with Alt+F4 or tray Quit, then reopen it.",
+                        variant: "success"
+                    });
                 }
             } catch (err) {
                 console.error("[GpuBinder] Failed to update GPU preference:", err);
-                showToast("Failed to update Discord GPU preference. Check the console for details.", "failure");
+                showToast({ text: "Failed to update Discord GPU preference. Check the console for details.", variant: "critical" });
             }
         },
     },

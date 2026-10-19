@@ -565,7 +565,7 @@ async function signMessage(text: string): Promise<string> {
             privateKey = privateKeyObj;
         }
     } catch (e) {
-        showToast("Cannot read your private key", "failure");
+        showToast({ text: "Cannot read your private key", variant: "critical" });
         throw e;
     }
 
@@ -760,7 +760,7 @@ export default definePlugin({
                         const decrypted = await decryptMessage(message.content, message.author.id);
                         buildDecryptModal(decrypted.data, decrypted.verified);
                     } catch (error) {
-                        showToast(formatError(error), "failure");
+                        showToast({ text: formatError(error), variant: "critical" });
                     }
                 }
             };

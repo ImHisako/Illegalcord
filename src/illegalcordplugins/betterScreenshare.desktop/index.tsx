@@ -135,7 +135,7 @@ function refreshActiveScreenshareOptions() {
 
 function notifyQuickSettingsChange(label: string) {
     refreshActiveScreenshareOptions();
-    showToast(`BetterScreenshare: ${label} applied.`, "success");
+    showToast({ text: `BetterScreenshare: ${label} applied.`, variant: "success" });
 }
 
 function isCompleteQualityProfile(profile: ScreenshareProfile): profile is ScreenshareProfile & Required<Pick<ScreenshareProfile, "width" | "height" | "framerate" | "videoBitrate">> {
@@ -218,7 +218,7 @@ function saveCustomQualityPreset(name: string, preset: QuickQualityPreset) {
 
     store.saveProfile(profile);
     store.setCurrentProfile(profile);
-    showToast(`BetterScreenshare: ${name} saved.`, "success");
+    showToast({ text: `BetterScreenshare: ${name} saved.`, variant: "success" });
 }
 
 function updateCurrentProfile(profile: Partial<NamedScreenshareProfile>) {
@@ -281,7 +281,7 @@ function openCreateQualityPresetModal() {
     const preset = profileToQualityPreset({ ...screenshareStore.get().currentProfile, name: "" });
 
     if (!preset) {
-        showToast("Set resolution, framerate and video bitrate before saving a preset.", "failure");
+        showToast({ text: "Set resolution, framerate and video bitrate before saving a preset.", variant: "critical" });
         return;
     }
 

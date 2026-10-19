@@ -781,12 +781,12 @@ async function handleGeoImage(imageUrl: string) {
 
     const parsedUrl = parseUrl(imageUrl);
     if (!parsedUrl || (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:")) {
-        showToast("This image does not have a public URL that GeoSeeer can analyze.", "failure");
+        showToast({ text: "This image does not have a public URL that GeoSeeer can analyze.", variant: "critical" });
         return;
     }
 
     const channelId = SelectedChannelStore.getChannelId();
-    showToast("Geo Osint analysis started.", "message");
+    showToast({ text: "Geo Osint analysis started." });
     debug("Starting Geo Osint analysis");
 
     try {

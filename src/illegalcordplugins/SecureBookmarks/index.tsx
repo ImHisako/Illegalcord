@@ -41,7 +41,7 @@ function addBookmarkMenu(children: Array<ReactElement | null>, props: MessageCon
                     action={() => {
                         void saveMessageBookmark(message, duration).catch(error => {
                             logger.error("Failed to save bookmark.", error);
-                            showToast("Could not save this bookmark.", "failure");
+                            showToast({ text: "Could not save this bookmark.", variant: "critical" });
                         });
                     }}
                 />

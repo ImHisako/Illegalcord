@@ -385,7 +385,7 @@ function getProfileEffectPreview(effect: ProfileEffect) {
 }
 
 function showLarpCordToast(message: string) {
-    showToast(message, "success");
+    showToast({ text: message, variant: "success" });
 }
 
 interface CustomProfileData {

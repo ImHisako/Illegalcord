@@ -376,25 +376,25 @@ function toggleBadge(userId: string, badge: any, hasActualBadge: boolean) {
     if (hasActualBadge) {
         if (isHidden) {
             unhideRealBadge(userId, badge.id);
-            showToast(`Restored ${badge.title}`, "success");
+            showToast({ text: `Restored ${badge.title}`, variant: "success" });
         } else {
             hideRealBadge(userId, badge.id);
-            showToast(`Removed ${badge.title}`, "success");
+            showToast({ text: `Removed ${badge.title}`, variant: "success" });
         }
     } else {
         if (hasUserBadge) {
             removeBadgeFromUser(userId, badge.id);
-            showToast(`Removed ${badge.title}`, "success");
+            showToast({ text: `Removed ${badge.title}`, variant: "success" });
         } else {
             addBadgesToUser(userId, [badge]);
-            showToast(`Added ${badge.title}`, "success");
+            showToast({ text: `Added ${badge.title}`, variant: "success" });
         }
     }
 }
 
 function giveAllBadges(userId: string) {
     addBadgesToUser(userId, availableBadges);
-    showToast("Added all badges", "success");
+    showToast({ text: "Added all badges", variant: "success" });
 }
 
 function addUserBadge(userId: string) {
@@ -417,7 +417,7 @@ function addUserBadge(userId: string) {
     };
 
     addBadgesToUser(userId, [userBadge]);
-    showToast(`Added badge: ${badgeId}`, "success");
+    showToast({ text: `Added badge: ${badgeId}`, variant: "success" });
 }
 
 let originalGetUserProfile: any;
@@ -537,7 +537,7 @@ export default definePlugin({
                             });
                             userBadgesMap.delete(user.id);
 
-                            showToast("Removed all badges", "success");
+                            showToast({ text: "Removed all badges", variant: "success" });
                         }}
                     />
                     <Menu.MenuItem
@@ -548,7 +548,7 @@ export default definePlugin({
                             userBadgesMap.delete(user.id);
                             removedBadgesMap.delete(user.id);
 
-                            showToast("Reset badges to original state", "success");
+                            showToast({ text: "Reset badges to original state", variant: "success" });
                         }}
                     />
                 </Menu.MenuItem>

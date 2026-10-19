@@ -162,7 +162,7 @@ function BookmarksList({ password }: BookmarksListProps) {
     const remove = (id: string) => {
         void removeBookmark(id)
             .then(reload)
-            .then(() => showToast("Bookmark removed.", "success"));
+            .then(() => showToast({ text: "Bookmark removed.", variant: "success" }));
     };
 
     const confirmClear = () => {
@@ -175,7 +175,7 @@ function BookmarksList({ password }: BookmarksListProps) {
             onConfirm: () => {
                 void clearBookmarks()
                     .then(reload)
-                    .then(() => showToast("Bookmarks cleared.", "success"));
+                    .then(() => showToast({ text: "Bookmarks cleared.", variant: "success" }));
             }
         });
     };
@@ -300,7 +300,7 @@ export function renderSecureBookmarksToolboxMenu() {
                     void cleanupExpiredBookmarks()
                         .then(store => {
                             setCount(store.records.length);
-                            showToast("Expired bookmarks cleared.", "success");
+                            showToast({ text: "Expired bookmarks cleared.", variant: "success" });
                         });
                 }}
             />

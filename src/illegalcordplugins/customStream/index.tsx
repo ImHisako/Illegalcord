@@ -577,7 +577,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
         setNewProfileName("");
         setIsCreatingProfile(false);
         handleProfileSwitch(profile.id);
-        showToast(`Profile "${profile.name}" created`, "success");
+        showToast({ text: `Profile "${profile.name}" created`, variant: "success" });
     };
 
     // Удаление профиля
@@ -608,7 +608,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                 if (currentProfileId === profileId) {
                     handleProfileSwitch(DEFAULT_PROFILE_ID);
                 }
-                showToast("Profile deleted", "success");
+                showToast({ text: "Profile deleted", variant: "success" });
             }
         });
     };
@@ -627,7 +627,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
         await saveProfilesToDataStore();
         setProfileList(getProfileList());
         setEditingProfileId(null);
-        showToast("Profile renamed", "success");
+        showToast({ text: "Profile renamed", variant: "success" });
     };
 
     // Обработка перетаскиваемых файлов
@@ -663,7 +663,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
 
             await loadImages();
             if (added > 0) {
-                showToast(`Added: ${added}`, "success");
+                showToast({ text: `Added: ${added}`, variant: "success" });
             }
         } catch {
             setError("File processing error");
@@ -745,7 +745,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
 
                 await loadImages();
                 if (added > 0) {
-                    showToast(`Added: ${added}`, "success");
+                    showToast({ text: `Added: ${added}`, variant: "success" });
                 }
             } catch {
                 setError("File processing error");
@@ -766,7 +766,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
         }
         await loadImages();
         setProfileList(getProfileList()); // Обновляем список профилей для отображения количества
-        showToast("Deleted", "message");
+        showToast({ text: "Deleted" });
     };
 
     const handleClearAll = async () => {
@@ -784,7 +784,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                 setImages([]);
                 setPendingIndex(0);
                 setProfileList(getProfileList()); // Обновляем список профилей
-                showToast("All deleted", "message");
+                showToast({ text: "All deleted" });
             }
         });
     };
@@ -821,7 +821,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
         await saveSlideIndex(pendingIndex); // Сохраняем индекс в DataStore
         savedRef.current = true; // Помечаем что сохранили
         notifyImageChange(); // Обновляем иконку в панели
-        showToast("Settings saved!", "success");
+        showToast({ text: "Settings saved!", variant: "success" });
         rootProps.onClose();
     };
 
@@ -869,7 +869,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
             await moveImage(draggedIndex, toIndex);
             setPendingIndex(newPendingIndex);
             await loadImages();
-            showToast(`Moved: #${draggedIndex + 1} → #${toIndex + 1}`, "success");
+            showToast({ text: `Moved: #${draggedIndex + 1} → #${toIndex + 1}`, variant: "success" });
         }
 
         setDraggedIndex(null);

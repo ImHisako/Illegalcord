@@ -81,12 +81,12 @@ async function createArchiveFile(file: File, password: string): Promise<File | n
     const result = await Native?.createArchive(file.name || "file", await file.arrayBuffer(), password);
 
     if (!result?.success || !result.data || !result.fileName) {
-        showToast(result?.error ?? `Could not encrypt ${file.name}.`, "failure");
+        showToast({ text: result?.error ?? `Could not encrypt ${file.name}.`, variant: "critical" });
         return null;
     }
 
     if (!isSevenZipArchive(result.data)) {
-        showToast(`Could not create a valid archive for ${file.name}.`, "failure");
+        showToast({ text: `Could not create a valid archive for ${file.name}.`, variant: "critical" });
         return null;
     }
 
@@ -98,12 +98,12 @@ async function createArchiveFile(file: File, password: string): Promise<File | n
 async function uploadEncryptedFiles(files: File[], payload: UploadAddFilesEvent, password: string): Promise<void> {
     const channel = getUploadChannel(payload);
     if (!channel) {
-        showToast("Open a channel before uploading files.", "failure");
+        showToast({ text: "Open a channel before uploading files.", variant: "critical" });
         return;
     }
 
     const filesToEncrypt = files.filter(file => !allowedFiles.has(file) && shouldEncryptFile(file));
-    showToast(`Creating encrypted 7z archive${filesToEncrypt.length === 1 ? "" : "s"}.`, "message");
+    showToast({ text: `Creating encrypted 7z archive${filesToEncrypt.length === 1 ? "" : "s"}.` });
 
     const uploads: File[] = [];
     for (const file of files) {
@@ -142,17 +142,17 @@ function interceptUploadAddFiles(event: unknown): void {
 
     const { password } = settings.store;
     if (!password) {
-        showToast("Set a SecureZipper password before sending files.", "failure");
+        showToast({ text: "Set a SecureZipper password before sending files.", variant: "critical" });
         return;
     }
 
     if (!Native) {
-        showToast("SecureZipper native helper is not available. Restart Discord.", "failure");
+        showToast({ text: "SecureZipper native helper is not available. Restart Discord.", variant: "critical" });
         return;
     }
 
     void uploadEncryptedFiles(uniqueFiles, payload, password).catch(() => {
-        showToast("Could not encrypt the selected files.", "failure");
+        showToast({ text: "Could not encrypt the selected files.", variant: "critical" });
     });
 }
 

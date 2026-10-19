@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import type { ToastType } from "@vencord/discord-types";
+import type { ToastVariant } from "@vencord/discord-types";
 import { GuildMemberCountStore, GuildStore, React, showToast as showDiscordToast } from "@webpack/common";
 
 import {
@@ -35,8 +35,8 @@ import {
 const SCAN_TASK_ID = "kamidere-mutual-scanner:scan";
 const WARMUP_TASK_ID = "kamidere-mutual-scanner:warmup";
 
-function showToast(message: string, type: ToastType) {
-    showDiscordToast(message, type, { position: 1 });
+function showToast(message: string, variant: ToastVariant) {
+    showDiscordToast({ text: message, variant, position: "bottom" });
 }
 
 function clampNumber(value: number, min: number, max: number) {
@@ -289,13 +289,13 @@ export function resetMutualScannerRuntime() {
 export function cancelMutualScannerRun() {
     if (!scanController) return;
     scanController.cancel();
-    showToast("Mutual scan cancellation requested.", "message");
+    showToast("Mutual scan cancellation requested.", "default");
 }
 
 export function cancelMutualScannerWarmup() {
     if (!warmupController) return;
     warmupController.cancel();
-    showToast("Manual cache warmup cancellation requested.", "message");
+    showToast("Manual cache warmup cancellation requested.", "default");
 }
 
 export function startMutualScannerRun(ownerId: string | null, config: MutualScannerConfig) {
@@ -396,9 +396,9 @@ export function startMutualScannerRun(ownerId: string | null, config: MutualScan
         if (result.status === "completed") {
             showToast(`Mutual scan finished with ${result.matches.length} match${result.matches.length === 1 ? "" : "es"}.`, "success");
         } else if (result.status === "cancelled") {
-            showToast(`Mutual scan cancelled after ${result.stats.scannedCount} profile${result.stats.scannedCount === 1 ? "" : "s"}.`, "message");
+            showToast(`Mutual scan cancelled after ${result.stats.scannedCount} profile${result.stats.scannedCount === 1 ? "" : "s"}.`, "default");
         } else {
-            showToast(result.error ?? "Mutual scan failed.", "failure");
+            showToast(result.error ?? "Mutual scan failed.", "critical");
         }
     })();
 
@@ -491,7 +491,7 @@ export function startMutualScannerWarmup(
                         progress: current.warmup.progress ? { ...current.warmup.progress, state: "cancelled" } : current.warmup.progress,
                     },
                 }));
-                showToast("Manual cache warmup cancelled.", "message");
+                showToast("Manual cache warmup cancelled.", "default");
                 return;
             }
 
@@ -528,7 +528,7 @@ export function startMutualScannerWarmup(
             if (!meaningfulHydration) {
                 showToast(
                     "Manual cache warmup finished without receiving any additional member chunks from Discord.",
-                    "failure",
+                    "critical",
                 );
             } else {
                 showToast(
@@ -546,7 +546,7 @@ export function startMutualScannerWarmup(
                     progress: current.warmup.progress ? { ...current.warmup.progress, state: "failed" } : current.warmup.progress,
                 },
             }));
-            showToast(message, "failure");
+            showToast(message, "critical");
         } finally {
             finishWarmup();
             warmupController = null;

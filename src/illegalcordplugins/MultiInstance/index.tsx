@@ -271,7 +271,7 @@ function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
 
     async function openInstance(profile: InstanceProfile, mode: InstanceMode = profile.mode ?? "detached") {
         if (!Native) {
-            showToast("Multi Instance native helper is not available in this build.", "failure");
+            showToast({ text: "Multi Instance native helper is not available in this build.", variant: "critical" });
             return;
         }
 
@@ -283,9 +283,9 @@ function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
             .catch(error => ({ ok: false, error: getErrorMessage(error) }));
 
         if (result.ok) {
-            showToast(`${profile.name} opened as a ${mode} instance.`, "success");
+            showToast({ text: `${profile.name} opened as a ${mode} instance.`, variant: "success" });
         } else {
-            showToast(result.error ?? `Could not open ${profile.name}.`, "failure");
+            showToast({ text: result.error ?? `Could not open ${profile.name}.`, variant: "critical" });
         }
 
         await refreshInstances();
@@ -294,7 +294,7 @@ function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
 
     async function closeInstance(profile: InstanceProfile) {
         if (!Native) {
-            showToast("Multi Instance native helper is not available in this build.", "failure");
+            showToast({ text: "Multi Instance native helper is not available in this build.", variant: "critical" });
             return;
         }
 
@@ -304,9 +304,9 @@ function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
             .catch(error => ({ ok: false, error: getErrorMessage(error) }));
 
         if (result.ok) {
-            showToast(`${profile.name} closed.`, "success");
+            showToast({ text: `${profile.name} closed.`, variant: "success" });
         } else {
-            showToast(result.error ?? `Could not close ${profile.name}.`, "failure");
+            showToast({ text: result.error ?? `Could not close ${profile.name}.`, variant: "critical" });
         }
 
         await refreshInstances();
@@ -315,7 +315,7 @@ function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
 
     async function closeAllInstances() {
         if (!Native) {
-            showToast("Multi Instance native helper is not available in this build.", "failure");
+            showToast({ text: "Multi Instance native helper is not available in this build.", variant: "critical" });
             return;
         }
 
@@ -325,9 +325,9 @@ function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
             .catch(error => ({ ok: false, error: getErrorMessage(error) }));
 
         if (result.ok) {
-            showToast("All Multi Instance windows closed.", "success");
+            showToast({ text: "All Multi Instance windows closed.", variant: "success" });
         } else {
-            showToast(result.error ?? "Could not close all Multi Instance windows.", "failure");
+            showToast({ text: result.error ?? "Could not close all Multi Instance windows.", variant: "critical" });
         }
 
         await refreshInstances();
@@ -336,12 +336,12 @@ function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
 
     async function clearSavedSession(profile: InstanceProfile) {
         if (!Native) {
-            showToast("Multi Instance native helper is not available in this build.", "failure");
+            showToast({ text: "Multi Instance native helper is not available in this build.", variant: "critical" });
             return;
         }
 
         if (instances.some(instance => instance.id === profile.id)) {
-            showToast("Close this instance before clearing its saved session.", "failure");
+            showToast({ text: "Close this instance before clearing its saved session.", variant: "critical" });
             return;
         }
 
@@ -352,9 +352,9 @@ function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
 
         if (result.ok) {
             updateProfile(profile.id, { user: undefined });
-            showToast(`${profile.name} saved session cleared.`, "success");
+            showToast({ text: `${profile.name} saved session cleared.`, variant: "success" });
         } else {
-            showToast(result.error ?? `Could not clear ${profile.name}.`, "failure");
+            showToast({ text: result.error ?? `Could not clear ${profile.name}.`, variant: "critical" });
         }
 
         setBusyId(null);
@@ -391,7 +391,7 @@ function MultiInstanceModal({ rootProps }: { rootProps: RenderModalProps; }) {
         const name = editingName.trim();
 
         if (!name) {
-            showToast("Enter an instance name.", "failure");
+            showToast({ text: "Enter an instance name.", variant: "critical" });
             return;
         }
 

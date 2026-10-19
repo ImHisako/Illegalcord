@@ -66,8 +66,8 @@ function SettingsActions() {
                 <Button
                     variant="secondary"
                     onClick={() => void runMaintenanceNow()
-                        .then(() => showToast("Message log maintenance completed.", "success"))
-                        .catch(() => showToast("Message log maintenance failed.", "failure"))}
+                        .then(() => showToast({ text: "Message log maintenance completed.", variant: "success" }))
+                        .catch(() => showToast({ text: "Message log maintenance failed.", variant: "critical" }))}
                 >
                     Run maintenance
                 </Button>
@@ -81,7 +81,7 @@ function SettingsActions() {
                         cancelText: "Cancel",
                         onConfirm: async () => {
                             await clearAllLogs(true);
-                            showToast("Cleared every message log.", "success");
+                            showToast({ text: "Cleared every message log.", variant: "success" });
                         }
                     })}
                 >
@@ -203,7 +203,7 @@ export default definePlugin({
     start() {
         if (isPluginEnabled("MessageLoggerEnhanced")) {
             Settings.plugins.MessageLoggerEnhanced.enabled = false;
-            showToast("MessageLoggerEnhanced was disabled. Restart to activate IllegalMessageLogger safely.", "failure");
+            showToast({ text: "MessageLoggerEnhanced was disabled. Restart to activate IllegalMessageLogger safely.", variant: "critical" });
             return;
         }
 

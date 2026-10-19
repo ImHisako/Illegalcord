@@ -546,8 +546,8 @@ export default definePlugin({
         if (!this.useExternalBrowser() || !/^https?:\/\//i.test(url)) return false;
         if (!Native) return false;
         void Native.openInBrowser(settings.store.externalBrowser, url).then(opened => {
-            if (!opened) showToast("Could not open the selected browser. Check DiscordHardened settings.", "failure");
-        }).catch(() => showToast("Could not open the selected browser.", "failure"));
+            if (!opened) showToast({ text: "Could not open the selected browser. Check DiscordHardened settings.", variant: "critical" });
+        }).catch(() => showToast({ text: "Could not open the selected browser.", variant: "critical" }));
         return true;
     },
     toolboxActions: {

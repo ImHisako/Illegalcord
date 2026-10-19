@@ -13,7 +13,7 @@ import { copyToClipboard } from "@utils/clipboard";
 import { classNameFactory } from "@utils/css";
 import { fetchUserProfile, openUserProfile } from "@utils/discord";
 import { classes } from "@utils/misc";
-import type { RenderModalProps, ToastType } from "@vencord/discord-types";
+import type { RenderModalProps, ToastVariant } from "@vencord/discord-types";
 import { ChannelStore, GuildStore, Modal, openModal, React, RelationshipStore, showToast, TextInput, useEffect, useMemo, UserProfileStore, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 import { addServerTarget, getServerTargets, getTargets, removeServerTarget, removeTarget, setServerTargets, setTargets, settings, subscribeServerTargets, subscribeTargets } from "..";
@@ -136,8 +136,8 @@ const formatTime = (timestamp: number) =>
 const formatLabel = (label: string) =>
     label.replace(/[A-Z]/g, match => ` ${match}`).replace(/^./, match => match.toUpperCase());
 
-const toast = (message: string, type: ToastType = "success") =>
-    showToast(message, type);
+const toast = (message: string, variant: ToastVariant = "success") =>
+    showToast({ text: message, variant });
 
 const getMutualFriendId = (value: unknown) => {
     if (typeof value !== "object" || value == null) return;
@@ -314,10 +314,10 @@ const EventDetailsModal = ErrorBoundary.wrap(function EventDetailsModal({ event,
         try {
             void Promise.resolve(copyToClipboard(JSON.stringify(event, null, 2))).then(
                 () => toast("Event copied."),
-                () => toast("Failed to copy event.", "failure")
+                () => toast("Failed to copy event.", "critical")
             );
         } catch {
-            toast("Failed to copy event.", "failure");
+            toast("Failed to copy event.", "critical");
         }
     };
 
@@ -584,7 +584,7 @@ function SurveillanceTab() {
 
     const addVisibleUsers = () => {
         if (!userMatches.length) {
-            toast("No users to add.", "failure");
+            toast("No users to add.", "critical");
             return;
         }
 
@@ -594,7 +594,7 @@ function SurveillanceTab() {
 
     const addVisibleServers = () => {
         if (!serverMatches.length) {
-            toast("No servers to add.", "failure");
+            toast("No servers to add.", "critical");
             return;
         }
 
@@ -653,7 +653,7 @@ function SurveillanceTab() {
     const addInputTargets = () => {
         const ids = targetInput.match(/\d+/g) ?? [];
         if (!ids.length) {
-            toast("Enter a valid Discord user ID.", "failure");
+            toast("Enter a valid Discord user ID.", "critical");
             return;
         }
 
@@ -666,10 +666,10 @@ function SurveillanceTab() {
         try {
             void Promise.resolve(copyToClipboard(JSON.stringify(filteredEvents, null, 2))).then(
                 () => toast(`${pageHeading} events copied.`),
-                () => toast("Failed to copy surveillance events.", "failure")
+                () => toast("Failed to copy surveillance events.", "critical")
             );
         } catch {
-            toast("Failed to copy surveillance events.", "failure");
+            toast("Failed to copy surveillance events.", "critical");
         }
     };
 

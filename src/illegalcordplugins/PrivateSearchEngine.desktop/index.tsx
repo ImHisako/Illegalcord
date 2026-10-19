@@ -101,22 +101,22 @@ function StartpageIcon({ width = 20, height = 20, className }: SVGProps<SVGSVGEl
 
 async function openSearchBrowser() {
     if (!Native) {
-        showToast("Private Search native helper is unavailable.", "failure");
+        showToast({ text: "Private Search native helper is unavailable.", variant: "critical" });
         return;
     }
 
     const result = await Native.openSearchEngine(settings.store.searchEngine, settings.store.hardenFingerprinting, settings.store.spoofBrowserInfo, settings.store.fingerprintMode, settings.store.blockTrackers, settings.store.antiPopups, settings.store.quad9DnsProfile, settings.store.loadUblockOrigin, settings.store.unpackedExtensionPath);
-    if (!result.success) showToast(result.error ?? "Could not open Private Search.", "failure");
+    if (!result.success) showToast({ text: result.error ?? "Could not open Private Search.", variant: "critical" });
 }
 
 async function openBrowserLeaksTest() {
     if (!Native) {
-        showToast("Private Search native helper is unavailable.", "failure");
+        showToast({ text: "Private Search native helper is unavailable.", variant: "critical" });
         return;
     }
 
     const result = await Native.openBrowserLeaks(settings.store.searchEngine, settings.store.hardenFingerprinting, settings.store.spoofBrowserInfo, settings.store.fingerprintMode, settings.store.blockTrackers, settings.store.antiPopups, settings.store.quad9DnsProfile, settings.store.loadUblockOrigin, settings.store.unpackedExtensionPath);
-    if (!result.success) showToast(result.error ?? "Could not open BrowserLeaks.", "failure");
+    if (!result.success) showToast({ text: result.error ?? "Could not open BrowserLeaks.", variant: "critical" });
 }
 
 function StartpageBrowserButton() {

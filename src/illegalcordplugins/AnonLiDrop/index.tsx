@@ -116,18 +116,18 @@ let uploadTaskId: number | undefined;
 async function uploadAnonLiDrop() {
     const apiKey = settings.store.apiKey.trim();
     if (!apiKey) {
-        showToast("Set your Anon.li API key in plugin settings first.", "failure");
+        showToast({ text: "Set your Anon.li API key in plugin settings first.", variant: "critical" });
         return;
     }
 
     if (!Native) {
-        showToast("AnonLi native helper is not available. Restart Discord.", "failure");
+        showToast({ text: "AnonLi native helper is not available. Restart Discord.", variant: "critical" });
         return;
     }
 
     const channel = getCurrentChannel();
     if (!channel) {
-        showToast("Open a channel before uploading with Anon.li Drop.", "failure");
+        showToast({ text: "Open a channel before uploading with Anon.li Drop.", variant: "critical" });
         return;
     }
 
@@ -135,7 +135,7 @@ async function uploadAnonLiDrop() {
     if (!file) return;
 
     if (uploadTaskId !== undefined) {
-        showToast("An Anon.li upload is already in progress.", "failure");
+        showToast({ text: "An Anon.li upload is already in progress.", variant: "critical" });
         return;
     }
 
@@ -143,7 +143,7 @@ async function uploadAnonLiDrop() {
     const taskId = ++nextUploadTaskId;
     uploadTaskId = taskId;
 
-    showToast(`Uploading ${file.name} to Anon.li.`, "message");
+    showToast({ text: `Uploading ${file.name} to Anon.li.` });
 
     let uploadId: string | undefined;
 
@@ -181,7 +181,7 @@ async function uploadAnonLiDrop() {
             try {
                 await copyWithToast(finishResult.url, "Anon.li link copied.");
             } catch {
-                showToast("Could not copy the Anon.li link.", "failure");
+                showToast({ text: "Could not copy the Anon.li link.", variant: "critical" });
             }
         }
 
@@ -190,14 +190,14 @@ async function uploadAnonLiDrop() {
                 await sendMessage(channel.id, { content: finishResult.url });
                 return;
             } catch {
-                showToast("Could not send the Anon.li link. It was added to the message box instead.", "failure");
+                showToast({ text: "Could not send the Anon.li link. It was added to the message box instead.", variant: "critical" });
             }
         }
 
         insertTextIntoChatInputBox(finishResult.url);
     } catch (error) {
         if (generation === lifecycleGeneration) {
-            showToast(error instanceof Error ? error.message : "Anon.li upload failed.", "failure");
+            showToast({ text: error instanceof Error ? error.message : "Anon.li upload failed.", variant: "critical" });
         }
     } finally {
         if (uploadId && activeUploadIds.delete(uploadId)) await Native.abortUpload(uploadId).catch(() => undefined);

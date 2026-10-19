@@ -276,7 +276,7 @@ const log = {
 
 function showPluginToast(message: string, type: "message" | "success" | "failure" = "message") {
     if (settings.store.showNotifications) {
-        showToast(`[CustomDNS] ${message}`, type);
+        showToast({ text: `[CustomDNS] ${message}`, variant: type === "failure" ? "critical" : type === "success" ? "success" : "default" });
     }
 }
 

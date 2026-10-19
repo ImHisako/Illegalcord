@@ -212,7 +212,7 @@ function syncStyle() {
 function showStateToast(active: boolean) {
     if (!settings.store.showToasts) return;
 
-    showToast(active ? "StreamProof enabled." : "StreamProof disabled.", active ? "success" : "message");
+    showToast({ text: active ? "StreamProof enabled." : "StreamProof disabled.", variant: active ? "success" : "default" });
 }
 
 function applyStreamProof(showFeedback = false) {

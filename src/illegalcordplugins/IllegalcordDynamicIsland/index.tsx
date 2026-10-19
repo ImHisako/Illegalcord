@@ -301,10 +301,10 @@ function SpotifySection() {
 async function controlSoundCloud(action: "play" | "pause" | "previous" | "next") {
     if (!Native) return;
     try {
-        if (!await Native.control(action)) showToast("SoundCloud is no longer connected.", "failure");
+        if (!await Native.control(action)) showToast({ text: "SoundCloud is no longer connected.", variant: "critical" });
     } catch {
         logger.error("Could not control SoundCloud playback through WebNowPlaying.");
-        showToast("Could not control SoundCloud playback.", "failure");
+        showToast({ text: "Could not control SoundCloud playback.", variant: "critical" });
     }
 }
 
@@ -436,7 +436,7 @@ function DynamicIsland() {
         setBrowserTrack(null);
         if (!showSoundCloudIsland || IS_WEB) return;
         if (!Native) {
-            showToast("Restart Discord completely to load SoundCloud support.", "failure");
+            showToast({ text: "Restart Discord completely to load SoundCloud support.", variant: "critical" });
             return;
         }
 
@@ -448,7 +448,7 @@ function DynamicIsland() {
                 if (disposed) return;
                 setBrowserTrack(state.track);
                 if (state.error) {
-                    showToast(state.error, "failure");
+                    showToast({ text: state.error, variant: "critical" });
                     return;
                 }
                 timeoutId = window.setTimeout(() => void update(false), 1000);
@@ -456,7 +456,7 @@ function DynamicIsland() {
                 if (disposed) return;
                 setBrowserTrack(null);
                 logger.error("Could not read SoundCloud playback from WebNowPlaying.");
-                showToast("Could not connect to WebNowPlaying. Restart Discord and try again.", "failure");
+                showToast({ text: "Could not connect to WebNowPlaying. Restart Discord and try again.", variant: "critical" });
             }
         };
         void update(true);

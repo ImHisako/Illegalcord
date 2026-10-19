@@ -108,7 +108,7 @@ async function addAudioFile() {
     if (!file) return;
 
     if (!file.type.startsWith("audio/") && !/\.(?:mp3|wav|ogg|flac|m4a|aac|opus|webm)$/i.test(file.name)) {
-        showToast("The selected file does not appear to be audio.", "failure");
+        showToast({ text: "The selected file does not appear to be audio.", variant: "critical" });
         return;
     }
 
@@ -125,7 +125,7 @@ async function startSound(sound: SoundPadSound) {
         );
     } catch (error) {
         logger.error("Could not route the selected audio file.", error);
-        showToast("Could not play audio through the selected device.", "failure");
+        showToast({ text: "Could not play audio through the selected device.", variant: "critical" });
     }
 }
 
@@ -136,7 +136,7 @@ async function toggleMicrophone(enabled: boolean) {
     }
 
     if (settings.store.outputDeviceId === "default") {
-        showToast("Select a virtual audio cable as the output first.", "failure");
+        showToast({ text: "Select a virtual audio cable as the output first.", variant: "critical" });
         return;
     }
 
@@ -146,10 +146,10 @@ async function toggleMicrophone(enabled: boolean) {
             settings.store.outputDeviceId,
             settings.store.microphoneVolume
         );
-        showToast("Physical microphone added to the mix.", "success");
+        showToast({ text: "Physical microphone added to the mix.", variant: "success" });
     } catch (error) {
         logger.error("Could not route the physical microphone.", error);
-        showToast("Could not connect the physical microphone.", "failure");
+        showToast({ text: "Could not connect the physical microphone.", variant: "critical" });
     }
 }
 

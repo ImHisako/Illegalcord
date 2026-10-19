@@ -610,7 +610,7 @@ async function importPhrases() {
     try {
         const phrases = getPhrases(await file.text());
         if (!phrases.length) {
-            showToast("The file does not contain any valid phrases.", "failure");
+            showToast({ text: "The file does not contain any valid phrases.", variant: "critical" });
             return;
         }
 
@@ -619,10 +619,10 @@ async function importPhrases() {
             sourceFileName: file.name
         });
         restartPhraseRotation();
-        showToast(`Imported ${phrases.length} ${phrases.length === 1 ? "phrase" : "phrases"} from ${file.name}.`, "success");
+        showToast({ text: `Imported ${phrases.length} ${phrases.length === 1 ? "phrase" : "phrases"} from ${file.name}.`, variant: "success" });
     } catch (error) {
         logger.error("Could not read the selected text file.", error);
-        showToast("Could not read the selected file.", "failure");
+        showToast({ text: "Could not read the selected file.", variant: "critical" });
     }
 }
 
@@ -752,19 +752,19 @@ function SpicetifyInstallerSetting() {
         cancelText: "Cancel",
         onConfirm: () => {
             if (!Native) {
-                showToast("The Spicetify installer is only available in the desktop client.", "failure");
+                showToast({ text: "The Spicetify installer is only available in the desktop client.", variant: "critical" });
                 return;
             }
 
-            showToast("Opening the Spicetify installer.", "message");
+            showToast({ text: "Opening the Spicetify installer." });
             void Native.installSpicetify()
-                .then(result => showToast(
-                    result.success ? "Spicetify installer opened in a terminal." : result.error,
-                    result.success ? "success" : "failure"
-                ))
+                .then(result => showToast({
+                    text: result.success ? "Spicetify installer opened in a terminal." : result.error,
+                    variant: result.success ? "success" : "critical"
+                }))
                 .catch(error => {
                     logger.error("Could not open the Spicetify installer.", error);
-                    showToast("Could not open the Spicetify installer.", "failure");
+                    showToast({ text: "Could not open the Spicetify installer.", variant: "critical" });
                 });
         }
     });

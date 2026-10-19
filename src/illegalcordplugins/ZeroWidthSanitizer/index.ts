@@ -73,7 +73,7 @@ export default definePlugin({
                 messageObj.content = result;
                 log(`Removed invisible characters from outgoing message in channel ${channelId}`);
                 if (settings.store.showToastOnDetection) {
-                    showToast("ZeroWidthSanitizer: tracking characters removed from your message", "message");
+                    showToast({ text: "ZeroWidthSanitizer: tracking characters removed from your message" });
                 }
             }
         };
@@ -88,7 +88,7 @@ export default definePlugin({
                 messageObj.content = result;
                 log(`Removed invisible characters from edited message ${messageId}`);
                 if (settings.store.showToastOnDetection) {
-                    showToast("ZeroWidthSanitizer: tracking characters removed from your edit", "message");
+                    showToast({ text: "ZeroWidthSanitizer: tracking characters removed from your edit" });
                 }
             }
         };
@@ -97,7 +97,7 @@ export default definePlugin({
         addMessagePreEditListener(preEditListener);
 
         log("Plugin started");
-        showToast("ZeroWidthSanitizer active", "success");
+        showToast({ text: "ZeroWidthSanitizer active", variant: "success" });
     },
 
     stop() {

@@ -280,7 +280,7 @@ export async function getBookmarkProtectionState(): Promise<BookmarkProtectionSt
 export async function saveMessageBookmark(message: Message, duration: BookmarkDurationOption): Promise<void> {
     const channel = ChannelStore.getChannel(message.channel_id);
     if (!channel) {
-        showToast("Open the channel before saving this bookmark.", "failure");
+        showToast({ text: "Open the channel before saving this bookmark.", variant: "critical" });
         return;
     }
 
@@ -296,7 +296,7 @@ export async function saveMessageBookmark(message: Message, duration: BookmarkDu
     if (settings.plain.usePassword) {
         const { password } = settings.plain;
         if (!password) {
-            showToast("Set a SecureBookmarks password before saving.", "failure");
+            showToast({ text: "Set a SecureBookmarks password before saving.", variant: "critical" });
             return;
         }
 
@@ -310,7 +310,7 @@ export async function saveMessageBookmark(message: Message, duration: BookmarkDu
         await saveStore({ ...store, records: [record, ...store.records] });
     }
 
-    showToast(`Bookmark saved${duration.milliseconds === null ? "." : ` for ${duration.label.toLowerCase()}.`}`, "success");
+    showToast({ text: `Bookmark saved${duration.milliseconds === null ? "." : ` for ${duration.label.toLowerCase()}.`}`, variant: "success" });
 }
 
 export async function getVisibleBookmarks(password: string): Promise<VisibleBookmark[]> {

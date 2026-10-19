@@ -32,10 +32,10 @@ function TestWebhookButton() {
             onClick={() => {
                 void sendTestWebhook(webhookUrl)
                     .then(() => {
-                        showToast("Test webhook sent successfully.", "success");
+                        showToast({ text: "Test webhook sent successfully.", variant: "success" });
                     })
                     .catch((error: unknown) => {
-                        showToast(getToastErrorMessage(error), "failure");
+                        showToast({ text: getToastErrorMessage(error), variant: "critical" });
                     });
             }}
         >

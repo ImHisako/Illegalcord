@@ -139,10 +139,10 @@ async function applySharedConfig(attachment: MessageAttachment): Promise<void> {
 
         const settings = sanitizeObject(parsed.settings, "", []);
         await importSettings(JSON.stringify({ settings }), "plugins");
-        showToast("Configuration applied. Restart Illegalcord to finish applying the changes.", "success");
+        showToast({ text: "Configuration applied. Restart Illegalcord to finish applying the changes.", variant: "success" });
     } catch (error) {
         logger.error("Failed to import shared configuration", error);
-        showToast(error instanceof Error ? error.message : "Failed to import the configuration.", "failure");
+        showToast({ text: error instanceof Error ? error.message : "Failed to import the configuration.", variant: "critical" });
     }
 }
 
@@ -255,7 +255,7 @@ export default definePlugin({
                 setTimeout(() => UploadHandler.promptToUpload([file], context.channel, DraftType.ChannelMessage), 10);
             } catch (error) {
                 logger.error("Failed to prepare shared configuration", error);
-                showToast(error instanceof Error ? error.message : "Failed to prepare the configuration.", "failure");
+                showToast({ text: error instanceof Error ? error.message : "Failed to prepare the configuration.", variant: "critical" });
             }
         }
     }],

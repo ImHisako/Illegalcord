@@ -139,27 +139,27 @@ function triggerFollow(userChannelId: string | null = VoiceStateStore.getVoiceSt
                 if (channel.type === 1 || PermissionStore.can(PermissionsBits.CONNECT, channel)) {
                     if (channel.userLimit > 0 && !PermissionStore.can(PermissionsBits.MOVE_MEMBERS, channel)
                         && Object.keys(VoiceStateStore.getVoiceStatesForChannel(userChannelId)).length >= channel.userLimit) {
-                        showToast("Channel is full", "failure");
+                        showToast({ text: "Channel is full", variant: "critical" });
                         return;
                     }
                     ChannelActions.selectVoiceChannel(userChannelId);
-                    showToast("Followed user into a new voice channel", "success");
+                    showToast({ text: "Followed user into a new voice channel", variant: "success" });
                 } else {
-                    showToast("Insufficient permissions to enter in the voice channel", "failure");
+                    showToast({ text: "Insufficient permissions to enter in the voice channel", variant: "critical" });
                 }
             } else {
-                showToast("You are already in the same channel", "failure");
+                showToast({ text: "You are already in the same channel", variant: "critical" });
             }
         } else if (myChanId) {
             // if not in a voice channel and the setting is on disconnect
             if (settings.store.followLeave) {
                 ChannelActions.selectVoiceChannel(null);
-                showToast("Followed user left, disconnected", "success");
+                showToast({ text: "Followed user left, disconnected", variant: "success" });
             } else {
-                showToast("Followed user left, but not following disconnect", "failure");
+                showToast({ text: "Followed user left, but not following disconnect", variant: "critical" });
             }
         } else {
-            showToast("Followed user is not in a voice channel", "failure");
+            showToast({ text: "Followed user is not in a voice channel", variant: "critical" });
         }
     }
 }

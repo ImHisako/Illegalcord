@@ -249,7 +249,7 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
             if (reload) refresh();
         } catch (error) {
             if (error instanceof DOMException && error.name === "AbortError") return;
-            showToast(error instanceof Error ? error.message : "The log action failed. Please try again.", "failure");
+            showToast({ text: error instanceof Error ? error.message : "The log action failed. Please try again.", variant: "critical" });
         } finally {
             setBusy(false);
         }
@@ -282,7 +282,7 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
         await runAction(async () => {
             await flushQueuedLogs();
             const count = await exportLogs();
-            showToast(`Exported ${count} message logs.`, "success");
+            showToast({ text: `Exported ${count} message logs.`, variant: "success" });
         }, false);
     }
 
@@ -290,7 +290,7 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
         await runAction(async () => {
             const count = await importLogs();
             if (count == null) return;
-            showToast(`Imported ${count} message logs.`, "success");
+            showToast({ text: `Imported ${count} message logs.`, variant: "success" });
         });
     }
 
@@ -410,7 +410,7 @@ function LogsModal({ modalProps, initialQuery = "" }: LogsModalProps) {
                                 settings.store.messageLimit = limit;
                                 await flushQueuedLogs();
                                 await runMaintenance(limit, 0);
-                                showToast("Saved message limit applied.", "success");
+                                showToast({ text: "Saved message limit applied.", variant: "success" });
                             })}>Apply limit</Button>
                         </div>
                         <p id="illegal-ml-message-limit-help">Use a whole number of 0 or greater. 0 means no limit. Applying a limit removes the oldest unprotected logs. Protected logs are always kept, even above the limit.</p>
