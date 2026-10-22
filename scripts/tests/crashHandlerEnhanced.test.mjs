@@ -209,3 +209,35 @@ test("Includes the settings diagnostics and history in the popup without Discord
     assert.equal(store.crashCount, "0");
     assert.equal(store.lastCrashReport, "");
 });
+
+test("Ignores failed fetch rejections without hiding other errors or window failures", () => {
+    const calls = [];
+    const constants = source.slice(source.indexOf("const MESSAGE_SEND_FORBIDDEN_RE"), source.indexOf("const Native ="));
+    const messages = source.slice(source.indexOf("function getErrorText("), source.indexOf("function getErrorStack("));
+    const record = source.slice(source.indexOf("function asRecord("), source.indexOf("function readStringList("));
+    const handlers = source.slice(source.indexOf("function normalizeGlobalError("), source.indexOf("function installGlobalListeners("));
+    const { handleUnhandledRejection, handleGlobalError } = load(constants + messages + record + handlers + "\nreturn { handleUnhandledRejection, handleGlobalError };", {
+        latestReport: null,
+        settings: { store: { captureGlobalErrors: true, showSupportPopup: true } },
+        createReport: ({ error }, kind) => {
+            calls.push([kind, error.message]);
+            return { error, kind };
+        },
+        saveReport: () => calls.push("save"),
+        writeCrashLog: () => calls.push("log"),
+        openCrashSupportModal: () => calls.push("popup")
+    });
+    for (const reason of [new TypeError("Failed to fetch"), "Failed to fetch", { message: "Failed to fetch", stack: "TypeError: Failed to fetch" }]) {
+        handleUnhandledRejection({ reason });
+    }
+    assert.deepEqual(calls, []);
+
+    handleUnhandledRejection({ reason: new TypeError("Cannot read properties of undefined") });
+    handleUnhandledRejection({ reason: new Error("Failed to fetch user profile") });
+    handleGlobalError({ error: new TypeError("Failed to fetch") });
+    assert.deepEqual(calls, [
+        ["unhandled-rejection", "Cannot read properties of undefined"], "save", "log", "popup",
+        ["unhandled-rejection", "Failed to fetch user profile"], "save", "log", "popup",
+        ["window-error", "Failed to fetch"], "save", "log", "popup"
+    ]);
+});
