@@ -1411,6 +1411,8 @@ function isIgnorableGlobalError(error: unknown) {
 }
 
 function isIgnorableDiscordRejection(error: unknown) {
+    if (asRecord(error)?.status === 429) return true;
+
     const message = getErrorMessage(error);
 
     if (message === "Aborted" || message === "Failed to fetch") return true;

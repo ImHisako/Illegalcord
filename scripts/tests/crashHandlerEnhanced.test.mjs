@@ -210,7 +210,7 @@ test("Includes the settings diagnostics and history in the popup without Discord
     assert.equal(store.lastCrashReport, "");
 });
 
-test("Ignores failed fetch rejections without hiding other errors or window failures", () => {
+test("Ignores failed fetches and rate limit rejections without hiding other errors or window failures", () => {
     const calls = [];
     const constants = source.slice(source.indexOf("const MESSAGE_SEND_FORBIDDEN_RE"), source.indexOf("const Native ="));
     const messages = source.slice(source.indexOf("function getErrorText("), source.indexOf("function getErrorStack("));
@@ -227,17 +227,32 @@ test("Ignores failed fetch rejections without hiding other errors or window fail
         writeCrashLog: () => calls.push("log"),
         openCrashSupportModal: () => calls.push("popup")
     });
-    for (const reason of [new TypeError("Failed to fetch"), "Failed to fetch", { message: "Failed to fetch", stack: "TypeError: Failed to fetch" }]) {
+    const rateLimited = Object.assign(new Error("Ton nombre d'actions est limité."), { status: 429, retryAfter: 10 });
+    for (const reason of [
+        new TypeError("Failed to fetch"),
+        "Failed to fetch",
+        { message: "Failed to fetch", stack: "TypeError: Failed to fetch" },
+        rateLimited,
+        Object.assign(new Error("You are being rate limited."), { status: 429 }),
+        { status: 429, body: { message: "Riprova più tardi.", retry_after: 10 } },
+        { status: 429, message: "POST /users/@me/content-inventory/spotify [429]" }
+    ]) {
         handleUnhandledRejection({ reason });
     }
     assert.deepEqual(calls, []);
 
     handleUnhandledRejection({ reason: new TypeError("Cannot read properties of undefined") });
     handleUnhandledRejection({ reason: new Error("Failed to fetch user profile") });
+    handleUnhandledRejection({ reason: Object.assign(new Error("Server error"), { status: 500 }) });
+    handleUnhandledRejection({ reason: new Error("You are being rate limited.") });
     handleGlobalError({ error: new TypeError("Failed to fetch") });
+    handleGlobalError({ error: rateLimited });
     assert.deepEqual(calls, [
         ["unhandled-rejection", "Cannot read properties of undefined"], "save", "log", "popup",
         ["unhandled-rejection", "Failed to fetch user profile"], "save", "log", "popup",
-        ["window-error", "Failed to fetch"], "save", "log", "popup"
+        ["unhandled-rejection", "Server error"], "save", "log", "popup",
+        ["unhandled-rejection", "You are being rate limited."], "save", "log", "popup",
+        ["window-error", "Failed to fetch"], "save", "log", "popup",
+        ["window-error", "Ton nombre d'actions est limité."], "save", "log", "popup"
     ]);
 });
