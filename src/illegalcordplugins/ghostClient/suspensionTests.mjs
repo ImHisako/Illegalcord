@@ -16,7 +16,7 @@ const fullSource = transformSync(readFileSync(new URL("fullSuspension.ts", impor
 
 function fixture({ active = false, mode = "suspend", snapshot, failSave = false } = {}) {
     const plugins = {
-        DiscreetMode: { name: "DiscreetMode", dependencies: ["CommandsAPI"] },
+        GhostClient: { name: "GhostClient", dependencies: ["CommandsAPI"] },
         LarpCord: { name: "LarpCord", dependencies: ["HeaderBarAPI"] },
         ClientDiagnostics: { name: "ClientDiagnostics", started: true },
         CommandsAPI: { name: "CommandsAPI", required: true },
@@ -31,17 +31,18 @@ function fixture({ active = false, mode = "suspend", snapshot, failSave = false 
     const meta = Object.fromEntries(Object.keys(plugins).map(name => [name, { folderName: `src/${name.endsWith("API") ? "plugins/_api" : name === "Settings" ? "plugins/_core" : "illegalcordplugins"}/${name}` }]));
     const state = {
         plugins: Object.fromEntries(Object.keys(plugins).map(name => [name, { enabled: name !== "InitiallyOff" && name !== "Announcements" }])),
-        cloud: { settingsSync: true }
+        cloud: { settingsSync: true },
+        automatic: false
     };
     const data = { active, mode, suspendedPlugins: snapshot };
     const listeners = new Map();
     const store = new Proxy(data, { set(target, key, value) {
         const changed = target[key] !== value;
         target[key] = value;
-        if (changed) for (const listener of listeners.get(`plugins.DiscreetMode.${key}`) ?? []) listener();
+        if (changed) for (const listener of listeners.get(`plugins.GhostClient.${key}`) ?? []) listener();
         return true;
     } });
-    state.plugins.DiscreetMode = store;
+    state.plugins.GhostClient = store;
     store.enabled = true;
     const saved = [];
     const errors = [];
@@ -52,7 +53,7 @@ function fixture({ active = false, mode = "suspend", snapshot, failSave = false 
     const patches = Object.keys(plugins).map(plugin => ({ plugin }));
     const dependencies = {
         "~plugins": { __esModule: true, default: plugins, PluginMeta: meta },
-        "./settings": { settings: { store } },
+        "./settings": { settings: { store }, isGhostClientActive: () => store.enabled && (store.active || state.automatic) },
         "@webpack/patcher": { patches },
         "@api/PluginManager": {
             isPluginEnabled: name => plugins[name].required || plugins[name].isDependency || state.plugins[name].enabled,
@@ -75,7 +76,7 @@ function fixture({ active = false, mode = "suspend", snapshot, failSave = false 
             return dependencies[name];
         }, module, module.exports, { settings: { async set(value) {
             if (failSave) throw new Error("Write failed");
-            saved.push(structuredClone({ ...value, plugins: { ...value.plugins, DiscreetMode: data } }));
+            saved.push(structuredClone({ ...value, plugins: { ...value.plugins, GhostClient: data } }));
         } } }, { reload: () => reloads.push(true) });
         return module.exports;
     }
@@ -135,7 +136,29 @@ test("Hide mode skips startup effects until exit and restores the original lifec
     assert.equal(f.reloads.length, 0);
 });
 
-test("Keeps Client Diagnostics running across repeated hide cycles and when starting in discreet mode", async () => {
+test("Automatic activation pauses features without reloading even when manual activation uses suspend mode", async () => {
+    const f = fixture();
+    const handle = f.install();
+    handle.onReady();
+    await settle();
+    f.state.automatic = true;
+    handle.refresh();
+    assert.deepEqual(f.stopped.sort(), ["Announcements", "FakeNitro", "StaffDetector", "StatusCycler"]);
+    assert.equal(f.store.active, false);
+    assert.equal(f.store.mode, "suspend");
+    assert.equal(f.store.suspendedPlugins, undefined);
+    assert.equal(f.state.plugins.StaffDetector.enabled, true);
+    assert.equal(f.state.cloud.settingsSync, true);
+    assert.equal(f.reloads.length, 0);
+    assert.equal(f.saved.length, 0);
+    f.state.automatic = false;
+    handle.refresh();
+    assert.deepEqual(f.started.sort(), ["Announcements", "FakeNitro", "StaffDetector", "StatusCycler"]);
+    handle.stop();
+    assert.equal(f.listeners.size, 0);
+});
+
+test("Keeps Client Diagnostics running across repeated hide cycles and when starting in GhostClient", async () => {
     for (const active of [false, true]) {
         const f = fixture({ mode: "hide", active });
         const plugin = f.plugins.ClientDiagnostics;
@@ -249,10 +272,10 @@ test("Suspends plugin automations and notifications, saves enabled choices and r
     assert.equal(f.state.plugins.ClientDiagnostics.enabled, true);
     assert.equal(f.plugins.ClientDiagnostics.started, true);
     assert.equal(f.store.suspendedPlugins.plugins.ClientDiagnostics, undefined);
-    assert.equal(f.state.plugins.DiscreetMode.enabled, true);
+    assert.equal(f.state.plugins.GhostClient.enabled, true);
     assert.equal(f.state.plugins.CommandsAPI.enabled, true);
     assert.equal(f.state.cloud.settingsSync, false);
-    assert.equal(f.saved[0].plugins.DiscreetMode.suspendedPlugins.plugins.StaffDetector, true);
+    assert.equal(f.saved[0].plugins.GhostClient.suspendedPlugins.plugins.StaffDetector, true);
     assert.equal(f.reloads.length, 1);
     f.store.active = false;
     await settle();
@@ -276,7 +299,7 @@ test("Prunes feature patches at boot, retains infrastructure and restores a prev
     handle.onReady();
     await settle();
     assert.equal(f.reloads.length, 0);
-    assert.deepEqual(f.patches.map(patch => patch.plugin), ["DiscreetMode", "LarpCord", "ClientDiagnostics", "CommandsAPI", "HeaderBarAPI", "Settings"]);
+    assert.deepEqual(f.patches.map(patch => patch.plugin), ["GhostClient", "LarpCord", "ClientDiagnostics", "CommandsAPI", "HeaderBarAPI", "Settings"]);
     assert.equal(f.store.suspendedPlugins.plugins.StaffDetector, true);
     f.store.active = false;
     await settle();
@@ -332,7 +355,7 @@ test("Recovers plugins if the active flag was cleared while a saved suspension w
     handle.stop();
 });
 
-test("Restores suspended plugins when DiscreetMode itself is disabled", async () => {
+test("Restores suspended plugins when GhostClient itself is disabled", async () => {
     const f = fixture();
     const handle = f.install();
     handle.onReady();

@@ -12,7 +12,7 @@ import { compileFunction } from "node:vm";
 import { transformSync } from "esbuild";
 
 const source = readFileSync(new URL("index.tsx", import.meta.url), "utf8");
-const settingsSource = readFileSync(new URL("settings.ts", import.meta.url), "utf8");
+const settingsSource = readFileSync(new URL("settings.tsx", import.meta.url), "utf8");
 const larpSource = readFileSync(new URL("larpCord.ts", import.meta.url), "utf8");
 const visualsSource = readFileSync(new URL("visuals.tsx", import.meta.url), "utf8");
 const diagnosticsSource = readFileSync(new URL("../ClientDiagnostics/index.tsx", import.meta.url), "utf8");
@@ -40,8 +40,8 @@ function visible(node) {
     return typeof node.type === "function" ? visible(node.type(node.props)) : visible(node.props.children);
 }
 
-function fixture(active = true, donorData = {}, { deferReady = false } = {}) {
-    const state = { enabled: true, stream: null, streamerMode: false };
+function fixture(active = true, donorData = {}, { deferReady = false, storesReady = true } = {}) {
+    const state = { enabled: true, stream: null, streamerMode: false, guildId: null };
     const settings = {};
     const refreshed = [];
     const warnings = [];
@@ -66,6 +66,8 @@ function fixture(active = true, donorData = {}, { deferReady = false } = {}) {
     const realUser = new User("self");
     const realProfile = { userId: "self", bio: "Real bio", badges: [{ id: "real" }], banner: "real-banner", profileEffect: null };
     const stores = {
+        GuildStore: { getGuilds: () => ({ first: { id: "first", name: "First server" }, second: { id: "second", name: "Second server" } }) },
+        SelectedGuildStore: { getGuildId: () => state.guildId },
         UserStore: { getUser: id => id === "self" ? realUser : undefined, getCurrentUser: () => realUser, emitChange: () => emitted.push("user") },
         UserProfileStore: { getUserProfile: () => realProfile, getGuildMemberProfile: () => realProfile, emitChange: () => emitted.push("profile") },
         GuildMemberStore: { getMember: () => ({ nick: "Real nick" }), emitChange: () => emitted.push("member") },
@@ -117,8 +119,12 @@ function fixture(active = true, donorData = {}, { deferReady = false } = {}) {
             unregisterCommand(name) { registeredCommands.delete(name); }
         },
         "@api/HeaderBar": { _addChannelToolbarButtons: buttons => buttons.push("Plugin toolbar button") },
-        "@api/PluginManager": { isPluginEnabled: name => name === "DiscreetMode" ? state.enabled : reviewPlugins.has(name) },
+        "@api/PluginManager": { isPluginEnabled: name => name === "GhostClient" ? state.enabled : reviewPlugins.has(name) },
         "@api/Settings": {
+            migratePluginSettings: (name, oldName) => {
+                assert.equal(name, "GhostClient");
+                assert.equal(oldName, "DiscreetMode");
+            },
             definePluginSettings: definitions => {
                 const plain = Object.fromEntries(Object.entries(definitions).map(([key, definition]) => [key, definition.default ?? definition.options?.find(option => option.default)?.value]));
                 const store = new Proxy(plain, {
@@ -126,14 +132,14 @@ function fixture(active = true, donorData = {}, { deferReady = false } = {}) {
                         if (target[key] === value) return true;
                         target[key] = value;
                         definitions[key].onChange?.(value);
-                        for (const callback of changes.get(`plugins.DiscreetMode.${key}`) ?? []) callback();
+                        for (const callback of changes.get(`plugins.GhostClient.${key}`) ?? []) callback();
                         return true;
                     }
                 });
                 Object.assign(settings, { store, plain, use: () => store, def: definitions, withPrivateSettings: () => settings });
                 return settings;
             },
-            useSettings: () => ({ plugins: { DiscreetMode: { enabled: state.enabled } } }),
+            useSettings: () => ({ plugins: { GhostClient: { enabled: state.enabled } } }),
             SettingsStore: {
                 addChangeListener(key, callback) { const set = changes.get(key) ?? new Set(); set.add(callback); changes.set(key, set); },
                 removeChangeListener(key, callback) { changes.get(key)?.delete(callback); }
@@ -141,6 +147,7 @@ function fixture(active = true, donorData = {}, { deferReady = false } = {}) {
         },
         "@api/UserSettings": { getUserSettingLazy: () => ({ updateSetting: callback => { refreshed.push(callback(true)); return Promise.resolve(); } }) },
         "@components/ErrorBoundary": { wrap: component => component },
+        "@components/Heading": { Heading: "h5" },
         "@components/Paragraph": { Paragraph: "p" },
         "@equicordplugins/_api/userArea": userArea,
         "@plugins/_api/badges": badges,
@@ -154,12 +161,16 @@ function fixture(active = true, donorData = {}, { deferReady = false } = {}) {
         "@utils/css": { classNameFactory: prefix => (...parts) => parts.flatMap(part => typeof part === "string" ? [prefix + part] : Object.keys(part).filter(key => part[key]).map(key => prefix + key)).join(" ") },
         "@utils/Logger": { Logger: class { warn(...args) { warnings.push(args); } } },
         "@utils/lazy": { SYM_LAZY_GET: Symbol.for("vencord.lazy.get") },
-        "@utils/types": { __esModule: true, default: plugin => plugin, OptionType: { BOOLEAN: 1, STRING: 2, SELECT: 3 }, StartAt: { Init: 0 } },
+        "@utils/types": { __esModule: true, default: plugin => plugin, OptionType: { BOOLEAN: 1, STRING: 2, SELECT: 3, COMPONENT: 4 }, StartAt: { Init: 0 } },
         "@webpack/common": {
             ...stores,
-            ApplicationStreamingStore: { getCurrentUserActiveStream: () => state.stream },
-            StreamerModeStore: { get enabled() { return state.streamerMode; } },
-            useStateFromStores: (stores, selector) => { assert.equal(stores.length, 2); return selector(); }
+            lodash: { isEqual: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
+            React: { createElement, Fragment: "fragment" },
+            SearchableSelect: "select",
+            SelectedGuildStore: storesReady ? stores.SelectedGuildStore : undefined,
+            ApplicationStreamingStore: storesReady ? { getCurrentUserActiveStream: () => state.stream } : undefined,
+            StreamerModeStore: storesReady ? { get enabled() { return state.streamerMode; } } : undefined,
+            useStateFromStores: (stores, selector) => { assert.ok(stores.length > 0); return selector(); }
         }
     };
     function load(source) {
@@ -175,7 +186,7 @@ function fixture(active = true, donorData = {}, { deferReady = false } = {}) {
     dependencies["./larpCord"] = load(larpSource);
     dependencies["./visuals"] = load(visualsSource);
     dependencies["./pinDms"] = { installPinDmsPrivacy: () => ({ refresh() {}, stop() {} }) };
-    dependencies["./suspension"] = { installPluginSuspension: () => ({ onReady() {}, stop() {} }) };
+    dependencies["./suspension"] = { installPluginSuspension: () => ({ onReady() {}, refresh() {}, stop() {} }) };
     const loaded = load(source + "\nexport const testCommands = commands;");
     const plugin = loaded.default;
     plugin.commands = loaded.testCommands;
@@ -266,6 +277,112 @@ test("Restores all runtime overrides and preserves original layouts, settings an
     assert.deepEqual(f.warnings, []);
 });
 
+test("Streamer Mode hides every privacy surface automatically and restores it without changing manual activation", () => {
+    const f = fixture(false);
+    f.plugin.start();
+    const buttons = f.userArea.renderButtons({});
+    const activity = { name: "Illegalcord", type: 0, flags: 0 };
+    assert.equal(f.settings.streamerMode, true);
+    assert.deepEqual(visible(buttons), ["User area button"]);
+    f.state.stream = { streamKey: "self" };
+    f.plugin.flux.STREAM_CREATE();
+    assert.equal(f.settings.active, false);
+    assert.equal(f.plugin.isGhostClientActive(), true);
+    assert.equal(f.plugin.isInterfaceHidden(), true);
+    assert.deepEqual(visible(buttons), []);
+    assert.equal(f.plugin.isActivityAllowed(activity), false);
+    assert.deepEqual(f.core.buildLayout(f.builder), [{ key: "native" }]);
+    f.settings.streamerMode = false;
+    assert.equal(f.plugin.isInterfaceHidden(), false);
+    assert.deepEqual(visible(buttons), ["User area button"]);
+    f.settings.streamerMode = true;
+    assert.deepEqual(visible(buttons), []);
+    f.state.stream = null;
+    f.plugin.flux.STREAM_DELETE();
+    assert.equal(f.plugin.isGhostClientActive(), false);
+    assert.equal(f.plugin.isActivityAllowed(activity), true);
+    assert.deepEqual(visible(buttons), ["User area button"]);
+    assert.equal(f.core.buildLayout(f.builder), f.layout);
+    f.state.streamerMode = true;
+    f.plugin.flux.STREAMER_MODE_UPDATE();
+    assert.deepEqual(visible(buttons), []);
+    press(f, "F6");
+    f.state.streamerMode = false;
+    f.plugin.flux.STREAMER_MODE_UPDATE();
+    assert.equal(f.settings.active, true);
+    assert.deepEqual(visible(buttons), []);
+    press(f, "F6");
+    assert.deepEqual(visible(buttons), ["User area button"]);
+    f.plugin.stop();
+    assert.equal([...f.changes.values()].reduce((count, set) => count + set.size, 0), 0);
+});
+
+test("The searchable server blacklist supports multiple selections, removals and automatic activation only in selected servers", () => {
+    const f = fixture(false);
+    f.settings.streamerMode = false;
+    f.plugin.start();
+    const buttons = f.userArea.renderButtons({});
+    const dropdown = () => f.definitions.blacklistedGuilds.component().props.children[2].props;
+    assert.equal(dropdown().multi, true);
+    assert.equal(dropdown().clearable, true);
+    assert.equal(dropdown().closeOnSelect, false);
+    assert.deepEqual(dropdown().options.map(option => option.label), ["First server", "Second server"]);
+    const original = f.settings.blacklistedGuilds;
+    dropdown().onChange([dropdown().options[0], "second"]);
+    assert.deepEqual(original, []);
+    assert.deepEqual(dropdown().value, ["first", "second"]);
+    f.state.guildId = "first";
+    f.plugin.flux.CHANNEL_SELECT();
+    assert.equal(f.settings.active, false);
+    assert.equal(f.plugin.isGhostClientActive(), true);
+    assert.deepEqual(visible(buttons), []);
+    assert.deepEqual(f.core.buildLayout(f.builder), [{ key: "native" }]);
+    f.state.guildId = "other";
+    f.plugin.flux.CHANNEL_SELECT();
+    assert.deepEqual(visible(buttons), ["User area button"]);
+    f.state.guildId = "second";
+    f.plugin.flux.CHANNEL_SELECT();
+    assert.deepEqual(visible(buttons), []);
+    dropdown().onChange(["first"]);
+    assert.deepEqual(visible(buttons), ["User area button"]);
+    f.state.guildId = "first";
+    f.plugin.flux.CHANNEL_SELECT();
+    assert.deepEqual(visible(buttons), []);
+    dropdown().onChange([]);
+    assert.deepEqual(visible(buttons), ["User area button"]);
+    assert.equal(f.settings.active, false);
+    f.plugin.stop();
+});
+
+test("Overlapping stream and server triggers keep privacy enabled until both end", () => {
+    const f = fixture(false);
+    f.settings.blacklistedGuilds = ["first"];
+    f.state.stream = { streamKey: "self" };
+    f.state.guildId = "first";
+    assert.equal(f.plugin.isInterfaceHidden(), true);
+    f.state.stream = null;
+    assert.equal(f.plugin.isInterfaceHidden(), true);
+    f.state.guildId = null;
+    assert.equal(f.plugin.isInterfaceHidden(), false);
+    f.state.stream = { streamKey: "self" };
+    assert.equal(f.plugin.isInterfaceHidden(), true);
+    f.state.enabled = false;
+    assert.equal(f.plugin.isInterfaceHidden(), false);
+    assert.equal(f.plugin.isGhostClientActive(), false);
+});
+
+test("Automatic activation waits for Discord stores during early startup", () => {
+    const f = fixture(false, {}, { deferReady: true, storesReady: false });
+    f.settings.blacklistedGuilds = ["first"];
+    f.plugin.start();
+    assert.equal(f.plugin.isGhostClientActive(), false);
+    assert.equal(f.plugin.isInterfaceHidden(), false);
+    assert.equal(f.core.buildLayout(f.builder), f.layout);
+    f.plugin.stop();
+    for (const ready of f.readyCallbacks) ready();
+    assert.equal(f.registeredCommands.size, 0);
+});
+
 test("Hides the complete Illegalcord settings section by default and restores access independently of sharing", () => {
     const { plugin, settings, state, core, layout, builder } = fixture();
     const otherSection = { key: "discord_other" };
@@ -277,7 +394,7 @@ test("Hides the complete Illegalcord settings section by default and restores ac
     assert.equal(plugin.isInterfaceHidden(), false);
     assert.deepEqual(core.buildLayout(builder), [{ key: "native" }, otherSection]);
     assert.deepEqual(layout.map(section => section.key), ["native", "equicord_section", "discord_other"]);
-    const command = plugin.commands.find(command => command.name === "discreet-settings");
+    const command = plugin.commands.find(command => command.name === "ghostclient-settings");
     assert.ok(command);
     command.execute();
     assert.equal(core.buildLayout(builder), layout);
@@ -290,7 +407,7 @@ test("Hides the complete Illegalcord settings section by default and restores ac
     assert.equal(core.buildLayout(builder), layout);
 });
 
-test("Silences Client Diagnostics notifications during discreet mode and preserves the notification preference", () => {
+test("Silences Client Diagnostics notifications while GhostClient is active and preserves the notification preference", () => {
     const f = fixture(false);
     const settings = { store: { lagNotifications: true } };
     const notifications = [];
@@ -298,13 +415,22 @@ test("Silences Client Diagnostics notifications during discreet mode and preserv
     let checks = 0;
     const notificationSource = diagnosticsSource.slice(diagnosticsSource.indexOf("function maybeSendLagNotification()"), diagnosticsSource.indexOf("\nfunction startLagNotifications()"));
     const check = compileFunction(`${notificationSource};return maybeSendLagNotification;`, [
-        "settings", "isPluginEnabled", "discreetSettings", "startedAt", "LAG_NOTIFICATION_MIN_COLLECTION_MS",
+        "settings", "isGhostClientActive", "startedAt", "LAG_NOTIFICATION_MIN_COLLECTION_MS",
         "LAG_NOTIFICATION_COOLDOWN_MS", "lagNotificationTimes", "getLagNotificationCandidates", "showNotification", "openClientDiagnosticsSettings"
-    ])(settings, () => f.state.enabled, { plain: f.settings }, Date.now() - 60_000, 30_000, 600_000, cooldowns, () => {
+    ])(settings, f.plugin.isGhostClientActive, Date.now() - 60_000, 30_000, 600_000, cooldowns, () => {
         checks++;
         return [{ row: { name: "HeavyPlugin", impact: 1000 }, reasons: [] }];
     }, notification => notifications.push(notification), () => {});
 
+    f.state.stream = { streamKey: "self" };
+    check();
+    assert.equal(checks, 0);
+    f.state.stream = null;
+    f.settings.blacklistedGuilds = ["first"];
+    f.state.guildId = "first";
+    check();
+    assert.equal(checks, 0);
+    f.state.guildId = null;
     f.settings.active = true;
     for (let cycle = 0; cycle < 8; cycle++) check();
     assert.equal(checks, 0);
@@ -358,7 +484,7 @@ test("Leaves native toolbar controls intact and makes injected controls reactive
     assert.deepEqual(visible(toolbar), ["Native button"]);
     const wrapped = plugin.chatBarButtonWrapper.wrapper("Original chat buttons");
     const span = wrapped.type(wrapped.props);
-    assert.ok(span.props.className.includes("vc-discreet-mode-hidden"));
+    assert.ok(span.props.className.includes("vc-ghost-client-hidden"));
     assert.deepEqual(visible(span), ["Original chat buttons"]);
     settings.manualMode = false;
     assert.deepEqual(visible(toolbar), ["Native button", "Plugin toolbar button"]);
@@ -397,17 +523,17 @@ test("Filters activities before publication and skips menu additions without cha
     const { plugin, settings } = fixture();
     const [activityPatch, , , menuPatch] = plugin.patches;
     const code = "function publish(activity){let items=[];items.push({type:types.LISTENING,...activity}),emit()(items,changed);return items}";
-    const patched = code.replace(canonicalize(activityPatch.replacement.match), activityPatch.replacement.replace.replaceAll("$self", "DiscreetMode"));
+    const patched = code.replace(canonicalize(activityPatch.replacement.match), activityPatch.replacement.replace.replaceAll("$self", "GhostClient"));
     assert.notEqual(patched, code);
     const published = [];
-    const publish = compileFunction(patched + ";return publish;", ["DiscreetMode", "types", "emit", "changed"])(plugin, { LISTENING: 2 }, () => activities => published.push(activities), true);
+    const publish = compileFunction(patched + ";return publish;", ["GhostClient", "types", "emit", "changed"])(plugin, { LISTENING: 2 }, () => activities => published.push(activities), true);
     publish({ name: "Illegalcord" });
     publish({ name: "Music" });
     assert.deepEqual(published.map(activities => activities.map(activity => activity.name)), [[], ["Music"]]);
     const menu = "return Vencord.Api.ContextMenu._usePatchContextMenu(props)";
-    const menuCode = menu.replace(canonicalize(menuPatch.replacement.match), menuPatch.replacement.replace.replaceAll("$self", "DiscreetMode"));
+    const menuCode = menu.replace(canonicalize(menuPatch.replacement.match), menuPatch.replacement.replace.replaceAll("$self", "GhostClient"));
     const props = { children: ["Discord menu item"] };
-    const renderMenu = compileFunction(menuCode, ["DiscreetMode", "Vencord", "props"]);
+    const renderMenu = compileFunction(menuCode, ["GhostClient", "Vencord", "props"]);
     const api = { Api: { ContextMenu: { _usePatchContextMenu: original => ({ ...original, added: true }) } } };
     assert.equal(renderMenu(plugin, api, props).added, true);
     settings.manualMode = true;
@@ -419,14 +545,14 @@ test("Wraps the existing header and toolbar API calls while preserving native co
     const { plugin, settings } = fixture();
     const [, headerPatch, toolbarPatch] = plugin.patches;
     const headerSource = 'return ["Native header button",...Vencord.Api.HeaderBar._addHeaderBarButtons()]';
-    const headerCode = headerSource.replace(canonicalize(headerPatch.replacement.match), headerPatch.replacement.replace.replaceAll("$self", "DiscreetMode"));
+    const headerCode = headerSource.replace(canonicalize(headerPatch.replacement.match), headerPatch.replacement.replace.replaceAll("$self", "GhostClient"));
     assert.notEqual(headerCode, headerSource);
     const api = { Api: { HeaderBar: { _addHeaderBarButtons: () => ["Plugin header button"] } } };
-    const header = compileFunction(headerCode, ["DiscreetMode", "Vencord"])(plugin, api);
+    const header = compileFunction(headerCode, ["GhostClient", "Vencord"])(plugin, api);
     const toolbarSource = 'let buttons=["Native toolbar button"];Vencord.Api.HeaderBar._addChannelToolbarButtons(buttons);return buttons';
-    const toolbarCode = toolbarSource.replace(canonicalize(toolbarPatch.replacement.match), toolbarPatch.replacement.replace.replaceAll("$self", "DiscreetMode"));
+    const toolbarCode = toolbarSource.replace(canonicalize(toolbarPatch.replacement.match), toolbarPatch.replacement.replace.replaceAll("$self", "GhostClient"));
     assert.notEqual(toolbarCode, toolbarSource);
-    const toolbar = compileFunction(toolbarCode, ["DiscreetMode"])(plugin);
+    const toolbar = compileFunction(toolbarCode, ["GhostClient"])(plugin);
     assert.deepEqual(visible(header), ["Native header button", "Plugin header button"]);
     assert.deepEqual(visible(toolbar), ["Native toolbar button", "Plugin toolbar button"]);
     settings.manualMode = true;
@@ -441,7 +567,7 @@ test("Reviews enabled recognizable plugins and explains public badge limitations
     assert.ok(text.includes("FakeNitro"));
     assert.ok(!text.includes("CustomRPC"));
     assert.ok(text.includes("public source"));
-    assert.ok(text.includes("/discreet"));
+    assert.ok(text.includes("/ghostclient"));
     assert.deepEqual([...reviewPlugins], ["FakeNitro"]);
 });
 
@@ -457,13 +583,14 @@ function press(fixture, key, overrides = {}) {
     return event;
 }
 
-test("F6 toggles all discreet effects and restores the interface even while streaming", () => {
+test("F6 toggles all GhostClient effects during streaming when automatic activation is disabled", () => {
     const f = fixture(false);
     assert.equal(f.settings.active, false);
     assert.equal(f.settings.keybind, "F6");
     assert.equal(f.settings.mode, "hide");
     assert.deepEqual(f.definitions.mode.options.map(option => option.value), ["hide", "suspend"]);
     f.settings.manualMode = false;
+    f.settings.streamerMode = false;
     f.plugin.start();
     const buttons = f.userArea.renderButtons({});
     const branded = { name: "Illegalcord", type: 0, flags: 0 };
@@ -485,7 +612,7 @@ test("F6 toggles all discreet effects and restores the interface even while stre
     assert.deepEqual(f.badges.getBadges({ userId: "123" }), [{ id: "custom", userId: "123" }]);
     f.plugin.stop();
     assert.equal(f.listeners.size, 0);
-    assert.deepEqual(f.refreshed, [true, true, true, true]);
+    assert.deepEqual(f.refreshed, [true, true, true, true, true]);
     press(f, "F6");
     assert.equal(f.settings.active, false);
 });
@@ -528,7 +655,7 @@ test("Rejects invalid shortcuts and keeps command and toolbox toggles equivalent
     }
     f.plugin.commands[0].execute();
     assert.equal(f.plugin.isInterfaceHidden(), true);
-    f.plugin.toolboxActions["Toggle discreet interface"]();
+    f.plugin.toolboxActions["Toggle GhostClient"]();
     assert.equal(f.plugin.isInterfaceHidden(), false);
     assert.equal(f.settings.manualMode, true);
 });
@@ -548,9 +675,9 @@ test("Hides local client badges for self and other profiles while preserving nat
     const patch = f.plugin.patches.find(patch => patch.find.includes("UserProfileBadgeListRows"));
     assert.ok(patch);
     const source = "let native=(0,source.getBadges)(profile,legacy),{pendingBadgeHiddenBadges:hidden,pendingBadgeDisplayOrder:order}=pending;return native";
-    const patched = source.replace(canonicalize(patch.replacement.match), patch.replacement.replace.replaceAll("$self", "DiscreetMode"));
+    const patched = source.replace(canonicalize(patch.replacement.match), patch.replacement.replace.replaceAll("$self", "GhostClient"));
     assert.notEqual(patched, source);
-    const render = compileFunction(patched, ["DiscreetMode", "source", "profile", "legacy", "pending"]);
+    const render = compileFunction(patched, ["GhostClient", "source", "profile", "legacy", "pending"]);
     const profiles = ["self", "other"].map(userId => ({ userId, getBadges: () => [...f.badges.getBadges({ userId }), ...discordBadges, ...localBadges] }));
     const getBadges = { getBadges: profile => profile.getBadges() };
     for (const profile of profiles) {
@@ -613,9 +740,9 @@ test("F6 hides platform indicators and Questify across API surfaces without hidi
     const rendered = cases.map(([find, source, expected]) => {
         const patch = f.plugin.patches.find(patch => patch.find === find);
         assert.ok(patch, find);
-        const code = source.replace(canonicalize(patch.replacement.match), patch.replacement.replace.replaceAll("$self", "DiscreetMode"));
+        const code = source.replace(canonicalize(patch.replacement.match), patch.replacement.replace.replaceAll("$self", "GhostClient"));
         assert.notEqual(code, source);
-        const render = compileFunction(`return function(props){${code}}`, ["DiscreetMode", "Vencord"])(f.plugin, api);
+        const render = compileFunction(`return function(props){${code}}`, ["GhostClient", "Vencord"])(f.plugin, api);
         const node = render({ user: { id: "123" } });
         assert.deepEqual(visible(node), expected);
         return { node, expected };
@@ -733,14 +860,14 @@ test("Leaves fixed webpack exports intact while installing and removing LarpCord
     assert.equal(f.stores.SnowflakeUtils.extractTimestamp, original);
 });
 
-test("Drops toasts during discreet mode instead of queuing them for later", () => {
+test("Drops toasts while GhostClient is active instead of queuing them for later", () => {
     const f = fixture(false);
     const patch = f.plugin.patches.find(patch => patch.find === ".currentToastMap.has(");
     const source = "return function show(toast){let surface=toast?.surface??\"app\";sent.push({surface,toast});}";
-    const code = source.replace(canonicalize(patch.replacement.match), patch.replacement.replace.replaceAll("$self", "DiscreetMode"));
+    const code = source.replace(canonicalize(patch.replacement.match), patch.replacement.replace.replaceAll("$self", "GhostClient"));
     assert.notEqual(code, source);
     const sent = [];
-    const show = compileFunction(code, ["DiscreetMode", "sent"])(f.plugin, sent);
+    const show = compileFunction(code, ["GhostClient", "sent"])(f.plugin, sent);
     show({ text: "Before" });
     f.settings.active = true;
     f.settings.hideInterface = false;

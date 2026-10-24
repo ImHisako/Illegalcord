@@ -14,7 +14,7 @@ import { Button } from "@components/Button";
 import { CodeBlock } from "@components/CodeBlock";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { ClockIcon, CopyIcon, MagnifyingGlassIcon, ResetIcon } from "@components/Icons";
-import { settings as discreetSettings } from "@illegalcordplugins/discreetMode/settings";
+import { isGhostClientActive } from "@illegalcordplugins/ghostClient/settings";
 import SettingsPlugin from "@plugins/_core/settings";
 import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
@@ -1137,7 +1137,7 @@ function getLagNotificationCandidates() {
 
 function maybeSendLagNotification() {
     if (!settings.store.lagNotifications) return;
-    if (isPluginEnabled("DiscreetMode") && discreetSettings.plain.active) return;
+    if (isGhostClientActive()) return;
     if (Date.now() - startedAt < LAG_NOTIFICATION_MIN_COLLECTION_MS) return;
 
     const now = Date.now();

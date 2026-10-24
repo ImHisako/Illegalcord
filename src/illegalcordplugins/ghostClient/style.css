@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-.vc-discreet-mode-chatbar {
+.vc-ghost-client-chatbar {
     display: contents;
 }
 
-.vc-discreet-mode-chatbar.vc-discreet-mode-hidden .vc-chatbar-button {
+.vc-ghost-client-chatbar.vc-ghost-client-hidden .vc-chatbar-button {
     display: none;
 }

@@ -10,7 +10,7 @@ import PinDMs from "@plugins/pinDms";
 import { DEFAULT_CHUNK_SIZE } from "@plugins/pinDms/constants";
 import { init } from "@plugins/pinDms/data";
 
-const KEYS = ["active", "hideInterface", "manualMode", "enabled"] as const;
+const KEYS = ["active", "hideInterface", "manualMode", "enabled", "streamerMode", "blacklistedGuilds"] as const;
 
 export function installPinDmsPrivacy(isInterfaceHidden: () => boolean) {
     const originals = {
@@ -39,13 +39,13 @@ export function installPinDmsPrivacy(isInterfaceHidden: () => boolean) {
     function refresh() {
         if (isPluginEnabled("PinDMs")) void init();
     }
-    for (const key of KEYS) SettingsStore.addChangeListener(`plugins.DiscreetMode.${key}`, refresh);
+    for (const key of KEYS) SettingsStore.addChangeListener(`plugins.GhostClient.${key}`, refresh);
     refresh();
 
     return {
         refresh,
         stop() {
-            for (const key of KEYS) SettingsStore.removeChangeListener(`plugins.DiscreetMode.${key}`, refresh);
+            for (const key of KEYS) SettingsStore.removeChangeListener(`plugins.GhostClient.${key}`, refresh);
             Object.assign(PinDMs, originals);
             refresh();
         }

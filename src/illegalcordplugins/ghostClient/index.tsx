@@ -22,19 +22,19 @@ import { Logger } from "@utils/Logger";
 import definePlugin, { StartAt } from "@utils/types";
 import type { Activity } from "@vencord/discord-types";
 import { onceReady } from "@webpack";
-import { ApplicationStreamingStore, StreamerModeStore, useStateFromStores } from "@webpack/common";
+import { ApplicationStreamingStore, SelectedGuildStore, StreamerModeStore, useStateFromStores } from "@webpack/common";
 import type { PropsWithChildren, ReactNode } from "react";
 
 import { installLarpCordPrivacy } from "./larpCord";
 import { installPinDmsPrivacy } from "./pinDms";
-import { handleKeyDown, refreshActivities, settings, toggleDiscreetMode } from "./settings";
+import { handleKeyDown, isAutomaticallyActive, isGhostClientActive, isSharing, refreshActivities, settings, toggleGhostClient } from "./settings";
 import { installPluginSuspension } from "./suspension";
 import { installVisualPrivacy } from "./visuals";
 
-const cl = classNameFactory("vc-discreet-mode-");
-const logger = new Logger("DiscreetMode");
-const INTERFACE_KEYS: Array<"active" | "hideInterface" | "manualMode"> = ["active", "hideInterface", "manualMode"];
-const ENABLED_KEYS: Parameters<typeof useSettings>[0] = ["plugins.DiscreetMode.enabled"];
+const cl = classNameFactory("vc-ghost-client-");
+const logger = new Logger("GhostClient");
+const INTERFACE_KEYS = ["active", "hideInterface", "manualMode", "streamerMode", "blacklistedGuilds"] satisfies Parameters<typeof settings.use>[0];
+const ENABLED_KEYS: Parameters<typeof useSettings>[0] = ["plugins.GhostClient.enabled"];
 const CLIENT_NAMES = /\b(?:illegalcord|equicord|vencord|vesktop|equibop|betterdiscord|nightcord|testcord)\b/i;
 const RECOGNIZABLE_PLUGINS: Record<string, string> = {
     CustomRPC: "Custom activities remain public unless they mention a filtered client name.",
@@ -54,33 +54,36 @@ let restoreVisuals: (() => void) | undefined;
 let restoreSettingsLayout: (() => void) | undefined;
 let refreshProfiles: (() => void) | undefined;
 let restoreSuspension: (() => void) | undefined;
+let refreshSuspension: (() => void) | undefined;
 const commands: VencordCommand[] = [
-    { name: "discreet", description: "Toggle discreet mode.", execute: toggleDiscreetMode },
+    { name: "ghostclient", description: "Toggle manual GhostClient activation.", execute: toggleGhostClient },
     {
-        name: "discreet-settings",
+        name: "ghostclient-settings",
         description: "Show or hide the Illegalcord settings section.",
         execute() { settings.store.hideSettings = !settings.store.hideSettings; }
     }
 ];
 
-function isSharing() {
-    return ApplicationStreamingStore.getCurrentUserActiveStream() != null || StreamerModeStore.enabled;
+function refreshPrivacy() {
+    refreshSuspension?.();
+    refreshProfiles?.();
+    refreshActivities();
 }
 
 function isInterfaceHidden() {
-    if (!isPluginEnabled("DiscreetMode")) return false;
+    if (!isPluginEnabled("GhostClient")) return false;
     const { active, hideInterface, manualMode } = settings.plain;
-    return active && hideInterface && (manualMode || isSharing());
+    return hideInterface && (isAutomaticallyActive() || active && (manualMode || isSharing()));
 }
 
 function useInterfaceHidden() {
-    const { active, hideInterface, manualMode } = settings.use(INTERFACE_KEYS);
-    const { enabled } = useSettings(ENABLED_KEYS).plugins.DiscreetMode;
-    const sharing = useStateFromStores([ApplicationStreamingStore, StreamerModeStore], isSharing);
-    return enabled && active && hideInterface && (manualMode || sharing);
+    const { active, hideInterface, manualMode, streamerMode, blacklistedGuilds } = settings.use(INTERFACE_KEYS);
+    const { enabled } = useSettings(ENABLED_KEYS).plugins.GhostClient;
+    return useStateFromStores([ApplicationStreamingStore, StreamerModeStore, SelectedGuildStore], isInterfaceHidden,
+        [enabled, active, hideInterface, manualMode, streamerMode, blacklistedGuilds]);
 }
 
-const DiscreetInterface = ErrorBoundary.wrap(function DiscreetInterface({ children }: PropsWithChildren) {
+const GhostInterface = ErrorBoundary.wrap(function GhostInterface({ children }: PropsWithChildren) {
     return useInterfaceHidden() ? null : <>{children}</>;
 }, { noop: true });
 
@@ -89,23 +92,23 @@ const ChatBarWrapper = ErrorBoundary.wrap(function ChatBarWrapper({ children }: 
 }, { noop: true });
 
 function wrapButtons(children: ReactNode) {
-    return [<DiscreetInterface key="vc-discreet-mode-interface">{children}</DiscreetInterface>];
+    return [<GhostInterface key="vc-ghost-client-interface">{children}</GhostInterface>];
 }
 
-function DiscreetModeAbout() {
+function GhostClientAbout() {
     useSettings(AUDIT_KEYS);
     const active = useInterfaceHidden();
     const recognizable = Object.entries(RECOGNIZABLE_PLUGINS).filter(([name]: [string, string]) => isPluginEnabled(name));
 
     return (
         <>
-            <Paragraph>{active ? "The discreet interface is active." : "The discreet interface is visible."}</Paragraph>
+            <Paragraph>{active ? "GhostClient is active." : "The Illegalcord interface is visible."}</Paragraph>
             <Paragraph>
                 Hide mode hides plugin controls, blocks toasts and pauses running plugin features, including StaffDetector alerts, without reloading Discord.
                 Already applied patches can continue to affect messages and other screens in hide mode.
                 Suspend mode reloads Discord to remove feature patches and restores your plugin choices with another reload when you leave it.
                 Core components, APIs, Client Diagnostics and LarpCord contact replacements remain available. Your enabled plugin choices stay unchanged.
-                Client Diagnostics keeps collecting measurements without sending performance notifications during discreet mode.
+                Client Diagnostics keeps collecting measurements without sending performance notifications while GhostClient is active.
             </Paragraph>
             <Paragraph>
                 Chat bar, header and user area plugin buttons are hidden, including Dynamic Island.
@@ -118,9 +121,16 @@ function DiscreetModeAbout() {
                 Version details are hidden in this mode.
             </Paragraph>
             <Paragraph>
-                Press the configured shortcut (F6 by default) or use /discreet to hide or restore Illegalcord.
+                Streamer Mode automatically hides the interface during screen sharing or Discord Streamer Mode.
+                The server blacklist automatically hides it while viewing a selected server.
+                Both restore the interface when their conditions end and always use hide mode without reloading.
+                Manual activation stays in effect until you turn it off.
+            </Paragraph>
+            <Paragraph>
+                Press the configured shortcut (F6 by default) or use /ghostclient to toggle manual activation.
+                Automatic triggers keep the interface hidden while their conditions apply.
                 The shortcut works while Discord is focused, including when its settings section is hidden.
-                Reopen settings after toggling to update the sidebar. Use /discreet-settings to change the sidebar preference.
+                Reopen settings after toggling to update the sidebar. Use /ghostclient-settings to change the sidebar preference.
             </Paragraph>
             <Paragraph>
                 Themes and crash recovery screens can still reveal modifications.
@@ -135,14 +145,14 @@ function DiscreetModeAbout() {
 }
 
 export default definePlugin({
-    name: "DiscreetMode",
+    name: "GhostClient",
     description: "Reduces visible client mod clues in activities and screen captures.",
     authors: [EquicordDevs.irritably],
     startAt: StartAt.Init,
     tags: ["Privacy", "Utility"],
     dependencies: ["CommandsAPI", "UserSettingsAPI", "HeaderBarAPI", "UserAreaAPI", "BadgeAPI", "ContextMenuAPI", "NicknameIconsAPI", "MemberListDecoratorsAPI", "MessageDecorationsAPI", "ServerListAPI"],
     settings,
-    settingsAboutComponent: ErrorBoundary.wrap(DiscreetModeAbout, { noop: true }),
+    settingsAboutComponent: ErrorBoundary.wrap(GhostClientAbout, { noop: true }),
     patches: [
         {
             find: '"LocalActivityStore"',
@@ -225,16 +235,17 @@ export default definePlugin({
             find: ".currentToastMap.has(",
             replacement: {
                 match: /(?<=function \i\(\i\)\{)(?=let \i=\i\?\.surface\?\?"app")/,
-                replace: "if($self.isDiscreetActive())return;"
+                replace: "if($self.isGhostClientActive())return;"
             }
         }
     ],
-    toolboxActions: { "Toggle discreet interface": toggleDiscreetMode },
+    toolboxActions: { "Toggle GhostClient": toggleGhostClient },
     chatBarButtonWrapper: { wrapper: (children: ReactNode) => <ChatBarWrapper>{children}</ChatBarWrapper>, priority: -100 },
     flux: {
-        STREAM_CREATE() { refreshProfiles?.(); },
-        STREAM_DELETE() { refreshProfiles?.(); },
-        STREAMER_MODE_UPDATE() { refreshProfiles?.(); }
+        STREAM_CREATE: refreshPrivacy,
+        STREAM_DELETE: refreshPrivacy,
+        STREAMER_MODE_UPDATE: refreshPrivacy,
+        CHANNEL_SELECT: refreshPrivacy
     },
 
     start() {
@@ -242,11 +253,12 @@ export default definePlugin({
         restoreVisuals = installVisualPrivacy(isInterfaceHidden, useInterfaceHidden);
         const { buildLayout } = SettingsPlugin;
         SettingsPlugin.buildLayout = builder => {
-            if (!settings.plain.active || !settings.plain.hideSettings) return buildLayout.call(SettingsPlugin, builder);
+            if (!isGhostClientActive() || !settings.plain.hideSettings) return buildLayout.call(SettingsPlugin, builder);
             return builder.buildLayout().filter(node => node.key !== "equicord_section");
         };
         restoreSettingsLayout = () => { SettingsPlugin.buildLayout = buildLayout; };
         const suspension = installPluginSuspension();
+        refreshSuspension = suspension.refresh;
         let cancelled = false;
         restoreSuspension = () => {
             cancelled = true;
@@ -256,7 +268,7 @@ export default definePlugin({
             if (cancelled) return;
             suspension.onReady();
             this.startInterface();
-        }).catch((error: unknown) => logger.error("Could not initialize the discreet interface.", error));
+        }).catch((error: unknown) => logger.error("Could not initialize GhostClient.", error));
     },
 
     startInterface() {
@@ -272,7 +284,7 @@ export default definePlugin({
 
         SettingsPlugin.getInfoString = () => isInterfaceHidden() ? "" : getInfoString.call(SettingsPlugin);
         SettingsPlugin.makeInfoElements = (...args: Parameters<typeof makeInfoElements>) => makeInfoElements.apply(SettingsPlugin, args)
-            .map(element => <DiscreetInterface key={element.key}>{element}</DiscreetInterface>);
+            .map(element => <GhostInterface key={element.key}>{element}</GhostInterface>);
         BadgeAPI.getBadges = (profile: Parameters<typeof getBadges>[0]) => isInterfaceHidden() ? [] : getBadges.call(BadgeAPI, profile);
         UserAreaAPI.renderButtons = (props: Parameters<typeof renderButtons>[0]) => wrapButtons(renderButtons.call(UserAreaAPI, props));
         restoreInterface = () => {
@@ -292,6 +304,7 @@ export default definePlugin({
     stop() {
         restoreSuspension?.();
         restoreSuspension = undefined;
+        refreshSuspension = undefined;
         window.removeEventListener("keydown", handleKeyDown, true);
         restoreInterface?.();
         restoreInterface = undefined;
@@ -305,9 +318,7 @@ export default definePlugin({
     isInterfaceHidden,
     wrapButtons,
 
-    isDiscreetActive() {
-        return isPluginEnabled("DiscreetMode") && settings.plain.active;
-    },
+    isGhostClientActive,
 
     useBadges(badges: Array<ProfileBadge & { icon?: string; }>) {
         const hidden = useInterfaceHidden();
@@ -323,7 +334,7 @@ export default definePlugin({
     },
 
     isActivityAllowed(activity: Activity) {
-        if (!isPluginEnabled("DiscreetMode") || !settings.plain.active || !settings.plain.hideBrandedActivities) return true;
+        if (!isGhostClientActive() || !settings.plain.hideBrandedActivities) return true;
         return ![
             activity.name, activity.details, activity.state, activity.url, activity.details_url, activity.state_url,
             ...Object.values(activity.assets ?? {}), ...activity.buttons ?? [], ...activity.metadata?.button_urls ?? []

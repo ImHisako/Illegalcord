@@ -12,7 +12,7 @@ import type { User } from "@vencord/discord-types";
 import { findByProps } from "@webpack";
 import { GuildMemberStore, IconUtils, SnowflakeUtils, UserProfileStore, UserStore } from "@webpack/common";
 
-const KEYS = ["active", "hideInterface", "manualMode", "enabled"] as const;
+const KEYS = ["active", "hideInterface", "manualMode", "enabled", "streamerMode", "blacklistedGuilds"] as const;
 
 export function installLarpCordPrivacy(isInterfaceHidden: () => boolean) {
     const iconUtils = (IconUtils as typeof IconUtils & { [SYM_LAZY_GET](): typeof IconUtils; })[SYM_LAZY_GET]();
@@ -96,14 +96,14 @@ export function installLarpCordPrivacy(isInterfaceHidden: () => boolean) {
         GuildMemberStore.emitChange();
         AccountStore?.emitChange();
     }
-    for (const key of KEYS) SettingsStore.addChangeListener(`plugins.DiscreetMode.${key}`, refresh);
+    for (const key of KEYS) SettingsStore.addChangeListener(`plugins.GhostClient.${key}`, refresh);
     refresh();
 
     return {
         refresh,
         stop() {
             installed = false;
-            for (const key of KEYS) SettingsStore.removeChangeListener(`plugins.DiscreetMode.${key}`, refresh);
+            for (const key of KEYS) SettingsStore.removeChangeListener(`plugins.GhostClient.${key}`, refresh);
             for (const restore of restorers.reverse()) restore();
             refresh();
         }

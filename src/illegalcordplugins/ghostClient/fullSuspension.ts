@@ -14,7 +14,7 @@ import Plugins from "~plugins";
 
 import { settings } from "./settings";
 
-const logger = new Logger("DiscreetMode");
+const logger = new Logger("GhostClient");
 
 export function installFullSuspension(candidates: Plugin[]) {
     const metadata = candidates.map(plugin => ({ plugin, required: plugin.required, isDependency: plugin.isDependency }));
@@ -23,7 +23,7 @@ export function installFullSuspension(candidates: Plugin[]) {
     let busy = false;
     let queued = false;
     let reloadRequested = false;
-    const active = () => !disposed && settings.store.active && settings.store.mode === "suspend" && isPluginEnabled("DiscreetMode");
+    const active = () => !disposed && settings.store.active && settings.store.mode === "suspend" && isPluginEnabled("GhostClient");
 
     function prepare() {
         if (!settings.store.suspendedPlugins) {
@@ -117,8 +117,8 @@ export function installFullSuspension(candidates: Plugin[]) {
         }
         void commit(false);
     }
-    SettingsStore.addChangeListener("plugins.DiscreetMode.active", changed);
-    SettingsStore.addChangeListener("plugins.DiscreetMode.mode", changed);
+    SettingsStore.addChangeListener("plugins.GhostClient.active", changed);
+    SettingsStore.addChangeListener("plugins.GhostClient.mode", changed);
 
     return {
         onReady() {
@@ -127,8 +127,8 @@ export function installFullSuspension(candidates: Plugin[]) {
         },
         stop() {
             disposed = true;
-            SettingsStore.removeChangeListener("plugins.DiscreetMode.active", changed);
-            SettingsStore.removeChangeListener("plugins.DiscreetMode.mode", changed);
+            SettingsStore.removeChangeListener("plugins.GhostClient.active", changed);
+            SettingsStore.removeChangeListener("plugins.GhostClient.mode", changed);
             if (settings.store.suspendedPlugins) void commit(true);
         }
     };

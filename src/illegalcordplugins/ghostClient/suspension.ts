@@ -13,12 +13,13 @@ import type { Plugin } from "@utils/types";
 import Plugins, { PluginMeta } from "~plugins";
 
 import { installFullSuspension } from "./fullSuspension";
-import { settings } from "./settings";
+import { isGhostClientActive, settings } from "./settings";
 
-const logger = new Logger("DiscreetMode");
+const logger = new Logger("GhostClient");
+const KEYS = ["active", "mode", "streamerMode", "blacklistedGuilds"] as const;
 
 export function installPluginSuspension() {
-    const retained = new Set(["DiscreetMode", "LarpCord", "ClientDiagnostics"]);
+    const retained = new Set(["GhostClient", "LarpCord", "ClientDiagnostics"]);
     for (const [name, meta] of Object.entries(PluginMeta)) {
         if (/\/(?:_api|_core)\//.test(meta.folderName)) retained.add(name);
     }
@@ -40,7 +41,7 @@ export function installPluginSuspension() {
     let installed = true;
     let ready = false;
     let scheduled = false;
-    const active = () => installed && settings.store.active && settings.store.mode !== "suspend" && isPluginEnabled("DiscreetMode");
+    const active = () => installed && isGhostClientActive() && !(settings.store.active && settings.store.mode === "suspend");
 
     function resume() {
         for (const plugin of paused) {
@@ -113,18 +114,17 @@ export function installPluginSuspension() {
         });
     }
 
-    SettingsStore.addChangeListener("plugins.DiscreetMode.active", changed);
-    SettingsStore.addChangeListener("plugins.DiscreetMode.mode", changed);
+    for (const key of KEYS) SettingsStore.addChangeListener(`plugins.GhostClient.${key}`, changed);
 
     return {
+        refresh: changed,
         onReady() {
             full.onReady();
             ready = true;
             schedule();
         },
         stop() {
-            SettingsStore.removeChangeListener("plugins.DiscreetMode.active", changed);
-            SettingsStore.removeChangeListener("plugins.DiscreetMode.mode", changed);
+            for (const key of KEYS) SettingsStore.removeChangeListener(`plugins.GhostClient.${key}`, changed);
             installed = false;
             resume();
             for (const restore of restorers) restore();

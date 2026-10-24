@@ -75,7 +75,7 @@ test("Hides saved PinDMs categories, collapsed sections and ordering while keepi
     assert.equal(f.plugin.isChannelHidden(2, 0), true);
     const handle = f.install();
     f.state.hidden = true;
-    f.listeners.get("plugins.DiscreetMode.active")();
+    f.listeners.get("plugins.GhostClient.active")();
     assert.equal(f.plugin.isPinned("pinned"), false);
     assert.deepEqual(["recent", "pinned"].filter(id => !f.plugin.isPinned(id)), ["recent", "pinned"]);
     assert.equal(f.plugin.categoryLen(), 0);
@@ -93,7 +93,7 @@ test("Hides saved PinDMs categories, collapsed sections and ordering while keepi
     assert.equal(f.data.currentUserCategories, f.categories);
     assert.ok(f.state.updates >= 3);
     f.state.hidden = false;
-    f.listeners.get("plugins.DiscreetMode.active")();
+    f.listeners.get("plugins.GhostClient.active")();
     assert.equal(f.plugin.isPinned("pinned"), true);
     assert.deepEqual(f.plugin.makeProps(instance, { sections: [1, 1] }).sections, [1, 1, 1]);
     assert.equal(f.plugin.isChannelHidden(2, 0), true);
@@ -104,7 +104,7 @@ test("Hides saved PinDMs categories, collapsed sections and ordering while keepi
     assert.equal(f.listeners.size, 0);
 });
 
-test("Uses the current account's pins and restores exact methods when DiscreetMode stops", () => {
+test("Uses the current account's pins and restores exact methods when GhostClient stops", () => {
     const f = fixture();
     const originals = { ...f.plugin };
     const handle = f.install();
