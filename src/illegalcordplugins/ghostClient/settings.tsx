@@ -53,7 +53,7 @@ export function isSharing() {
 }
 
 export function isAutomaticallyActive() {
-    const { streamerMode, blacklistedGuilds } = settings.plain;
+    const { streamerMode, blacklistedGuilds } = settings.store;
     const guildId = SelectedGuildStore?.getGuildId();
     return streamerMode && isSharing() || guildId != null && blacklistedGuilds.includes(guildId);
 }

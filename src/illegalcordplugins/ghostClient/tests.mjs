@@ -128,6 +128,13 @@ function fixture(active = true, donorData = {}, { deferReady = false, storesRead
             definePluginSettings: definitions => {
                 const plain = Object.fromEntries(Object.entries(definitions).map(([key, definition]) => [key, definition.default ?? definition.options?.find(option => option.default)?.value]));
                 const store = new Proxy(plain, {
+                    get(target, key) {
+                        if (target[key] === undefined && Object.hasOwn(definitions, key)) {
+                            const definition = definitions[key];
+                            target[key] = definition.default ?? definition.options?.find(option => option.default)?.value;
+                        }
+                        return target[key];
+                    },
                     set(target, key, value) {
                         if (target[key] === value) return true;
                         target[key] = value;
@@ -352,6 +359,15 @@ test("The searchable server blacklist supports multiple selections, removals and
     assert.deepEqual(visible(buttons), ["User area button"]);
     assert.equal(f.settings.active, false);
     f.plugin.stop();
+});
+
+test("Missing server blacklist settings do not interrupt session startup", () => {
+    const f = fixture(false);
+    delete f.settings.blacklistedGuilds;
+    f.state.guildId = "first";
+    assert.equal(f.plugin.isGhostClientActive(), false);
+    assert.equal(f.plugin.isActivityAllowed({ name: "Discord", type: 0, flags: 0 }), true);
+    assert.deepEqual(f.settings.blacklistedGuilds, []);
 });
 
 test("Overlapping stream and server triggers keep privacy enabled until both end", () => {
