@@ -22,7 +22,17 @@ export function installLarpCordPrivacy(isInterfaceHidden: () => boolean) {
         emitChange(): void;
     } | undefined;
     let installed = true;
-    const hidden = () => installed && isPluginEnabled("LarpCord") && isInterfaceHidden();
+    let checkingVisibility = false;
+    const hidden = () => {
+        if (!installed || !isPluginEnabled("LarpCord")) return false;
+        if (checkingVisibility) return true;
+        checkingVisibility = true;
+        try {
+            return isInterfaceHidden();
+        } finally {
+            checkingVisibility = false;
+        }
+    };
     const restorers: Array<() => void> = [];
 
     function intercept<Args extends unknown[], Result>(target: object, key: string, native: (...args: Args) => Result) {

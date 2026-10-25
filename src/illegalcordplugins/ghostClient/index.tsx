@@ -122,7 +122,7 @@ function GhostClientAbout() {
             </Paragraph>
             <Paragraph>
                 Streamer Mode automatically hides the interface during screen sharing or Discord Streamer Mode.
-                The server blacklist automatically hides it while viewing a selected server.
+                The server blacklist automatically hides it only while sharing your screen and viewing a selected server.
                 Both restore the interface when their conditions end and always use hide mode without reloading.
                 Manual activation stays in effect until you turn it off.
             </Paragraph>

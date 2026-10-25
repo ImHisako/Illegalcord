@@ -30,7 +30,7 @@ function ServerBlacklist() {
     return (
         <>
             <Heading>Server blacklist</Heading>
-            <Paragraph>Automatically hide the Illegalcord interface while viewing any selected server.</Paragraph>
+            <Paragraph>Automatically hide the Illegalcord interface while sharing your screen and viewing any selected server.</Paragraph>
             <SearchableSelect
                 options={options}
                 value={blacklistedGuilds}
@@ -55,7 +55,8 @@ export function isSharing() {
 export function isAutomaticallyActive() {
     const { streamerMode, blacklistedGuilds } = settings.store;
     const guildId = SelectedGuildStore?.getGuildId();
-    return streamerMode && isSharing() || guildId != null && blacklistedGuilds.includes(guildId);
+    return streamerMode && isSharing()
+        || guildId != null && blacklistedGuilds.includes(guildId) && ApplicationStreamingStore?.getCurrentUserActiveStream() != null;
 }
 
 export function isGhostClientActive() {

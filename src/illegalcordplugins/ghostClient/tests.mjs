@@ -175,7 +175,13 @@ function fixture(active = true, donorData = {}, { deferReady = false, storesRead
             React: { createElement, Fragment: "fragment" },
             SearchableSelect: "select",
             SelectedGuildStore: storesReady ? stores.SelectedGuildStore : undefined,
-            ApplicationStreamingStore: storesReady ? { getCurrentUserActiveStream: () => state.stream } : undefined,
+            ApplicationStreamingStore: storesReady ? { getCurrentUserActiveStream() {
+                if (state.stream) {
+                    const user = stores.UserStore.getCurrentUser();
+                    stores.GuildMemberStore.getMember(state.guildId, user.id);
+                }
+                return state.stream;
+            } } : undefined,
             StreamerModeStore: storesReady ? { get enabled() { return state.streamerMode; } } : undefined,
             useStateFromStores: (stores, selector) => { assert.ok(stores.length > 0); return selector(); }
         }
@@ -324,7 +330,7 @@ test("Streamer Mode hides every privacy surface automatically and restores it wi
     assert.equal([...f.changes.values()].reduce((count, set) => count + set.size, 0), 0);
 });
 
-test("The searchable server blacklist supports multiple selections, removals and automatic activation only in selected servers", () => {
+test("The searchable server blacklist only activates during own screen sharing in selected servers", () => {
     const f = fixture(false);
     f.settings.streamerMode = false;
     f.plugin.start();
@@ -341,6 +347,14 @@ test("The searchable server blacklist supports multiple selections, removals and
     f.state.guildId = "first";
     f.plugin.flux.CHANNEL_SELECT();
     assert.equal(f.settings.active, false);
+    assert.equal(f.plugin.isGhostClientActive(), false);
+    assert.deepEqual(visible(buttons), ["User area button"]);
+    assert.deepEqual(f.core.buildLayout(f.builder), f.layout);
+    f.state.streamerMode = true;
+    f.plugin.flux.STREAMER_MODE_UPDATE();
+    assert.equal(f.plugin.isGhostClientActive(), false);
+    f.state.stream = { streamKey: "self" };
+    f.plugin.flux.STREAM_CREATE();
     assert.equal(f.plugin.isGhostClientActive(), true);
     assert.deepEqual(visible(buttons), []);
     assert.deepEqual(f.core.buildLayout(f.builder), [{ key: "native" }]);
@@ -354,6 +368,14 @@ test("The searchable server blacklist supports multiple selections, removals and
     assert.deepEqual(visible(buttons), ["User area button"]);
     f.state.guildId = "first";
     f.plugin.flux.CHANNEL_SELECT();
+    assert.deepEqual(visible(buttons), []);
+    f.state.stream = null;
+    f.plugin.flux.STREAM_DELETE();
+    assert.equal(f.plugin.isGhostClientActive(), false);
+    assert.deepEqual(visible(buttons), ["User area button"]);
+    assert.deepEqual(f.core.buildLayout(f.builder), f.layout);
+    f.state.stream = { streamKey: "self" };
+    f.plugin.flux.STREAM_CREATE();
     assert.deepEqual(visible(buttons), []);
     dropdown().onChange([]);
     assert.deepEqual(visible(buttons), ["User area button"]);
@@ -370,15 +392,19 @@ test("Missing server blacklist settings do not interrupt session startup", () =>
     assert.deepEqual(f.settings.blacklistedGuilds, []);
 });
 
-test("Overlapping stream and server triggers keep privacy enabled until both end", () => {
+test("The server blacklist requires screen sharing while Streamer Mode remains an independent trigger", () => {
     const f = fixture(false);
     f.settings.blacklistedGuilds = ["first"];
     f.state.stream = { streamKey: "self" };
     f.state.guildId = "first";
     assert.equal(f.plugin.isInterfaceHidden(), true);
     f.state.stream = null;
+    assert.equal(f.plugin.isInterfaceHidden(), false);
+    f.state.streamerMode = true;
     assert.equal(f.plugin.isInterfaceHidden(), true);
     f.state.guildId = null;
+    assert.equal(f.plugin.isInterfaceHidden(), true);
+    f.state.streamerMode = false;
     assert.equal(f.plugin.isInterfaceHidden(), false);
     f.state.stream = { streamKey: "self" };
     assert.equal(f.plugin.isInterfaceHidden(), true);
@@ -441,11 +467,12 @@ test("Silences Client Diagnostics notifications while GhostClient is active and 
     f.state.stream = { streamKey: "self" };
     check();
     assert.equal(checks, 0);
-    f.state.stream = null;
+    f.settings.streamerMode = false;
     f.settings.blacklistedGuilds = ["first"];
     f.state.guildId = "first";
     check();
     assert.equal(checks, 0);
+    f.state.stream = null;
     f.state.guildId = null;
     f.settings.active = true;
     for (let cycle = 0; cycle < 8; cycle++) check();
@@ -841,6 +868,41 @@ test("Suspends late LarpCord hooks and cached cosmetic data while keeping email 
     assert.equal(f.larp.fakeCurrentUser, f.originalLarp.fakeCurrentUser);
     assert.equal(UserStore.getUser("self").username, "Fake name");
     assert.equal([...f.changes.values()].reduce((count, set) => count + set.size, 0), 0);
+});
+
+test("Screen sharing permission checks do not recurse through LarpCord privacy hooks", () => {
+    const f = fixture(false);
+    f.reviewPlugins.add("LarpCord");
+    f.settings.blacklistedGuilds = ["first"];
+    f.state.guildId = "first";
+    f.plugin.start();
+    const { UserStore } = f.stores;
+    const getCurrentUser = UserStore.getCurrentUser.bind(UserStore);
+    const getUser = UserStore.getUser.bind(UserStore);
+    UserStore.getCurrentUser = () => f.larp.fakeCurrentUser(getCurrentUser());
+    UserStore.getUser = id => f.larp.fakeCurrentUser(getUser(id));
+    const buttons = f.userArea.renderButtons({});
+    for (const streamerMode of [true, false]) {
+        f.settings.streamerMode = streamerMode;
+        assert.equal(UserStore.getCurrentUser().username, "Fake name");
+        f.state.stream = { streamKey: "self" };
+        f.plugin.flux.STREAM_CREATE();
+        assert.equal(f.plugin.isInterfaceHidden(), true);
+        assert.equal(f.plugin.isGhostClientActive(), true);
+        assert.deepEqual(visible(buttons), []);
+        assert.deepEqual(f.core.buildLayout(f.builder), [{ key: "native" }]);
+        assert.equal(UserStore.getCurrentUser().username, "Real name");
+        assert.equal(UserStore.getUser("self").username, "Real name");
+        assert.equal(UserStore.getCurrentUser().email, "fake@example.invalid");
+        assert.equal(f.larp.patchBannerUrl({}), null);
+        f.state.stream = null;
+        f.plugin.flux.STREAM_DELETE();
+        assert.equal(f.plugin.isInterfaceHidden(), false);
+        assert.deepEqual(visible(buttons), ["User area button"]);
+        assert.equal(UserStore.getCurrentUser().username, "Fake name");
+        assert.equal(f.larp.patchBannerUrl({}), "fake-banner");
+    }
+    f.plugin.stop();
 });
 
 test("Restores exact descriptors without LarpCord hooks and refreshes profiles for automatic sharing changes", () => {
