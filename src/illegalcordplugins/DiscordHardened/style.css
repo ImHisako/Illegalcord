@@ -110,6 +110,14 @@
     color: var(--text-normal);
 }
 
+.vc-discord-hardened-request-entry summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    cursor: pointer;
+}
+
 .vc-discord-hardened-details[open] summary {
     margin-bottom: 8px;
 }
@@ -202,4 +210,52 @@
     color: var(--text-muted);
     line-height: 1.6;
     text-align: center;
+}
+
+.vc-discord-hardened-request-console {
+    height: 480px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--background-primary);
+    font-family: var(--font-code);
+    font-size: 12px;
+    line-height: 1.6;
+    user-select: text;
+}
+
+.vc-discord-hardened-request-entry {
+    padding: 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    overflow-wrap: anywhere;
+}
+
+.vc-discord-hardened-request-entry time,
+.vc-discord-hardened-request-metadata {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.vc-discord-hardened-request-url {
+    flex-basis: 100%;
+}
+
+.vc-discord-hardened-request-metadata {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    margin-top: 12px;
+}
+
+.vc-discord-hardened-request-console :focus-visible {
+    outline: 2px solid var(--focus-primary);
+    outline-offset: -2px;
+}
+
+.vc-discord-hardened-status[data-result="Completed"] {
+    color: var(--text-positive);
+}
+
+.vc-discord-hardened-status[data-result="Blocked"],
+.vc-discord-hardened-status[data-result="Failed"] {
+    color: var(--text-danger);
 }

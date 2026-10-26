@@ -10,6 +10,7 @@ import { Logger } from "@utils/Logger";
 
 import { registerMicrophoneStream } from "./microphonePrivacy";
 import { getBlockedRequestKind, isDiscordHost, type NetworkSettings } from "./network";
+import type { RequestInput } from "./requestLog";
 import { type BlockCategory, isPermissionAllowed, recordBlock, registerTemporaryClone, registerTemporaryTracks } from "./session";
 
 const logger = new Logger("DiscordHardened");
@@ -173,7 +174,7 @@ function denied(permission: BlockCategory): Promise<never> {
     return Promise.reject(new DOMException(`${permission} is blocked by DiscordHardened.`, "NotAllowedError"));
 }
 
-function patchNetwork(settings: PrivacySettings): void {
+function patchNetwork(settings: PrivacySettings, recordRequest: (request: RequestInput) => void): void {
     const originalFetch = window.fetch;
     const protectedFetch: typeof window.fetch = (input, init) => {
         const url = getUrl(input, settings);
@@ -181,6 +182,7 @@ function patchNetwork(settings: PrivacySettings): void {
 
         if (kind && url) {
             logBlocked(kind, settings);
+            recordRequest({ url: url.href, method: init?.method ?? (input instanceof Request ? input.method : "GET"), resourceType: "fetch", source: "Firewall", state: "Blocked", detail: kind });
             return Promise.resolve(new Response(null, { status: 204 }));
         }
 
@@ -199,6 +201,7 @@ function patchNetwork(settings: PrivacySettings): void {
 
         if (kind && url) {
             logBlocked(kind, settings);
+            recordRequest({ url: url.href, method, resourceType: "xhr", source: "Firewall", state: "Blocked", detail: kind });
             blockedXhrs.add(this);
             originalOpen.call(this, "GET", "data:,", async, username, password);
             return;
@@ -228,6 +231,7 @@ function patchNetwork(settings: PrivacySettings): void {
 
             if (kind && url) {
                 logBlocked(kind, settings);
+                recordRequest({ url: url.href, method: "POST", resourceType: "ping", source: "Firewall", state: "Blocked", detail: kind });
                 return true;
             }
 
@@ -651,7 +655,7 @@ function patchWindowOpen(settings: PrivacySettings, openLink: (url: string) => b
     patchValue(window, "open", protectedWindowOpen);
 }
 
-export function startHardening(settings: PrivacySettings, openLink: (url: string) => boolean): void {
+export function startHardening(settings: PrivacySettings, openLink: (url: string) => boolean, recordRequest: (request: RequestInput) => void = () => undefined): void {
     if (restorers.length) return;
     activeSettings = settings;
 
@@ -666,7 +670,7 @@ export function startHardening(settings: PrivacySettings, openLink: (url: string
         });
     }
 
-    patchNetwork(settings);
+    patchNetwork(settings, recordRequest);
     patchMedia(settings);
     patchNotifications(settings);
     patchClipboard(settings);

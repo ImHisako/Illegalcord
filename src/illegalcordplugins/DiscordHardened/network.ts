@@ -26,7 +26,14 @@ export const DEFAULT_FIREWALL_URLS = [
 export const DEFAULT_BLOCKED_PATTERNS = ["sentry", "google", "tracking", "stats", "\\.spotify", "pagead", "analytics", "doubleclick"].join("\n");
 export const DEFAULT_ALLOWED_PATTERNS = ["videoplayback", "discord-attachments", "googleapis", "search", "api.spotify", "discord.com/assets/sentry."].join("\n");
 
-export interface NetworkSettings {
+export interface RequestRuleSettings {
+    blockedRequestUrls?: string;
+    allowedRequestUrls?: string;
+}
+
+export type RequestRuleDecision = "Block" | "Allow" | null;
+
+export interface NetworkSettings extends RequestRuleSettings {
     questCompatibility?: boolean;
     blockTelemetry: boolean;
     blockSentry: boolean;
@@ -55,6 +62,44 @@ interface FirewallRules {
 }
 
 let firewallRules: FirewallRules | null = null;
+let requestRules: { blocked: string; allowed: string; blocklist: Set<string>; allowlist: Set<string>; } | undefined;
+
+export function getRequestRuleTarget(value: string | URL): string | null {
+    let url: URL;
+    try {
+        url = typeof value === "string" ? new URL(value) : value;
+    } catch {
+        return null;
+    }
+    if (!["http:", "https:", "ws:", "wss:"].includes(url.protocol) || url.username || url.password
+        || /\[redacted\]|%5bredacted%5d/i.test(url.pathname)) return null;
+    const target = `${url.origin}${url.pathname}`;
+    return target.length < 2048 ? target : null;
+}
+
+export function validateRequestRuleList(value: string): true | string {
+    const lines = value.split("\n").map((line: string) => line.trim()).filter(Boolean);
+    if (value.length > 65_536 || lines.length > 200) return "Keep each request rule list within 200 URLs and 65536 characters.";
+    return lines.every((line: string) => !/[?#*]/.test(line) && getRequestRuleTarget(line) !== null)
+        || "Enter complete HTTP, HTTPS, WS or WSS URLs without queries, fragments, credentials or wildcards.";
+}
+
+export function getRequestRuleDecision(url: string | URL, settings: RequestRuleSettings): RequestRuleDecision {
+    const blocked = typeof settings.blockedRequestUrls === "string" && settings.blockedRequestUrls.length <= 65_536 ? settings.blockedRequestUrls : "";
+    const allowed = typeof settings.allowedRequestUrls === "string" && settings.allowedRequestUrls.length <= 65_536 ? settings.allowedRequestUrls : "";
+    if (!blocked && !allowed) return null;
+    const target = getRequestRuleTarget(url);
+    if (!target) return null;
+    if (!requestRules || requestRules.blocked !== blocked || requestRules.allowed !== allowed) {
+        requestRules = {
+            blocked, allowed,
+            blocklist: new Set(blocked.split("\n").filter((line: string) => line.trim()).slice(0, 200).map((line: string) => getRequestRuleTarget(line.trim())).filter((value: string | null): value is string => value !== null)),
+            allowlist: new Set(allowed.split("\n").filter((line: string) => line.trim()).slice(0, 200).map((line: string) => getRequestRuleTarget(line.trim())).filter((value: string | null): value is string => value !== null)),
+        };
+    }
+    if (requestRules.allowlist.has(target)) return "Allow";
+    return requestRules.blocklist.has(target) ? "Block" : null;
+}
 
 function matchesHost(hostname: string, root: string): boolean {
     return hostname === root || hostname.endsWith(`.${root}`);
@@ -103,6 +148,9 @@ function isBlockedByGoofCord(url: URL, settings: NetworkSettings): boolean {
 
 export function getBlockedRequestKind(url: URL | null, settings: NetworkSettings, noTrackEnabled: boolean): BlockCategory | null {
     if (!url) return null;
+    const decision = getRequestRuleDecision(url, settings);
+    if (decision === "Allow") return null;
+    if (decision === "Block") return "Request rule";
 
     const { pathname } = url;
 

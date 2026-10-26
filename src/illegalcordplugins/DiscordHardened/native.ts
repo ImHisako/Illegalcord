@@ -7,11 +7,54 @@
 import type { Event, IpcMainInvokeEvent, Session, WebContents, WebPreferences } from "electron";
 
 import { launchBrowser, listInstalledBrowsers } from "./browsers";
+import { createAdvancedRequestLog } from "./nativeAdvancedLog";
 import { clearTemporaryPermissions } from "./nativePermissions";
 import { isDiscordAppUrl, isTrustedSender, restrictWebPreferences } from "./nativeSecurity";
-import { configureSessionProxy, getSessionStatus, prepareSession, releaseSession } from "./nativeSession";
+import { configureSessionProxy, getSessionRequestLog, getSessionStatus, prepareSession, releaseSession } from "./nativeSession";
 
 export { setTemporaryPermissions } from "./nativePermissions";
+
+const advancedCaptures = new Map<WebContents, { capture: ReturnType<typeof createAdvancedRequestLog>; destroyed: () => void; }>();
+
+export async function configureRequestCapture(event: IpcMainInvokeEvent, webSockets: unknown, localResources: unknown) {
+    if (!isTrustedSender(event) || typeof webSockets !== "boolean" || typeof localResources !== "boolean") return null;
+    const existing = advancedCaptures.get(event.sender);
+    if (existing) {
+        event.sender.removeListener("destroyed", existing.destroyed);
+        existing.capture.stop();
+        advancedCaptures.delete(event.sender);
+    }
+    if (!webSockets && !localResources) return true;
+    const { requests } = prepareSession(event.sender.session);
+    const capture = createAdvancedRequestLog(event.sender, requests.log, webSockets, localResources);
+    const destroyed = () => {
+        capture.stop();
+        event.sender.removeListener("destroyed", destroyed);
+        if (advancedCaptures.get(event.sender)?.capture === capture) advancedCaptures.delete(event.sender);
+    };
+    advancedCaptures.set(event.sender, { capture, destroyed });
+    event.sender.once("destroyed", destroyed);
+    await capture.start();
+    if (!isTrustedSender(event)) {
+        destroyed();
+        return null;
+    }
+    return true;
+}
+
+export function getRequestLog(event: IpcMainInvokeEvent) {
+    if (!isTrustedSender(event)) return null;
+    const log = getSessionRequestLog(event.sender.session);
+    return log ? { ...log.snapshot(), advanced: advancedCaptures.get(event.sender)?.capture.status() } : null;
+}
+
+export function clearRequestLog(event: IpcMainInvokeEvent): boolean {
+    if (!isTrustedSender(event)) return false;
+    const log = getSessionRequestLog(event.sender.session);
+    if (!log) return false;
+    log.clear();
+    return true;
+}
 
 interface AppliedState {
     sender: WebContents;
@@ -204,6 +247,7 @@ export async function configure(
 
 export async function restore(event: IpcMainInvokeEvent): Promise<boolean> {
     if (!isTrustedSender(event)) return false;
+    await configureRequestCapture(event, false, false);
     const state = appliedStates.get(event.sender.id);
     if (!state) return false;
 

@@ -14,7 +14,7 @@ export const TEMPORARY_PERMISSIONS = {
 } as const;
 
 export type TemporaryPermission = keyof typeof TEMPORARY_PERMISSIONS;
-export type BlockCategory = "GoofCord firewall" | "tracing" | "telemetry" | "typing indicator" | "Sentry" | "fingerprinting"
+export type BlockCategory = "Request rule" | "GoofCord firewall" | "tracing" | "telemetry" | "typing indicator" | "Sentry" | "fingerprinting"
     | "Legacy media capture" | "Microphone access" | "Camera access" | "Media capture" | "Display capture"
     | "Speaker selection" | "Clipboard write access" | "Clipboard read access" | "Hardware access"
     | "Battery information" | "Fullscreen access" | "Background synchronization" | "Unsafe window request" | "Device enumeration"

@@ -15,6 +15,7 @@ import { Margins } from "@utils/margins";
 import { React, TabBar, useState } from "@webpack/common";
 
 import { settings } from "./index";
+import { RequestPanel } from "./RequestPanel";
 import { SecurityPanel } from "./SecurityPanel";
 
 type SettingKey = keyof typeof settings.def;
@@ -26,6 +27,7 @@ interface SettingsGroup {
 }
 
 const PLUGIN_SETTINGS_PATHS: Array<"plugins.DiscordHardened.*"> = ["plugins.DiscordHardened.*"];
+const REQUEST_SETTINGS = ["recordNetworkRequests", "recordWebSocketMessages", "recordLocalResources", "recordVoiceDiagnostics", "requestLogLimit", "requestLogRetention", "blockedRequestUrls", "allowedRequestUrls"] as const;
 const SETTINGS_GROUPS = [
     {
         title: "Embeds and autoplay",
@@ -43,6 +45,8 @@ const SETTINGS_GROUPS = [
             "blockFingerprinting",
             "goofCordFirewall",
             "sessionFirewall",
+            "blockedRequestUrls",
+            "allowedRequestUrls",
             "customFirewallRules",
             "firewallBlocklist",
             "firewallBlockedPatterns",
@@ -140,7 +144,7 @@ function SettingRow({ settingKey, pluginSettings }: SettingRowProps) {
 
 function DiscordHardenedSettings() {
     const pluginSettings = useSettings(PLUGIN_SETTINGS_PATHS).plugins.DiscordHardened;
-    const [tab, setTab] = useState<"settings" | "security">("settings");
+    const [tab, setTab] = useState<"settings" | "security" | "requests">("settings");
 
     return (
         <SettingsTab>
@@ -152,10 +156,13 @@ function DiscordHardenedSettings() {
             <TabBar type="top" look="brand" selectedItem={tab} onItemSelect={setTab} className={Margins.bottom20}>
                 <TabBar.Item id="settings">Settings</TabBar.Item>
                 <TabBar.Item id="security">Security and logs</TabBar.Item>
+                <TabBar.Item id="requests">Request logs</TabBar.Item>
             </TabBar>
 
             {tab === "security" ? <ErrorBoundary noop>
                 <SecurityPanel />
+            </ErrorBoundary> : tab === "requests" ? <ErrorBoundary noop>
+                <RequestPanel controls={REQUEST_SETTINGS.map(settingKey => <SettingRow key={settingKey} settingKey={settingKey} pluginSettings={pluginSettings} />)} />
             </ErrorBoundary> : SETTINGS_GROUPS.map(group => (
                 <section key={group.title} className={Margins.bottom20}>
                     <Heading tag="h3">{group.title}</Heading>

@@ -10,12 +10,14 @@ import { escapeRegExp } from "@utils/text";
 import { app, type OnBeforeRequestListenerDetails, type Session, session, type WebContents, type WebRequestFilter } from "electron";
 
 import { installPermissionControls } from "./nativePermissions";
-import { DEFAULT_ALLOWED_PATTERNS, DEFAULT_BLOCKED_PATTERNS, DEFAULT_FIREWALL_URLS, getBlockedRequestKind } from "./network";
+import { installRequestLog } from "./nativeRequestLog";
+import { DEFAULT_ALLOWED_PATTERNS, DEFAULT_BLOCKED_PATTERNS, DEFAULT_FIREWALL_URLS, getBlockedRequestKind, getRequestRuleDecision } from "./network";
 
 type RequestListener = NonNullable<Parameters<Session["webRequest"]["onBeforeRequest"]>[0]>;
 type ProxyStatus = "Disabled" | "Pending" | "Active" | "Failed";
 
 interface SessionState {
+    requests: ReturnType<typeof installRequestLog>;
     permissionsInstalled: boolean;
     proxyStatus: ProxyStatus;
     proxyKey: string;
@@ -38,7 +40,7 @@ export function getSessionStatus(ses: Session) {
 
 function filterRequest(details: OnBeforeRequestListenerDetails): boolean {
     const settings = RendererSettings.store.plugins?.DiscordHardened;
-    if (settings?.enabled === false || settings?.sessionFirewall !== true) return false;
+    if (settings?.enabled === false) return false;
     let url: URL;
     try {
         url = new URL(details.url);
@@ -46,6 +48,9 @@ function filterRequest(details: OnBeforeRequestListenerDetails): boolean {
         return false;
     }
     if (url.protocol !== "http:" && url.protocol !== "https:" && url.protocol !== "ws:" && url.protocol !== "wss:") return false;
+    const decision = getRequestRuleDecision(url, { blockedRequestUrls: settings?.blockedRequestUrls, allowedRequestUrls: settings?.allowedRequestUrls });
+    if (decision !== null) return decision === "Block";
+    if (settings?.sessionFirewall !== true) return false;
     const kind = getBlockedRequestKind(url, {
         questCompatibility: settings?.questCompatibility !== false,
         blockTelemetry: settings?.blockTelemetry !== false,
@@ -66,16 +71,19 @@ export function prepareSession(ses: Session): SessionState {
     const existing = sessions.get(ses);
     if (existing) return existing;
     const restorePermissions = installPermissionControls(ses);
+    const requests = installRequestLog(ses, () => RendererSettings.store.plugins?.DiscordHardened);
     const { onBeforeRequest } = ses.webRequest;
     let hostListener: RequestListener | null = null;
     let hostFilter: WebRequestFilter | undefined;
     let hostPatterns: RegExp[] | undefined;
     const state: SessionState = {
+        requests,
         permissionsInstalled: Boolean(restorePermissions),
         proxyStatus: "Disabled",
         proxyKey: "",
         ready: Promise.resolve(true),
         restore: () => {
+            requests.stop();
             restorePermissions?.();
             if (ses.webRequest.onBeforeRequest === protectedBeforeRequest) {
                 ses.webRequest.onBeforeRequest = onBeforeRequest;
@@ -85,19 +93,27 @@ export function prepareSession(ses: Session): SessionState {
         },
     };
     const listener: RequestListener = (details, callback) => {
-        const pending = state.ready;
-        void pending.then(ready => {
-            if (pending !== state.ready) {
-                listener(details, callback);
-                return;
-            }
-            if (!ready || filterRequest(details)) {
-                callback({ cancel: true });
-                return;
-            }
-            if (hostListener && (!hostPatterns || hostPatterns.some(pattern => pattern.test(details.url)))) hostListener(details, callback);
-            else callback({ cancel: false });
-        });
+        requests.begin(details);
+        waitForProxy();
+        function waitForProxy(): void {
+            const pending = state.ready;
+            void pending.then(ready => {
+                if (pending !== state.ready) {
+                    waitForProxy();
+                    return;
+                }
+                if (!ready || filterRequest(details)) {
+                    requests.log.finish(details.id, { state: "Blocked", detail: ready ? "Request firewall" : "Desktop proxy unavailable" });
+                    callback({ cancel: true });
+                    return;
+                }
+                if (hostListener && (!hostPatterns || hostPatterns.some(pattern => pattern.test(details.url)))) hostListener(details, result => {
+                    if (result.cancel) requests.log.finish(details.id, { state: "Blocked", detail: "Request filter" });
+                    callback(result);
+                });
+                else callback({ cancel: false });
+            });
+        }
     };
     function protectedBeforeRequest(filter: WebRequestFilter | RequestListener | null, handler?: RequestListener | null): void {
         hostFilter = typeof filter === "object" && filter !== null ? filter : undefined;
@@ -125,6 +141,10 @@ export function prepareSession(ses: Session): SessionState {
         void configureSessionProxy(ses, settings.proxyRules ?? "127.0.0.1:8080", settings.proxyBypassRules ?? "<local>");
     }
     return state;
+}
+
+export function getSessionRequestLog(ses: Session) {
+    return sessions.get(ses)?.requests.log;
 }
 
 export async function configureSessionProxy(ses: Session, proxyRules: unknown, proxyBypassRules: unknown): Promise<boolean> {

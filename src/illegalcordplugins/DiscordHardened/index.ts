@@ -20,8 +20,9 @@ import { SettingsRouter, showToast, UserStore } from "@webpack/common";
 import { refreshAttachmentWarnings, startAttachmentWarnings, stopAttachmentWarnings } from "./AttachmentWarnings";
 import { BrowserSettings } from "./BrowserSettings";
 import { refreshCameraPrivacy, refreshMicrophonePrivacy, scheduleMicrophonePrivacyRefresh, startMicrophonePrivacy, stopMicrophonePrivacy } from "./microphonePrivacy";
-import { DEFAULT_ALLOWED_PATTERNS, DEFAULT_BLOCKED_PATTERNS, DEFAULT_FIREWALL_URLS } from "./network";
+import { DEFAULT_ALLOWED_PATTERNS, DEFAULT_BLOCKED_PATTERNS, DEFAULT_FIREWALL_URLS, validateRequestRuleList } from "./network";
 import { DEFAULT_EMBED_DOMAINS, isAllowedEmbed, parseDomainList, validateDomainList } from "./policy";
+import { browserRequestLog, refreshRequestLogging, startRequestLogging, stopRequestLogging } from "./requestCapture";
 import { startHardening, stopHardening } from "./runtime";
 import { getTemporaryPermissions, setBlockRecording, startPermissionSession, stopPermissionSession } from "./session";
 
@@ -242,6 +243,20 @@ export const settings = definePluginSettings({
         description: "Show and customize the GoofCord firewall rule lists.",
         default: false,
     },
+    blockedRequestUrls: {
+        type: OptionType.STRING,
+        description: "Exact URLs to block for every request method, one per line. Query strings are ignored. Rules stay active while request logging is paused.",
+        default: "",
+        multiline: true,
+        isValid: validateRequestRuleList,
+    },
+    allowedRequestUrls: {
+        type: OptionType.STRING,
+        description: "Exact URL exceptions for this plugin's request filters, one per line. Query strings are ignored. Other plugins and browser policies can still block these requests.",
+        default: "",
+        multiline: true,
+        isValid: validateRequestRuleList,
+    },
     firewallBlocklist: {
         type: OptionType.STRING,
         description: "URL wildcard patterns blocked by the GoofCord firewall, one per line.",
@@ -424,6 +439,51 @@ export const settings = definePluginSettings({
         default: true,
         onChange: setBlockRecording,
     },
+    recordNetworkRequests: {
+        type: OptionType.BOOLEAN,
+        description: "Record network request metadata in memory. Request bodies, headers, URL queries and credentials are excluded. May increase CPU and memory usage and cause lag.",
+        default: true,
+        onChange: refreshRequestLogging,
+    },
+    recordWebSocketMessages: {
+        type: OptionType.BOOLEAN,
+        description: "Record each observed WebSocket message with its direction, size and opcode. Message payloads are excluded. May increase CPU and memory usage and cause lag.",
+        default: false,
+        target: "DESKTOP",
+        onChange: refreshRequestLogging,
+    },
+    recordLocalResources: {
+        type: OptionType.BOOLEAN,
+        description: "Observe local blob and data resource loads through desktop network instrumentation. Embedded data and blob identifiers are excluded. Resources Chromium does not report remain unavailable. May increase CPU and memory usage and cause lag.",
+        default: false,
+        target: "DESKTOP",
+        onChange: refreshRequestLogging,
+    },
+    recordVoiceDiagnostics: {
+        type: OptionType.BOOLEAN,
+        description: "Listen for voice engine connection events and supported traffic counters. Audio, addresses and credentials are excluded. This does not capture every native module request or packet. May increase CPU and memory usage and cause lag.",
+        default: false,
+        target: "DESKTOP",
+        onChange: refreshRequestLogging,
+    },
+    requestLogLimit: {
+        type: OptionType.NUMBER,
+        description: "Maximum retained requests per log source. Older entries are removed automatically.",
+        default: 2000,
+        isValid: (value: number) => Number.isInteger(value) && value >= 100 && value <= 10_000 || "Enter a whole number between 100 and 10000.",
+    },
+    requestLogRetention: {
+        type: OptionType.SELECT,
+        description: "Automatically remove requests older than this duration. The entry limit always applies.",
+        options: [
+            { label: "5 minutes", value: 5 },
+            { label: "15 minutes", value: 15, default: true },
+            { label: "1 hour", value: 60 },
+            { label: "6 hours", value: 360 },
+            { label: "24 hours", value: 1440 },
+            { label: "Until cleared or the entry limit is reached", value: 0 },
+        ],
+    },
     proxy: {
         type: OptionType.BOOLEAN,
         description: "Route Discord traffic through an Electron proxy. Restart Discord after changing this setting.",
@@ -574,7 +634,8 @@ export default definePlugin({
         });
         startAttachmentWarnings();
         startMicrophonePrivacy(settings.store);
-        startHardening(settings.store, url => this.openLink(url));
+        startRequestLogging(settings.store, Boolean(Native), Native ? (webSockets: boolean, localResources: boolean) => Native.configureRequestCapture(webSockets, localResources) : undefined);
+        startHardening(settings.store, url => this.openLink(url), browserRequestLog.record);
 
         await configureNative(currentLifecycleId);
     },
@@ -586,6 +647,7 @@ export default definePlugin({
         stopPermissionSession();
         stopHardening();
         stopMicrophonePrivacy();
+        await stopRequestLogging();
 
         if (!Native) return;
 
