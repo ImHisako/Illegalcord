@@ -210,7 +210,7 @@ test("Includes the settings diagnostics and history in the popup without Discord
     assert.equal(store.lastCrashReport, "");
 });
 
-test("Ignores failed fetches and rate limit rejections without hiding other errors or window failures", () => {
+test("Ignores known Discord rejections without hiding other errors or window failures", () => {
     const calls = [];
     const constants = source.slice(source.indexOf("const MESSAGE_SEND_FORBIDDEN_RE"), source.indexOf("const Native ="));
     const messages = source.slice(source.indexOf("function getErrorText("), source.indexOf("function getErrorStack("));
@@ -232,6 +232,9 @@ test("Ignores failed fetches and rate limit rejections without hiding other erro
         new TypeError("Failed to fetch"),
         "Failed to fetch",
         { message: "Failed to fetch", stack: "TypeError: Failed to fetch" },
+        new Error("Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION"),
+        "Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION",
+        { message: "Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION", stack: "Error: Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION" },
         rateLimited,
         Object.assign(new Error("You are being rate limited."), { status: 429 }),
         { status: 429, body: { message: "Riprova più tardi.", retry_after: 10 } },
@@ -245,14 +248,18 @@ test("Ignores failed fetches and rate limit rejections without hiding other erro
     handleUnhandledRejection({ reason: new Error("Failed to fetch user profile") });
     handleUnhandledRejection({ reason: Object.assign(new Error("Server error"), { status: 500 }) });
     handleUnhandledRejection({ reason: new Error("You are being rate limited.") });
+    handleUnhandledRejection({ reason: new Error("Cannot set setting key: OTHER_SETTING") });
     handleGlobalError({ error: new TypeError("Failed to fetch") });
     handleGlobalError({ error: rateLimited });
+    handleGlobalError({ error: new Error("Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION") });
     assert.deepEqual(calls, [
         ["unhandled-rejection", "Cannot read properties of undefined"], "save", "log", "popup",
         ["unhandled-rejection", "Failed to fetch user profile"], "save", "log", "popup",
         ["unhandled-rejection", "Server error"], "save", "log", "popup",
         ["unhandled-rejection", "You are being rate limited."], "save", "log", "popup",
+        ["unhandled-rejection", "Cannot set setting key: OTHER_SETTING"], "save", "log", "popup",
         ["window-error", "Failed to fetch"], "save", "log", "popup",
-        ["window-error", "Ton nombre d'actions est limité."], "save", "log", "popup"
+        ["window-error", "Ton nombre d'actions est limité."], "save", "log", "popup",
+        ["window-error", "Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION"], "save", "log", "popup"
     ]);
 });
