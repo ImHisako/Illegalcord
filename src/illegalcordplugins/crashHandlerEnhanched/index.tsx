@@ -147,6 +147,11 @@ interface CrashReport {
     message: string;
     stack?: string;
     componentStack?: string;
+    sourceLocation?: {
+        filename: string;
+        line: number;
+        column: number;
+    };
     channelId?: string;
     crashCount: number;
     recentCrashCount: number;
@@ -850,6 +855,7 @@ function formatReport(report: CrashReport) {
         `Enabled plugins: ${report.enabledPlugins.join(", ") || "None"}`,
     ];
 
+    if (report.sourceLocation) parts.push(`Source: ${report.sourceLocation.filename || "<anonymous>"}:${report.sourceLocation.line}:${report.sourceLocation.column}`);
     if (report.possiblePlugins.length) parts.push(`Plugins to check (recent activity only, not proof):\n${report.possiblePlugins.map(({ name, callbacks, lastActivityMs, lastSurface }) => `${name}: ${callbacks} callbacks, last ${lastActivityMs} ms before crash (${lastSurface})`).join("\n")}`);
     if (report.recurringPlugins.length) parts.push(`Plugins with callbacks before similar crashes (not proof):\n${report.recurringPlugins.map(({ name, crashes }) => `${name}: ${crashes}/${report.similarCrashes} crashes`).join("\n")}`);
     if (report.patchedModules.length) parts.push(`Patched module sources in the stack (module-level clues, not proof):\n${report.patchedModules.map(({ sourceId, plugins }) => `WebpackModule${sourceId}: ${plugins.join(", ")}`).join("\n")}`);
@@ -1445,6 +1451,13 @@ function handleGlobalError(event: ErrorEvent) {
     if (!settings.store.captureGlobalErrors) return;
     if (latestReport && Date.now() - latestReport.timestamp < 1000 && latestReport.message === getErrorMessage(error)) return;
     const report = createReport({ error }, "window-error");
+    if (event.filename || event.lineno || event.colno) {
+        report.sourceLocation = {
+            filename: event.filename,
+            line: event.lineno,
+            column: event.colno
+        };
+    }
     saveReport(report);
     writeCrashLog(report);
     if (settings.store.showSupportPopup) openCrashSupportModal(report);

@@ -263,3 +263,43 @@ test("Ignores known Discord rejections without hiding other errors or window fai
         ["window-error", "Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION"], "save", "log", "popup"
     ]);
 });
+
+test("Preserves browser error locations in saved reports and disk logs", () => {
+    const reports = [];
+    const logs = [];
+    const handlers = source.slice(source.indexOf("function normalizeGlobalError("), source.indexOf("function installGlobalListeners("));
+    const formatter = source.slice(source.indexOf("function formatReport("), source.indexOf("function saveReport("));
+    const logBuilder = source.slice(source.indexOf("function buildCrashLogContents("), source.indexOf("function writeCrashLog("));
+    const { handleGlobalError, buildCrashLogContents } = load(handlers + formatter + logBuilder + "\nreturn { handleGlobalError, buildCrashLogContents };", {
+        latestReport: null,
+        settings: { store: { captureGlobalErrors: true } },
+        getErrorMessage: error => error.message,
+        createReport: ({ error }, kind) => ({
+            kind, message: error.message, stack: error.stack, timestamp: 0,
+            possiblePlugins: [], recurringPlugins: [], patchedModules: [], diagnosticEvents: [], breadcrumbs: [], enabledPlugins: []
+        }),
+        saveReport: report => reports.push(report),
+        writeCrashLog: report => logs.push(report),
+        VERSION: "test",
+        navigator: { userAgent: "test" },
+        CRASH_KIND_LABELS: { "window-error": "Window error" }
+    });
+    const error = new TypeError("Cannot read properties of undefined (reading 'cloneNode')");
+    for (const event of [
+        { error, filename: "file:///VencordRenderer", lineno: 42, colno: 1940 },
+        { error: null, message: error.message, filename: "", lineno: 1, colno: 1940 }
+    ]) {
+        handleGlobalError(event);
+        const report = reports.at(-1);
+        assert.deepEqual(report.sourceLocation, { filename: event.filename, line: event.lineno, column: event.colno });
+        assert.equal(logs.at(-1), report);
+        const log = JSON.parse(buildCrashLogContents(report));
+        assert.deepEqual(log.sourceLocation, report.sourceLocation);
+        assert.ok(log.reportText.includes(`Source: ${event.filename || "<anonymous>"}:${event.lineno}:${event.colno}`));
+    }
+    assert.equal(reports[0].stack, error.stack);
+    handleGlobalError({ error, filename: "", lineno: 0, colno: 0 });
+    const log = JSON.parse(buildCrashLogContents(reports.at(-1)));
+    assert.equal(log.sourceLocation, undefined);
+    assert.ok(!log.reportText.includes("Source:"));
+});
