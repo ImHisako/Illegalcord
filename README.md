@@ -2,6 +2,8 @@
 
 🌐 **Languages / Lingue:** [English](README.md) | [Italiano](README_IT.md)
 
+Security and abuse reports: [Reporting policy](SECURITY.md) · [Privacy Policy](PRIVACY_POLICY.md) · [Plugin and external component notes](#security-privacy-and-external-components). Private contacts: [illegalcord@secria.me](mailto:illegalcord@secria.me) and [@benedicence on Telegram](https://t.me/benedicence).
+
 Illegalcord is an open-source fork of [Equicord](https://github.com/Equicord) and [Vencord](https://github.com/Vendicated/Vencord), featuring more than 300 plugins. It is designed for users who value complete freedom in development, transparency, privacy, and customization.
 
 Originally created as a personal project, Illegalcord gradually gained popularity as more people discovered and appreciated its ideas and features. The client aims to provide more private communication through the SecurecordOpossum plugin and allows users to overcome Discord's upload limits by using external services such as [anon.li](https://anon.li/).
@@ -194,6 +196,43 @@ Note: Firefox extension zip requires Firefox for developers
 We are proudly partnered with [Nightcord](https://nightcord.st/).
 Their ideas, design choices, and pieces of their code have been directly integrated into the development philosophy of Illegalcord, influencing several plugins and features.
 This partnership has been more than a name: it has been a concrete contribution to the direction and quality of this client.
+
+## Security, privacy, and external components
+
+> [!WARNING]
+> Bundled features include batch messaging, moderation evasion, user monitoring, OSINT and breach-data lookups, automated gift redemption, and credential-related integrations. Public source code and a PoC label do not certify software safety or guarantee protection from account suspension.
+
+Depending on enabled plugins and settings, the client can process Discord data locally or send data to other providers. Read the [Privacy Policy](PRIVACY_POLICY.md) and [Security and abuse reporting policy](SECURITY.md) before enabling sensitive features.
+
+### External programs and native modules
+
+**StereoInstaller** includes a compiled `discord_voice.node` module and can download replacement voice modules from an independent project. **GhostSelfbot** downloads and launches an external executable or Python source, can install Python requirements, and optionally writes the current Discord token into local Ghost configuration files. Ghost's subsequent execution and network behavior are separate from that local configuration step. Other optional integrations, such as the Spicetify installer in StatusCycler, also download and run external software.
+
+Treat each native module and downloaded program as a separate trust decision. Review its source, version, integrity, and distribution rights before installation; do not assume that a binary matches the code shown in this repository. The [security reporting contacts](SECURITY.md#private-contacts) accept reports about suspicious downloads and integrations as well as vulnerabilities in the client.
+
+Introductory statements about source availability refer to code published in this repository: including a compiled module or linking an external project does not establish its safety, license, or correspondence to the available source. Statements about ban risk are not a verified estimate of enforcement probability or a guarantee about how Discord will treat an account.
+
+### Plugin behavior and security notes
+
+- **MutualScanner** | Requests server member and user profile data to find mutual friends and saves results locally.
+- **SendTrail** | Tracks your newly sent messages locally and lets you select and delete them.
+- **DiscordHardened** | Controls selected network requests, permissions, and Electron security settings. It does not make Discord anonymous.
+- **FloeP2PService** | Shares files through the external Floe CLI.
+- **StereoInstaller** | Installs or reverts voice module replacements using a bundled native binary or downloads from independent projects.
+- **FakeMuteAndDeafen** | Changes outgoing mute and deafen indicators while audio can remain active.
+- **AnonLi** | Uploads encrypted files to [Anon.li](https://anon.li/) and shares links through Discord.
+- **Stalker** | Tracks selected users' visible presence, activity, voice, and message events, with optional local logs.
+- **MassMention** | Sends batches of real user mentions, potentially covering all members loaded by the client.
+- **AutoModBypass** | Transforms outgoing text using alternate Unicode characters, including modes intended to evade AutoMod.
+- **SecurecordOpossum** | Experimental message encryption based on [BlazingOpossum](https://github.com/ZygoteCode/BlazingOpossum). Inclusion does not establish an independent cryptographic security audit.
+- **GhostSelfbot** | Downloads and launches the external [Ghost selfbot](https://ghostt.cc/), with optional writing of your Discord token to local Ghost files. The plugin and token auto-fill are disabled by default.
+- **1FA** | Hides Discord's moderation warning about two-factor authentication. It does not disable authentication requirements.
+- **FollowUser** | Automatically follows a selected user between visible voice channels your account can join.
+- **DontLimitMe** | Enlarges the local message queue. It does not remove Discord's server-side rate limits and can facilitate spam.
+- **OSINTToolkit** | Sends lookups to external services, including CordCat, Breach.vip, and GeoSeeer. Results can contain sensitive personal or breach data.
+- **NitroSniper** | Automatically attempts to redeem gift links, with optional third-party CAPTCHA solving, proxy, and webhook integrations. [Original project](https://github.com/neoarz/NitroSniper/tree/main).
+- **IllegalMessageLogger** | Persistently stores deleted and edited messages locally. Time-based retention is unlimited by default, with a separate message-count limit.
+- **NitroSniper Nighty Ver** | Automatically attempts to redeem gift links from received messages and can send results to a configured webhook.
 
 ## Disclaimer
 

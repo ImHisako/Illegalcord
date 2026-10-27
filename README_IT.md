@@ -2,6 +2,8 @@
 
 🌐 **Lingue / Languages:** [Italiano](README_IT.md) | [English](README.md)
 
+Sicurezza e abusi: [Procedura di segnalazione](SECURITY.md) · [Privacy Policy](PRIVACY_POLICY.md) · [Note sui plugin e sui componenti esterni](#sicurezza-privacy-e-componenti-esterni). Contatti privati: [illegalcord@secria.me](mailto:illegalcord@secria.me) e [@benedicence su Telegram](https://t.me/benedicence).
+
 Illegalcord è un fork open source di [Equicord](https://github.com/Equicord) e [Vencord](https://github.com/Vendicated/Vencord), con più di 300 plugin. È progettato per chi dà valore alla completa libertà di sviluppo, alla trasparenza, alla privacy e alla personalizzazione.
 
 Nato inizialmente come progetto personale, Illegalcord ha guadagnato popolarità nel tempo, man mano che sempre più persone ne hanno scoperto e apprezzato le idee e le funzionalità. Il client mira a offrire comunicazioni più private attraverso il plugin SecurecordOpossum e consente di superare i limiti di caricamento di Discord utilizzando servizi esterni come [anon.li](https://anon.li/).
@@ -166,6 +168,43 @@ Nota: Il file zip dell'estensione Firefox richiede Firefox per sviluppatori
 - [Vendicated](https://github.com/Vendicated) per aver creato [Vencord](https://github.com/Vendicated/Vencord)
 - [verticalsync](https://github.com/verticalsync) per aver creato [Suncord](https://github.com/verticalsync/Suncord)
 - [Nightcord](https://nightcord.ru/) Per l'idee & la Base di alcuni plugins.
+
+## Sicurezza, privacy e componenti esterni
+
+> [!WARNING]
+> Le funzioni incluse comprendono invio di messaggi in serie, elusione della moderazione, monitoraggio degli utenti, ricerche OSINT e su dati provenienti da violazioni, riscatto automatico di regali e integrazioni che trattano credenziali. La disponibilità dei sorgenti e la qualifica di PoC non certificano la sicurezza del software né garantiscono protezione dalla sospensione dell'account.
+
+In base ai plugin e alle impostazioni attivati, il client può trattare dati di Discord localmente oppure inviarli ad altri fornitori. Prima di attivare funzioni sensibili, consulta la [Privacy Policy](PRIVACY_POLICY.md) e la [procedura per segnalare vulnerabilità e abusi](SECURITY.md).
+
+### Programmi esterni e moduli nativi
+
+**StereoInstaller** include un modulo `discord_voice.node` compilato e può scaricare moduli vocali sostitutivi da un progetto indipendente. **GhostSelfbot** scarica e avvia un eseguibile esterno o sorgenti Python, può installare le dipendenze Python e scrivere facoltativamente il token Discord corrente nei file locali di configurazione di Ghost. La successiva esecuzione di Ghost e il suo comportamento di rete sono separati da questa scrittura locale. Anche altre integrazioni facoltative, come l'installer di Spicetify in StatusCycler, scaricano ed eseguono software esterno.
+
+Valuta separatamente l'affidabilità di ogni modulo nativo e programma scaricato. Prima dell'installazione, verificane sorgenti, versione, integrità e diritti di distribuzione; non presumere che un binario corrisponda al codice mostrato in questo repository. I [contatti per le segnalazioni di sicurezza](SECURITY.md#private-contacts) ricevono segnalazioni su download e integrazioni sospetti oltre che sulle vulnerabilità del client.
+
+Le dichiarazioni introduttive sulla disponibilità dei sorgenti riguardano il codice pubblicato nel repository: la presenza di un modulo compilato o il collegamento a un progetto esterno non ne dimostrano la sicurezza, la licenza o la corrispondenza con i sorgenti. I riferimenti al rischio di ban non costituiscono una stima verificata della probabilità di sanzioni né una garanzia sul trattamento dell'account da parte di Discord.
+
+### Comportamento dei plugin e note di sicurezza
+
+- **MutualScanner** | Richiede dati sui membri dei server e sui profili per individuare amici in comune e salva i risultati localmente.
+- **SendTrail** | Tiene traccia localmente dei nuovi messaggi inviati dal tuo account e consente di selezionarli e cancellarli.
+- **FloeP2PService** | Condivide file attraverso la CLI esterna di Floe.
+- **DiscordHardened** | Controlla determinate richieste di rete, autorizzazioni e impostazioni di sicurezza di Electron. Non rende anonimo l'uso di Discord.
+- **StereoInstaller** | Installa o ripristina moduli vocali sostitutivi usando un binario nativo incluso o download da progetti indipendenti.
+- **FakeMuteAndDeafen** | Modifica gli indicatori di microfono e audio disattivati comunicati a Discord mentre l'audio può rimanere attivo.
+- **AnonLi** | Carica file cifrati su [Anon.li](https://anon.li/) e ne condivide i collegamenti attraverso Discord.
+- **Stalker** | Segue gli eventi visibili di presenza, attività, voce e messaggi degli utenti selezionati, con log locali facoltativi.
+- **MassMention** | Invia gruppi di menzioni reali, potenzialmente a tutti i membri caricati dal client.
+- **AutoModBypass** | Trasforma il testo in uscita usando caratteri Unicode alternativi, incluse modalità concepite per eludere AutoMod.
+- **SecurecordOpossum** | Cifratura sperimentale dei messaggi basata su [BlazingOpossum](https://github.com/ZygoteCode/BlazingOpossum). L'inclusione non dimostra l'esistenza di un audit crittografico indipendente.
+- **GhostSelfbot** | Scarica e avvia il [selfbot Ghost](https://ghostt.cc/) esterno, con scrittura facoltativa del tuo token Discord nei file locali di Ghost. Il plugin e l'inserimento automatico del token sono disattivati per impostazione iniziale.
+- **1FA** | Nasconde l'avviso di Discord sull'autenticazione a due fattori per la moderazione. Non disattiva i requisiti di autenticazione.
+- **FollowUser** | Segue automaticamente un utente selezionato tra i canali vocali visibili ai quali il tuo account può accedere.
+- **DontLimitMe** | Amplia la coda locale dei messaggi. Non rimuove i limiti applicati dai server Discord e può facilitare lo spam.
+- **OSINTToolkit** | Invia ricerche a servizi esterni, inclusi CordCat, Breach.vip e GeoSeeer. I risultati possono contenere dati personali sensibili o provenienti da violazioni.
+- **NitroSniper** | Tenta automaticamente di riscattare collegamenti regalo, con integrazioni facoltative per servizi CAPTCHA esterni, proxy e webhook. [Progetto originale](https://github.com/neoarz/NitroSniper/tree/main).
+- **IllegalMessageLogger** | Conserva localmente messaggi cancellati e modificati. Per impostazione iniziale non esiste una scadenza temporale, ma è presente un limite separato al numero di messaggi.
+- **NitroSniper Nighty Ver** | Tenta automaticamente di riscattare collegamenti regalo dai messaggi ricevuti e può inviare i risultati a un webhook configurato.
 
 ## Dichiarazione di Non Responsabilità
 
