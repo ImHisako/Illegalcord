@@ -27,6 +27,39 @@ Optional plugins can also contact independent services. For example, OSINTToolki
 
 Other plugins may use file-hosting or upload providers, webhooks, CAPTCHA services, content or reputation databases, update servers, or other APIs selected by the plugin or user. Each provider independently determines what it receives, why it processes the data, how long it keeps it, and how data-protection rights can be exercised. Illegalcord does not control these providers, certify their legal compliance or data provenance, or have the ability to access or erase data held by them.
 
+## When requests to external services are made
+
+The trigger depends on the plugin and its settings. Some integrations contact a provider only when a user invokes a feature; others start background activity as soon as the plugin is enabled and started. A plugin already enabled in saved settings can start automatically with the client.
+
+### OSINTToolkit
+
+In normal use, requests to **CordCat, Breach.vip, and GeoSeeer** begin when the user executes the relevant command, presses a lookup or analysis button, or selects an action such as image geolocation from a context menu. Starting the client with OSINTToolkit disabled, enabling the plugin without using a tool, opening its panel, or entering an API key does not by itself contact these services. Opening the panel reads locally stored investigation history. The **CordCat ready** indicator only checks whether a key has been entered; it does not validate the key with CordCat.
+
+The CordCat service-status button and `/cordcatstatus` command make a request when invoked; they do not run an automatic status poll. Domain and IP lookups contact their respective providers when invoked. A single lookup can cause more than one request through a fallback or retry, including trying another configured GeoSeeer key. Opening an external resource or search link also contacts the selected website under its own policy.
+
+### Other plugins and client features
+
+The following examples illustrate different request triggers and are not an exhaustive list of integrations:
+
+| Feature | When requests or connections begin |
+| --- | --- |
+| **ScamLinkDetector** | Downloads its scam-domain database from GitHub when the enabled plugin starts, without requiring a lookup button. |
+| **NitroSniper** | Automatically attempts gift redemption when the active plugin detects a matching message. Configured CAPTCHA services and webhooks can be contacted as part of processing the attempt and its result. |
+| **YMusicSync** | With a token configured, the started plugin initiates music-service connections and background updates. |
+| **GhostSelfbot** | Downloads or launches Ghost when the user invokes the corresponding command, or when the plugin's launch-on-enable or automatic-launch settings trigger it. Those automatic-launch options are disabled by default. The external program can then make its own network requests. |
+| **Client updates and cloud settings** | Desktop release builds with the updater enabled check for updates at startup and can repeat checks depending on settings. Configured cloud synchronization can also run automatically. These operations are separate from OSINTToolkit. |
+| **Plugin list and other remote images** | Displaying an image hosted by GitHub, Equicord, or another provider can request that image even if the optional plugin represented by the image is disabled. This does not trigger a CordCat or Breach.vip lookup. |
+
+### Disabling a plugin and work already in progress
+
+Disabling a plugin is not a guarantee that all network activity stops immediately:
+
+- A plugin that requires a restart keeps its previous running behavior until the client is restarted.
+- Operations already started, including pending requests and fallback or retry steps, can continue. OSINTToolkit cancels the requests it tracks in the client window when stopped, but its CordCat, Breach.vip, and GeoSeeer requests use separate cancellation controls in the desktop helper and are not directly cancelled by that stop action. Those requests can finish or reach their own timeout.
+- Disabling GhostSelfbot does not terminate an already launched Ghost process. That program can continue communicating until it is closed separately.
+
+Plugin code and desktop helper functions can remain loaded or registered while a plugin is disabled. Registration alone does not send a request, but another part of the client can still call a registered helper; the plugin switch does not enforce a blanket network block. With OSINTToolkit disabled at client startup, its normal lifecycle does not start the plugin or register its commands and context-menu actions. Data already received by an external provider remains subject to that provider's retention policy.
+
 ## User responsibilities and lawful use
 
 Users must review a plugin and every relevant third-party notice before enabling it. When using Illegalcord to process another person's personal data, the user is responsible for determining their role and obligations under applicable law, including whether a lawful basis, notice, consent, authorization, data-protection impact assessment, contract, or other safeguard is required.
