@@ -45,7 +45,6 @@ export const CspPolicies: PolicyMap = {
 
     "i.imgur.com": ImageSrc, // Imgur, used by some themes
     "i.ibb.co": ImageSrc, // ImgBB, used by some themes
-    "*.sndcdn.com": ["img-src"],
     "i.pinimg.com": ImageSrc, // Pinterest, used by some themes
     "files.catbox.moe": ImageAndCssSrc, // Catbox, used by some themes
 
@@ -99,7 +98,6 @@ export const CspPolicies: PolicyMap = {
     "audio-ssl.itunes.apple.com": ImageAndMediaSrc,
     "*.tidal.com": ImageAndMediaSrc,
     "embed.tidal.com": ["frame-src"],
-    "lrclib.net": ConnectSrc,
     "spotify-lyrics-api-pi.vercel.app": ConnectSrc,
     "translate.googleapis.com": ConnectSrc,
     "dc.songspotlight.nexpid.xyz": ConnectSrc,
@@ -216,7 +214,7 @@ function migrateThemeLinks() {
 export function initCsp() {
     migrateThemeLinks();
 
-    session.defaultSession.webRequest.onHeadersReceived(({ responseHeaders, resourceType }, cb) => {
+    session.defaultSession.webRequest.onHeadersReceived(({ responseHeaders, resourceType, url }, cb) => {
         if (responseHeaders) {
             if (resourceType === "mainFrame")
                 patchCsp(responseHeaders);
