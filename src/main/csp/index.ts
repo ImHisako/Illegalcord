@@ -4,11 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-<<<<<<< HEAD
 import { isDiscordAppUrl } from "@illegalcordplugins/DiscordHardened/nativeSecurity";
 import { addContentPolicy } from "@illegalcordplugins/DiscordHardened/policy";
-=======
->>>>>>> upstream/main
 import { NativeSettings, RendererSettings } from "@main/settings";
 import { session } from "electron";
 
@@ -217,13 +214,9 @@ function migrateThemeLinks() {
 }
 
 export function initCsp() {
-<<<<<<< HEAD
-    session.defaultSession.webRequest.onHeadersReceived(({ responseHeaders, resourceType, url }, cb) => {
-=======
     migrateThemeLinks();
 
     session.defaultSession.webRequest.onHeadersReceived(({ responseHeaders, resourceType }, cb) => {
->>>>>>> upstream/main
         if (responseHeaders) {
             if (resourceType === "mainFrame")
                 patchCsp(responseHeaders);
