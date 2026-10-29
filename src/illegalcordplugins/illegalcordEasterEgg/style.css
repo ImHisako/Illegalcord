@@ -1,0 +1,19 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+.vc-illegalcord-easter-egg-spectrum,
+.vc-illegalcord-easter-egg-spectrum * {
+    animation: vc-illegalcord-easter-egg-spectrum 8s linear infinite;
+}
+
+@keyframes vc-illegalcord-easter-egg-spectrum {
+    0%, 100% { color: hsl(0deg 100% 70%); }
+    16.67% { color: hsl(60deg 100% 70%); }
+    33.33% { color: hsl(120deg 100% 70%); }
+    50% { color: hsl(180deg 100% 70%); }
+    66.67% { color: hsl(240deg 100% 70%); }
+    83.33% { color: hsl(300deg 100% 70%); }
+}
