@@ -7,6 +7,7 @@
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
+import { makeLazy } from "@utils/lazy";
 import { classes, isAnyPluginDev } from "@utils/misc";
 import definePlugin, { OptionType, Plugin, PluginAuthor } from "@utils/types";
 import { React } from "@webpack/common";
@@ -44,6 +45,7 @@ const settings = definePluginSettings({
 });
 
 const VOICE_NAME_SETTINGS = ["developerVoiceSpectrum"] satisfies Array<keyof typeof settings.def>;
+const getPluginAuthorIds = makeLazy(() => new Set(Object.values(Plugins).flatMap((plugin: Plugin) => plugin.authors.map((author: PluginAuthor) => author.id.toString()))));
 
 interface DeveloperVoiceNameProps extends HTMLAttributes<HTMLElement> {
     component: ElementType;
@@ -52,10 +54,9 @@ interface DeveloperVoiceNameProps extends HTMLAttributes<HTMLElement> {
 
 const DeveloperVoiceName = ErrorBoundary.wrap(({ component, userId, className, ...props }: DeveloperVoiceNameProps) => {
     const { developerVoiceSpectrum } = settings.use(VOICE_NAME_SETTINGS);
-    const isDeveloper = isAnyPluginDev(userId) || Object.values(Plugins).some((plugin: Plugin) => plugin.authors.some((author: PluginAuthor) => author.id.toString() === userId));
     return React.createElement(component, {
         ...props,
-        className: classes(className, developerVoiceSpectrum && isDeveloper && "vc-illegalcord-easter-egg-spectrum")
+        className: classes(className, developerVoiceSpectrum && (isAnyPluginDev(userId) || getPluginAuthorIds().has(userId)) && "vc-illegalcord-easter-egg-spectrum")
     });
 }, { noop: true });
 
