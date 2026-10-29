@@ -8,9 +8,11 @@ import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
 import { classes, isAnyPluginDev } from "@utils/misc";
-import definePlugin, { OptionType } from "@utils/types";
+import definePlugin, { OptionType, Plugin, PluginAuthor } from "@utils/types";
 import { React } from "@webpack/common";
 import type { ElementType, HTMLAttributes } from "react";
+
+import Plugins from "~plugins";
 
 import style from "./style.css?managed";
 
@@ -50,9 +52,10 @@ interface DeveloperVoiceNameProps extends HTMLAttributes<HTMLElement> {
 
 const DeveloperVoiceName = ErrorBoundary.wrap(({ component, userId, className, ...props }: DeveloperVoiceNameProps) => {
     const { developerVoiceSpectrum } = settings.use(VOICE_NAME_SETTINGS);
+    const isDeveloper = isAnyPluginDev(userId) || Object.values(Plugins).some((plugin: Plugin) => plugin.authors.some((author: PluginAuthor) => author.id.toString() === userId));
     return React.createElement(component, {
         ...props,
-        className: classes(className, developerVoiceSpectrum && isAnyPluginDev(userId) && "vc-illegalcord-easter-egg-spectrum")
+        className: classes(className, developerVoiceSpectrum && isDeveloper && "vc-illegalcord-easter-egg-spectrum")
     });
 }, { noop: true });
 
@@ -81,7 +84,7 @@ export default definePlugin({
     }, {
         find: "#{intl::GUEST_NAME_SUFFIX})]",
         replacement: {
-            match: /(?<=\(0,\i\.jsxs\)\()(\i(?:\.\i)?|"span"|"div"),\{(?=[^{}]{0,150}?children:\[.{0,150}?#{intl::GUEST_NAME_SUFFIX})/,
+            match: /(?<=\(0,\i\.jsxs\)\()(\i(?:\.\i)?|"span"|"div"),\{(?=.{0,150}?children:\[.{0,200}?#{intl::GUEST_NAME_SUFFIX})/,
             replace: "$self.DeveloperVoiceName,{component:$1,userId:arguments[0].user.id,"
         }
     }],
