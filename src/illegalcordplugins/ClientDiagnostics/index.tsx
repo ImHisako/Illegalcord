@@ -16,7 +16,7 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { ClockIcon, CopyIcon, MagnifyingGlassIcon, ResetIcon } from "@components/Icons";
 import { isGhostClientActive } from "@illegalcordplugins/ghostClient/settings";
 import SettingsPlugin from "@plugins/_core/settings";
-import { EquicordDevs } from "@utils/constants";
+import { EquicordDevs, IS_LINUX } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { copyWithToast } from "@utils/discord";
 import { Logger } from "@utils/Logger";
@@ -27,6 +27,7 @@ import { React, SettingsRouter, TabBar, TextInput, useState } from "@webpack/com
 
 import { recordHealthCallback } from "./causes";
 import { ClientHealthPage, resetHealth, startHealth, stopHealth } from "./health";
+import { startResourceMonitor, stopResourceMonitor } from "./resourceMonitor";
 
 type SortBy = "impact" | "cpu" | "memory" | "calls" | "resources";
 type ClientDiagnosticsTab = "diagnostics" | "analysis" | "monitor" | "health" | "guide";
@@ -224,8 +225,65 @@ const settings = definePluginSettings({
         description: "Send a notification when a plugin may make Discord lag.",
         default: true,
         onChange: syncLagNotifications
+    },
+    autoRestart: {
+        type: OptionType.BOOLEAN,
+        displayName: "Automatic resource restarts",
+        description: "Automatically restart the desktop client after sustained high CPU or memory usage. Click the restart notification to cancel.",
+        default: false,
+        target: "DESKTOP",
+        onChange: syncResourceMonitor
+    },
+    restartCpuPercent: {
+        type: OptionType.NUMBER,
+        displayName: "CPU threshold (%)",
+        description: "Discord CPU usage as a percentage of total system capacity. Set to 0 to disable this threshold.",
+        default: 80,
+        target: "DESKTOP",
+        disabled: () => !settings.store.autoRestart,
+        isValid: (value: number) => Number.isFinite(value) && value >= 0 && value <= 100 || "Enter a percentage from 0 to 100.",
+        onChange: syncResourceMonitor
+    },
+    restartMemoryMb: {
+        type: OptionType.NUMBER,
+        displayName: "RAM threshold (MiB)",
+        description: "Combined RAM usage of Discord processes in MiB. Set to 0 to disable this threshold. Available on Windows and macOS.",
+        default: 4096,
+        target: "DESKTOP",
+        disabled: () => !settings.store.autoRestart || IS_LINUX,
+        isValid: (value: number) => Number.isInteger(value) && value >= 0 && value <= 65_536 || "Enter a whole number from 0 to 65536.",
+        onChange: syncResourceMonitor
+    },
+    restartAfterSeconds: {
+        type: OptionType.SLIDER,
+        displayName: "Time above threshold (seconds)",
+        description: "How long the same threshold must remain exceeded before a restart is scheduled. Monitoring skips the first minute after starting.",
+        markers: [10, 30, 60, 120],
+        default: 30,
+        target: "DESKTOP",
+        disabled: () => !settings.store.autoRestart,
+        onChange: syncResourceMonitor
+    },
+    restartCooldownMinutes: {
+        type: OptionType.SLIDER,
+        displayName: "Restart cooldown (minutes)",
+        description: "Minimum time between automatic restart attempts, including cancelled attempts. This limit survives client restarts.",
+        markers: [5, 15, 30, 60],
+        default: 15,
+        target: "DESKTOP",
+        disabled: () => !settings.store.autoRestart,
+        onChange: syncResourceMonitor
+    },
+    restartPauseDuringCalls: {
+        type: OptionType.BOOLEAN,
+        displayName: "Pause restarts during calls",
+        description: "Wait until your voice call or screen share ends before restarting automatically.",
+        default: true,
+        target: "DESKTOP",
+        disabled: () => !settings.store.autoRestart,
+        onChange: syncResourceMonitor
     }
-});
+}).withPrivateSettings<{ lastResourceRestartAt?: number; }>();
 
 const activeStack: ActiveContext[] = [];
 const stats = new Map<string, PluginStats>();
@@ -1177,6 +1235,15 @@ function syncLagNotifications() {
     else stopLagNotifications();
 }
 
+function syncResourceMonitor() {
+    stopResourceMonitor();
+    if (IS_WEB || !pluginStarted || !settings.store.autoRestart) return;
+
+    startResourceMonitor(() => settings.store, (timestamp: number) => {
+        settings.store.lastResourceRestartAt = timestamp;
+    });
+}
+
 function getReportRows() {
     return buildRows(false, false, "impact").slice(0, 25);
 }
@@ -1855,6 +1922,7 @@ export default definePlugin({
             for (const plugin of Object.values(plugins)) instrumentPlugin(plugin);
             pluginStarted = true;
             syncLagNotifications();
+            syncResourceMonitor();
             if (!SettingsPlugin.customEntries.some(entry => entry.key === ENTRY_KEY)) {
                 SettingsPlugin.customEntries.push({
                     key: ENTRY_KEY,
@@ -1869,6 +1937,7 @@ export default definePlugin({
     },
 
     stop() {
+        stopResourceMonitor();
         stopHealth();
         try {
             pluginStarted = false;
