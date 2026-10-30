@@ -6,10 +6,11 @@
 
 import { DataStore } from "@api/index";
 import ErrorBoundary from "@components/ErrorBoundary";
+import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
 import { insertTextIntoChatInputBox } from "@utils/discord";
 import type { RenderModalProps } from "@vencord/discord-types";
-import { ChannelStore, Forms, Modal, openModal, React, Select, SelectedChannelStore, TextArea, useEffect, UserStore } from "@webpack/common";
+import { ChannelStore, Modal, openModal, React, Select, SelectedChannelStore, TextArea, useEffect, UserStore } from "@webpack/common";
 
 import { encrypt, keyManager } from "./index";
 
@@ -62,7 +63,7 @@ function EncryptModal(props: EncryptModalProps) {
     return (
         <Modal
             {...props}
-            title={<Forms.FormTitle tag="h4">PGP/GPG Message</Forms.FormTitle>}
+            title={<Heading tag="h4">PGP/GPG Message</Heading>}
             subtitle="Encrypt locally, then review and send the draft yourself. Only the selected recipient and you can decrypt it."
             notice={error ? { type: "critical", message: error } : undefined}
             actions={[{
@@ -98,7 +99,7 @@ function EncryptModal(props: EncryptModalProps) {
                 }
             }]}
         >
-            <Forms.FormTitle tag="h5">Recipient</Forms.FormTitle>
+            <Heading tag="h5">Recipient</Heading>
             <Select
                 options={channel.recipients.map(id => ({ label: UserStore.getUser(id)?.username ?? id, value: id }))}
                 isSelected={value => value === recipientId}
@@ -108,14 +109,14 @@ function EncryptModal(props: EncryptModalProps) {
                 isDisabled={busy}
             />
             <Paragraph>The public key you use will also be saved for PGP commands. Verify its fingerprint before using a replacement key.</Paragraph>
-            <Forms.FormTitle tag="h5">Message</Forms.FormTitle>
+            <Heading tag="h5">Message</Heading>
             <TextArea
                 value={message}
                 disabled={busy}
                 onChange={setMessage}
             />
 
-            <Forms.FormTitle tag="h5">Recipient public key</Forms.FormTitle>
+            <Heading tag="h5">Recipient public key</Heading>
             <TextArea
                 value={pKey}
                 disabled={busy || loadingKey}

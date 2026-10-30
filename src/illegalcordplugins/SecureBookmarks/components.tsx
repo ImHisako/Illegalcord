@@ -5,12 +5,13 @@
  */
 
 import { BaseText } from "@components/BaseText";
+import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { classNameFactory } from "@utils/css";
 import { copyWithToast, openImageModal } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import type { RenderModalProps } from "@vencord/discord-types";
-import { Alerts, Button, Clickable, closeModal, Menu, Modal, NavigationRouter, openModal, Parser, showToast, TextInput, useEffect, useState } from "@webpack/common";
+import { Alerts, Clickable, closeModal, Menu, Modal, NavigationRouter, openModal, Parser, showToast, TextInput, useEffect, useState } from "@webpack/common";
 import type { ReactNode } from "react";
 
 import { PASSWORD_KEYS, settings } from "./settings";
@@ -191,7 +192,7 @@ function BookmarksList({ password }: BookmarksListProps) {
                 <>
                     <div className={cl("toolbar")}>
                         <BaseText size="sm" color="text-muted">{bookmarks.length} saved bookmark{bookmarks.length === 1 ? "" : "s"}.</BaseText>
-                        <Button size="small" color="RED" onClick={confirmClear}>Clear all</Button>
+                        <Button size="small" variant="dangerPrimary" onClick={confirmClear}>Clear all</Button>
                     </div>
                     {bookmarks.map(bookmark => (
                         <div className={cl("item")} key={bookmark.id}>
@@ -209,9 +210,9 @@ function BookmarksList({ password }: BookmarksListProps) {
                             </div>
                             <div className={cl("actions")}>
                                 <Button size="small" onClick={() => jumpToBookmark(bookmark)}>Jump</Button>
-                                <Button size="small" color="PRIMARY" onClick={() => copyWithToast(bookmark.link, "Bookmark link copied.")}>Copy link</Button>
-                                <Button size="small" color="PRIMARY" onClick={() => copyWithToast(bookmark.content || summarizeBookmark(bookmark), "Bookmark text copied.")}>Copy text</Button>
-                                <Button size="small" color="RED" onClick={() => remove(bookmark.id)}>Delete</Button>
+                                <Button size="small" variant="secondary" onClick={() => copyWithToast(bookmark.link, "Bookmark link copied.")}>Copy link</Button>
+                                <Button size="small" variant="secondary" onClick={() => copyWithToast(bookmark.content || summarizeBookmark(bookmark), "Bookmark text copied.")}>Copy text</Button>
+                                <Button size="small" variant="dangerPrimary" onClick={() => remove(bookmark.id)}>Delete</Button>
                             </div>
                         </div>
                     ))}

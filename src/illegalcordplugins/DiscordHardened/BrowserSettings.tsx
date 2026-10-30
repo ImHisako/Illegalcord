@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { Button } from "@components/Button";
 import { Paragraph } from "@components/Paragraph";
 import { Margins } from "@utils/margins";
 import type { PluginNative } from "@utils/types";
-import { Button, React, Select, useEffect, useState } from "@webpack/common";
+import { React, Select, useEffect, useState } from "@webpack/common";
 
 import type { InstalledBrowser } from "./browsers";
 import { settings } from "./index";

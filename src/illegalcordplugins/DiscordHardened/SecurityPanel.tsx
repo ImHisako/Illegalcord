@@ -6,6 +6,7 @@
 
 import "./style.css";
 
+import { Button } from "@components/Button";
 import { Heading } from "@components/Heading";
 import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
@@ -13,7 +14,7 @@ import { classNameFactory } from "@utils/css";
 import { useFixedTimer, useForceUpdater } from "@utils/react";
 import { formatDuration } from "@utils/text";
 import type { PluginNative } from "@utils/types";
-import { Button, moment, React, ScrollerThin, Select, TextInput, useEffect, useState } from "@webpack/common";
+import { moment, React, ScrollerThin, Select, TextInput, useEffect, useState } from "@webpack/common";
 
 import { settings } from "./index";
 import { getRuntimeProtections } from "./runtime";
@@ -111,7 +112,7 @@ export function SecurityPanel() {
                     <Heading tag="h3" id="vc-discord-hardened-desktop">Desktop snapshot</Heading>
                     <Paragraph>Electron protections at the last check.</Paragraph>
                 </div>
-                <Button size={Button.Sizes.SMALL} color={Button.Colors.PRIMARY} onClick={() => setRevision(value => value + 1)} disabled={!Native || loading}>
+                <Button size="small" variant="secondary" onClick={() => setRevision(value => value + 1)} disabled={!Native || loading}>
                     {loading ? "Checking..." : "Refresh desktop status"}
                 </Button>
             </div>
@@ -175,7 +176,7 @@ export function SecurityPanel() {
                         <Paragraph><strong>{TEMPORARY_PERMISSIONS[grant.permission]}</strong></Paragraph>
                         <Paragraph className={cl("countdown")}>{formatDuration(Math.max(0, grant.expiresAt - Date.now()))} remaining</Paragraph>
                     </div>
-                    <Button size={Button.Sizes.SMALL} color={Button.Colors.PRIMARY} aria-label={`Revoke ${TEMPORARY_PERMISSIONS[grant.permission]}`} onClick={() => { revokeTemporaryPermission(grant.permission); forceUpdate(); }}>Revoke</Button>
+                    <Button size="small" variant="secondary" aria-label={`Revoke ${TEMPORARY_PERMISSIONS[grant.permission]}`} onClick={() => { revokeTemporaryPermission(grant.permission); forceUpdate(); }}>Revoke</Button>
                 </div>)}
             </div> : <Paragraph className={cl("empty")}>No temporary permissions are active.</Paragraph>}
             <details className={cl("details")}>
@@ -196,7 +197,7 @@ export function SecurityPanel() {
                 <div className={cl("search")}>
                     <TextInput value={search} onChange={setSearch} placeholder="Filter by category..." aria-label="Filter log by category" />
                 </div>
-                <Button size={Button.Sizes.SMALL} color={Button.Colors.PRIMARY} onClick={() => { clearBlockLog(); forceUpdate(); }} disabled={!events.length}>Clear log</Button>
+                <Button size="small" variant="secondary" onClick={() => { clearBlockLog(); forceUpdate(); }} disabled={!events.length}>Clear log</Button>
             </div>
             {query ? <Paragraph role="status">{filteredEvents.length} of {events.length} entries match.</Paragraph> : null}
             <ScrollerThin className={cl("console")}>

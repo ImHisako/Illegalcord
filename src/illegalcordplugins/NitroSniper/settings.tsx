@@ -5,9 +5,10 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
+import { Button } from "@components/Button";
 import { Notice } from "@components/Notice";
 import { OptionType } from "@utils/types";
-import { Button, showToast } from "@webpack/common";
+import { showToast } from "@webpack/common";
 
 import { SniperLegalWarning } from "../_legalWarnings";
 import { sendTestWebhook } from "./webhook";

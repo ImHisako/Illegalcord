@@ -5,10 +5,11 @@
  */
 
 import { useSettings } from "@api/Settings";
+import { Button } from "@components/Button";
 import { Heading } from "@components/Heading";
 import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
-import { Alerts, Button, Checkbox, React, useState } from "@webpack/common";
+import { Alerts, Checkbox, React, useState } from "@webpack/common";
 
 import Plugins from "~plugins";
 

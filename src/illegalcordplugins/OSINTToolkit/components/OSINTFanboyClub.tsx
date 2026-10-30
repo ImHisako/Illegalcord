@@ -7,11 +7,12 @@
 import "./styles.css";
 
 import * as DataStore from "@api/DataStore";
+import { Button } from "@components/Button";
 import { HeadingPrimary, HeadingTertiary } from "@components/Heading";
 import { SettingsTab, wrapTab } from "@components/settings";
 import { classNameFactory } from "@utils/css";
 import { copyWithToast, openUserProfile } from "@utils/discord";
-import { Avatar, Button, Checkbox, MaskedLink, TextArea, TextInput, useEffect, UserStore, useState } from "@webpack/common";
+import { Avatar, Checkbox, MaskedLink, TextArea, TextInput, useEffect, UserStore, useState } from "@webpack/common";
 import type { PointerEvent, ReactNode } from "react";
 
 import {
@@ -116,8 +117,8 @@ function ResourceGroup({ title, items }: ResourceGroupProps) {
                             <span>{item.description}</span>
                         </div>
                         <Button
-                            color={Button.Colors.PRIMARY}
-                            size={Button.Sizes.SMALL}
+                            variant="secondary"
+                            size="small"
                             onClick={() => openExternal(item.url)}
                         >
                             Open
@@ -294,8 +295,8 @@ function DataExplorer({ value, depth = 0 }: DataExplorerProps) {
                             <span>{humanize(key)}</span>
                             <Button
                                 className={cl("copy-mini")}
-                                color={Button.Colors.TRANSPARENT}
-                                size={Button.Sizes.SMALL}
+                                variant="none"
+                                size="small"
                                 onClick={() => void copyWithToast(formatPrimitive(field), `${humanize(key)} copied.`)}
                             >
                                 Copy
@@ -347,7 +348,7 @@ function ProfileResult({ data }: ProfileResultProps) {
                     <p>@{username}{userId ? ` · ${userId}` : ""}</p>
                 </div>
                 {userId ? (
-                    <Button color={Button.Colors.PRIMARY} onClick={() => openUserProfile(userId)}>
+                    <Button variant="secondary" onClick={() => openUserProfile(userId)}>
                         Open in Discord
                     </Button>
                 ) : null}
@@ -472,16 +473,16 @@ function GeoResult({ data }: SpecializedResultProps) {
                             <small>{reasoning}</small>
                             <div className={cl("location-actions")}>
                                 <Button
-                                    color={Button.Colors.TRANSPARENT}
-                                    size={Button.Sizes.SMALL}
+                                    variant="none"
+                                    size="small"
                                     disabled={!coordinates}
                                     onClick={() => coordinates && void copyWithToast(coordinates, "Coordinates copied.")}
                                 >
                                     Copy coordinates
                                 </Button>
                                 <Button
-                                    color={Button.Colors.TRANSPARENT}
-                                    size={Button.Sizes.SMALL}
+                                    variant="none"
+                                    size="small"
                                     onClick={() => void copyWithToast(`${address}\n${coordinates ?? "Coordinates unavailable"}\n${reasoning}`, "Location text copied.")}
                                 >
                                     Copy text
@@ -652,8 +653,8 @@ function OSINTFanboyClub() {
                         <Button
                             key={item.id}
                             className={cl("nav-button", { "nav-button-active": section === item.id })}
-                            color={Button.Colors.TRANSPARENT}
-                            size={Button.Sizes.SMALL}
+                            variant="none"
+                            size="small"
                             onClick={() => setSection(item.id)}
                         >
                             <span>{item.label}</span>
@@ -673,7 +674,7 @@ function OSINTFanboyClub() {
                                         <Button disabled={Boolean(busy)} onClick={() => void run("cordcat", "CordCat full lookup", () => lookupCordCat("query", discordId.trim(), refreshCordCat))}>
                                             Full lookup
                                         </Button>
-                                        <Button color={Button.Colors.PRIMARY} disabled={Boolean(busy)} onClick={() => void run("cordcat", "CordCat user lookup", () => lookupCordCat("user", discordId.trim(), false))}>
+                                        <Button variant="secondary" disabled={Boolean(busy)} onClick={() => void run("cordcat", "CordCat user lookup", () => lookupCordCat("user", discordId.trim(), false))}>
                                             Public profile
                                         </Button>
                                     </div>
@@ -695,7 +696,7 @@ function OSINTFanboyClub() {
                                 </div>
 
                                 <ToolCard title="Service status" description="Check CordCat API, database, Discord and breach services without an API key.">
-                                    <Button color={Button.Colors.GREEN} disabled={Boolean(busy)} onClick={() => void run("status", "CordCat service status", () => lookupCordCat("status", "", false))}>
+                                    <Button variant="positive" disabled={Boolean(busy)} onClick={() => void run("status", "CordCat service status", () => lookupCordCat("status", "", false))}>
                                         Run health check
                                     </Button>
                                 </ToolCard>
@@ -716,7 +717,7 @@ function OSINTFanboyClub() {
                                         <Button disabled={Boolean(busy)} onClick={() => void run("ip", "IP lookup", () => lookupIP(ip))}>
                                             Analyze IP
                                         </Button>
-                                        <Button color={Button.Colors.PRIMARY} disabled={Boolean(busy)} onClick={() => void run("ip", "My public IP", () => lookupIP())}>
+                                        <Button variant="secondary" disabled={Boolean(busy)} onClick={() => void run("ip", "My public IP", () => lookupIP())}>
                                             Detect my IP
                                         </Button>
                                     </div>
@@ -732,10 +733,10 @@ function OSINTFanboyClub() {
                                         <Button disabled={Boolean(busy) || !username.trim()} onClick={() => void run("username", "Username footprint", async () => lookupUsername(username))}>
                                             Generate pivots
                                         </Button>
-                                        <Button color={Button.Colors.PRIMARY} disabled={!usernameUrls} onClick={() => usernameUrls && openExternal(usernameUrls.userSearch)}>
+                                        <Button variant="secondary" disabled={!usernameUrls} onClick={() => usernameUrls && openExternal(usernameUrls.userSearch)}>
                                             UserSearch
                                         </Button>
-                                        <Button color={Button.Colors.PRIMARY} disabled={!usernameUrls} onClick={() => usernameUrls && openExternal(usernameUrls.whatsMyName)}>
+                                        <Button variant="secondary" disabled={!usernameUrls} onClick={() => usernameUrls && openExternal(usernameUrls.whatsMyName)}>
                                             WhatsMyName
                                         </Button>
                                     </div>
@@ -768,10 +769,10 @@ function OSINTFanboyClub() {
                                 <ToolCard title="Discord profile utilities" description="Copy or open a canonical Discord user URL.">
                                     <TextInput value={profileId} placeholder="Discord user ID" onChange={setProfileId} />
                                     <div className={cl("actions")}>
-                                        <Button color={Button.Colors.PRIMARY} disabled={!profileUrl} onClick={() => void copyWithToast(profileId.trim(), "User ID copied.")}>
+                                        <Button variant="secondary" disabled={!profileUrl} onClick={() => void copyWithToast(profileId.trim(), "User ID copied.")}>
                                             Copy ID
                                         </Button>
-                                        <Button color={Button.Colors.PRIMARY} disabled={!profileUrl} onClick={() => profileUrl && void copyWithToast(profileUrl, "User URL copied.")}>
+                                        <Button variant="secondary" disabled={!profileUrl} onClick={() => profileUrl && void copyWithToast(profileUrl, "User URL copied.")}>
                                             Copy profile URL
                                         </Button>
                                         <Button disabled={!profileUrl} onClick={() => profileUrl && openUserProfile(profileId.trim())}>
@@ -789,7 +790,7 @@ function OSINTFanboyClub() {
                                     <Button disabled={Boolean(busy)} onClick={() => void run("geo", "GeoSeeer image analysis", () => geolocateImage(imageUrl))}>
                                         Analyze location
                                     </Button>
-                                    <Button color={Button.Colors.PRIMARY} disabled={!lensUrl} onClick={() => lensUrl && openExternal(lensUrl)}>
+                                    <Button variant="secondary" disabled={!lensUrl} onClick={() => lensUrl && openExternal(lensUrl)}>
                                         Reverse search
                                     </Button>
                                 </div>
@@ -848,15 +849,15 @@ function OSINTFanboyClub() {
                             {result ? (
                                 <div className={cl("result-actions")}>
                                     <Button
-                                        color={Button.Colors.TRANSPARENT}
-                                        size={Button.Sizes.SMALL}
+                                        variant="none"
+                                        size="small"
                                         onClick={() => void copyWithToast(`${result.title}\n\n${formatTextResult(result.data)}`, "Result text copied.")}
                                     >
                                         Copy text
                                     </Button>
                                     <Button
-                                        color={Button.Colors.TRANSPARENT}
-                                        size={Button.Sizes.SMALL}
+                                        variant="none"
+                                        size="small"
                                         onClick={() => void copyWithToast(formatResult(result.data), "Raw data copied.")}
                                     >
                                         Copy raw
@@ -875,8 +876,8 @@ function OSINTFanboyClub() {
                                     <Button
                                         key={entry.id}
                                         className={cl("history-item", { "history-item-active": result?.id === entry.id })}
-                                        color={Button.Colors.TRANSPARENT}
-                                        size={Button.Sizes.SMALL}
+                                        variant="none"
+                                        size="small"
                                         onClick={() => setResult(entry)}
                                     >
                                         <span>{entry.title}</span>

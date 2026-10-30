@@ -5,8 +5,9 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
+import { Button } from "@components/Button";
 import { OptionType } from "@utils/types";
-import { Button, showToast } from "@webpack/common";
+import { showToast } from "@webpack/common";
 
 import { sendTestWebhook } from "./webhook";
 

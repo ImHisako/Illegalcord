@@ -7,13 +7,14 @@
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
+import { Text } from "@components/Text";
 import { EquicordDevs } from "@utils/constants";
 import { classNameFactory } from "@utils/css";
 import { openUserProfile } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import { findByPropsLazy } from "@webpack";
-import { FluxDispatcher, GuildMemberStore, Menu, Modal, openModal, ScrollerThin, Text, useEffect, UserStore, useStateFromStores } from "@webpack/common";
+import { FluxDispatcher, GuildMemberStore, Menu, Modal, openModal, ScrollerThin, useEffect, UserStore, useStateFromStores } from "@webpack/common";
 
 const cl = classNameFactory("bc-");
 
@@ -28,7 +29,7 @@ async function openViewBoosters(guild: string) {
             <Modal
                 {...props}
                 size="lg"
-                title={<Text variant="heading-lg/semibold">Boosters</Text>}
+                title={<Text size="xl" weight="semibold">Boosters</Text>}
             >
                 <UserList guildId={guild} boosters={boosters} />
             </Modal>
@@ -152,7 +153,7 @@ function UserList({ guildId, boosters }: { guildId: string, boosters: any; }) {
                 return (
                     <Flex key={id} style={{ alignItems: "center", marginBottom: "10px", gap: "12px" }}>
                         {/* Boost Count */}
-                        <Text variant="text-md/bold" style={{ minWidth: "24px", textAlign: "center" }}>
+                        <Text size="md" weight="bold" style={{ minWidth: "24px", textAlign: "center" }}>
                             {boosters[id]}x
                         </Text>
 
@@ -168,7 +169,7 @@ function UserList({ guildId, boosters }: { guildId: string, boosters: any; }) {
                                 style={{ borderRadius: "50%" }}
                                 alt={`${user.username}'s avatar`}
                             />
-                            <Text variant="text-md/medium">
+                            <Text size="md" weight="medium">
                                 {user.globalName ?? user.username}
                             </Text>
                         </Flex>

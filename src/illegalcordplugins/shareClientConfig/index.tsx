@@ -6,6 +6,7 @@
 
 import { ApplicationCommandInputType } from "@api/Commands";
 import { importSettings } from "@api/SettingsSync/offline";
+import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading } from "@components/Heading";
 import { Paragraph } from "@components/Paragraph";
@@ -15,7 +16,7 @@ import { Margins } from "@utils/margins";
 import { isObject, parseUrl } from "@utils/misc";
 import definePlugin from "@utils/types";
 import type { Message, MessageAttachment } from "@vencord/discord-types";
-import { Button, ChannelStore, ConfirmModal, DraftType, openModal, showToast, UploadHandler } from "@webpack/common";
+import { ChannelStore, ConfirmModal, DraftType, openModal, showToast, UploadHandler } from "@webpack/common";
 
 const FILE_NAME = "illegalcord-config.json";
 const FORMAT = "illegalcord-shared-config";
@@ -176,7 +177,7 @@ const ConfigAccessory = ErrorBoundary.wrap(function ConfigAccessory({ message }:
         {attachments.map((attachment: MessageAttachment) => (
             <div key={attachment.id} className={Margins.top8}>
                 <Button
-                    size={Button.Sizes.SMALL}
+                    size="small"
                     onClick={() => openImportConfirmation(attachment, message.author.username)}
                 >
                     Apply Illegalcord configuration

@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { Button } from "@components/Button";
 import { Heading } from "@components/Heading";
 import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
-import { Alerts, Button, moment, React, TextInput, useEffect, useState } from "@webpack/common";
+import { Alerts, moment, React, TextInput, useEffect, useState } from "@webpack/common";
 
 import type { BackupInfo } from "./config";
 import { type ActionProps, applyConfig, authorName, Native, saveBackup, snapshot } from "./utils";
@@ -65,7 +66,7 @@ export function Backups({ busy, run, canApply }: ActionProps) {
                 setName("");
                 return "Configuration backup saved in ConfigBackups.";
             })}>Create backup</Button>
-            <Button color={Button.Colors.PRIMARY} disabled={busy} onClick={() => void refresh()}>Refresh backups</Button>
+            <Button variant="secondary" disabled={busy} onClick={() => void refresh()}>Refresh backups</Button>
         </div>
         {directory ? <Paragraph className="vc-config-editor-path">{directory}</Paragraph> : null}
         {error ? <Notice.Warning>{error}</Notice.Warning> : null}
@@ -77,7 +78,7 @@ export function Backups({ busy, run, canApply }: ActionProps) {
                     <Paragraph><strong>{backup.name}</strong></Paragraph>
                     <Paragraph>{moment(backup.createdAt).format("LLL")} · {backup.author}</Paragraph>
                 </div>
-                <Button size={Button.Sizes.SMALL} color={Button.Colors.PRIMARY} disabled={busy} onClick={() => restore(backup)}>Restore</Button>
+                <Button size="small" variant="secondary" disabled={busy} onClick={() => restore(backup)}>Restore</Button>
             </div>)}
         </div>
     </div>;

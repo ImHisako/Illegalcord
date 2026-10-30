@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { Button, React } from "@webpack/common";
+import { Button } from "@components/Button";
+import { React } from "@webpack/common";
 
 import { PLUGIN_VERSION, UPDATE_CHECK_URL } from "../constants";
 import { compareVersions } from "../utils/helpers";

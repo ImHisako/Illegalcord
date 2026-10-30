@@ -5,9 +5,9 @@
  */
 
 import { BaseText } from "@components/BaseText";
-import { makeLazy } from "@utils/lazy";
+import { Button } from "@components/Button";
 import { formatDurationMs } from "@utils/text";
-import { Button, React, Slider, Tooltip, useEffect, useRef, useState } from "@webpack/common";
+import { React, Slider, Tooltip, useEffect, useRef, useState } from "@webpack/common";
 
 import { ICONS, TEXT } from "../constants";
 import { cl } from "../css";
@@ -21,11 +21,6 @@ export function Icon({ path }: { path: string; }) {
         </svg>
     );
 }
-
-const blankLook = makeLazy(() => {
-    const looks = Button.Looks as Record<string, string>;
-    return looks.BLANK ?? looks.LINK;
-});
 
 interface PanelButtonProps {
     label: string;
@@ -43,9 +38,8 @@ export function PanelButton({ label, onClick, children, active = false, primary 
                 <Button
                     {...tooltipProps}
                     aria-label={label}
-                    size={Button.Sizes.NONE}
-                    look={blankLook()}
-                    color={Button.Colors.TRANSPARENT}
+                    size="iconOnly"
+                    variant="none"
                     className={cl("btn", { "btn-primary": primary, "btn-active": active })}
                     disabled={disabled}
                     onClick={(event: React.MouseEvent) => {

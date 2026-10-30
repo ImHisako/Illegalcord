@@ -8,6 +8,7 @@ import "./style.css";
 
 import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
+import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading } from "@components/Heading";
 import { DeleteIcon, HeadphonesIcon, NoEntrySignIcon, WarningIcon } from "@components/Icons";
@@ -16,7 +17,7 @@ import SettingsPlugin from "@plugins/_core/settings";
 import { EquicordDevs } from "@utils/constants";
 import { classes, removeFromArray } from "@utils/misc";
 import definePlugin, { OptionType, PluginNative, ReporterTestable } from "@utils/types";
-import { Alerts, Button, React, Select, SettingsRouter, showToast, TextInput } from "@webpack/common";
+import { Alerts, React, Select, SettingsRouter, showToast, TextInput } from "@webpack/common";
 
 import type { ActionInfo, InstallInfo, NativeResult } from "./native";
 
@@ -292,7 +293,7 @@ function StereoInstallerPanel() {
             ),
             confirmText: "Patch Discord voice",
             cancelText: "Cancel",
-            confirmColor: Button.Colors.RED,
+            confirmColor: "danger",
             onConfirm: () => void runAction("patch")
         });
     }
@@ -312,7 +313,7 @@ function StereoInstallerPanel() {
             ),
             confirmText: "Replace index.js",
             cancelText: "Cancel",
-            confirmColor: Button.Colors.RED,
+            confirmColor: "danger",
             onConfirm: () => void runAction("method2Index")
         });
     }
@@ -374,15 +375,15 @@ function StereoInstallerPanel() {
                         </div>
                         <div className="vc-stereo-installer-warning-actions">
                             <Button
-                                color={Button.Colors.PRIMARY}
-                                size={Button.Sizes.SMALL}
+                                variant="secondary"
+                                size="small"
                                 onClick={openDiscordAudioCollectiveSource}
                             >
                                 Discord Audio Collective
                             </Button>
                             <Button
-                                color={Button.Colors.PRIMARY}
-                                size={Button.Sizes.SMALL}
+                                variant="secondary"
+                                size="small"
                                 onClick={openVoicePlaygroundSource}
                             >
                                 Voice Playground
@@ -398,22 +399,22 @@ function StereoInstallerPanel() {
                         </Paragraph>
                         <div className="vc-stereo-installer-warning-actions">
                             <Button
-                                color={Button.Colors.PRIMARY}
-                                size={Button.Sizes.SMALL}
+                                variant="secondary"
+                                size="small"
                                 onClick={openVoicePlaygroundSource}
                             >
                                 Voice Playground source
                             </Button>
                             <Button
-                                color={Button.Colors.PRIMARY}
-                                size={Button.Sizes.SMALL}
+                                variant="secondary"
+                                size="small"
                                 onClick={openMethod2Tutorial}
                             >
                                 Corruption fix tutorial
                             </Button>
                             <Button
-                                color={Button.Colors.RED}
-                                size={Button.Sizes.SMALL}
+                                variant="dangerPrimary"
+                                size="small"
                                 disabled={busy}
                                 onClick={confirmMethod2IndexPatch}
                             >
@@ -431,32 +432,32 @@ function StereoInstallerPanel() {
                 />
                 <div className="vc-stereo-installer-buttons">
                     <Button
-                        color={Button.Colors.PRIMARY}
-                        size={Button.Sizes.SMALL}
+                        variant="secondary"
+                        size="small"
                         disabled={busy}
                         onClick={() => void autoDetect()}
                     >
                         Auto-detect
                     </Button>
                     <Button
-                        color={Button.Colors.PRIMARY}
-                        size={Button.Sizes.SMALL}
+                        variant="secondary"
+                        size="small"
                         disabled={busy}
                         onClick={() => void browse()}
                     >
                         Browse
                     </Button>
                     <Button
-                        color={Button.Colors.GREEN}
-                        size={Button.Sizes.SMALL}
+                        variant="positive"
+                        size="small"
                         disabled={busy}
                         onClick={confirmPatch}
                     >
                         Patch Discord voice
                     </Button>
                     <Button
-                        color={Button.Colors.RED}
-                        size={Button.Sizes.SMALL}
+                        variant="dangerPrimary"
+                        size="small"
                         disabled={busy}
                         onClick={() => void runAction("revert")}
                     >
@@ -486,8 +487,8 @@ function StereoInstallerPanel() {
                         <Paragraph>{logs.length ? `${logs.length} log entries.` : "No log entries yet."}</Paragraph>
                     </div>
                     <Button
-                        color={Button.Colors.RED}
-                        size={Button.Sizes.SMALL}
+                        variant="dangerPrimary"
+                        size="small"
                         disabled={busy || !logs.length}
                         onClick={() => void clearLogs()}
                     >

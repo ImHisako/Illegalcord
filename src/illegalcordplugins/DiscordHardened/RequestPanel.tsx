@@ -6,13 +6,14 @@
 
 import "./style.css";
 
+import { Button } from "@components/Button";
 import { Heading } from "@components/Heading";
 import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
 import { classNameFactory } from "@utils/css";
 import type { PluginNative } from "@utils/types";
 import { saveFile } from "@utils/web";
-import { Button, moment, React, ScrollerThin, Select, TextInput, useEffect, useState } from "@webpack/common";
+import { moment, React, ScrollerThin, Select, TextInput, useEffect, useState } from "@webpack/common";
 import type { ReactNode } from "react";
 
 import { settings } from "./index";
@@ -145,7 +146,7 @@ export function RequestPanel({ controls }: RequestPanelProps) {
         <section className={cl("card")}>
             <div className={cl("toolbar")}>
                 <Heading tag="h3">Additional capture sources</Heading>
-                <Button size={Button.Sizes.SMALL} color={Button.Colors.PRIMARY} disabled={!Native || !options.recordNetworkRequests || !options.recordWebSocketMessages && !options.recordLocalResources} onClick={refreshRequestLogging}>Reconnect capture</Button>
+                <Button size="small" variant="secondary" disabled={!Native || !options.recordNetworkRequests || !options.recordWebSocketMessages && !options.recordLocalResources} onClick={refreshRequestLogging}>Reconnect capture</Button>
             </div>
             <div className={cl("checks")}>
                 <div className={cl("check")}><span>WebSocket message metadata</span><span className={cl("status")} data-status={coverage.webSockets}>{coverage.webSockets}</span></div>
@@ -162,13 +163,13 @@ export function RequestPanel({ controls }: RequestPanelProps) {
             <div className={cl("toolbar")}>
                 <Heading tag="h3" id="vc-discord-hardened-requests">Request logs</Heading>
                 <div className={cl("toolbar")}>
-                    <Button size={Button.Sizes.SMALL} color={Button.Colors.PRIMARY} onClick={() => settings.store.recordNetworkRequests = !options.recordNetworkRequests}>
+                    <Button size="small" variant="secondary" onClick={() => settings.store.recordNetworkRequests = !options.recordNetworkRequests}>
                         {options.recordNetworkRequests ? "Pause capture" : "Resume capture"}
                     </Button>
-                    <Button size={Button.Sizes.SMALL} color={Button.Colors.PRIMARY} disabled={!filtered.length} onClick={() => saveFile(new File([
+                    <Button size="small" variant="secondary" disabled={!filtered.length} onClick={() => saveFile(new File([
                         JSON.stringify({ exportedAt: new Date().toISOString(), filters: { search, state, method, resource, source }, requests: filtered }, null, 2)
                     ], `discord-requests-${Date.now()}.json`, { type: "application/json" }))}>Export filtered logs</Button>
-                    <Button size={Button.Sizes.SMALL} color={Button.Colors.RED} disabled={clearing} onClick={clear}>{clearing ? "Clearing..." : "Clear logs"}</Button>
+                    <Button size="small" variant="dangerPrimary" disabled={clearing} onClick={clear}>{clearing ? "Clearing..." : "Clear logs"}</Button>
                 </div>
             </div>
             {error ? <Notice.Warning role="alert">{error}</Notice.Warning> : null}
@@ -217,8 +218,8 @@ export function RequestPanel({ controls }: RequestPanelProps) {
             <div className={cl("toolbar")}>
                 <Paragraph>{filtered.length} matching entries. Page {page + 1} of {pages}. Newest first.</Paragraph>
                 <div className={cl("toolbar")}>
-                    <Button size={Button.Sizes.SMALL} color={Button.Colors.PRIMARY} disabled={page === 0} onClick={() => setPageIndex(page - 1)}>Previous</Button>
-                    <Button size={Button.Sizes.SMALL} color={Button.Colors.PRIMARY} disabled={page + 1 >= pages} onClick={() => setPageIndex(page + 1)}>Next</Button>
+                    <Button size="small" variant="secondary" disabled={page === 0} onClick={() => setPageIndex(page - 1)}>Previous</Button>
+                    <Button size="small" variant="secondary" disabled={page + 1 >= pages} onClick={() => setPageIndex(page + 1)}>Next</Button>
                 </div>
             </div>
         </section>

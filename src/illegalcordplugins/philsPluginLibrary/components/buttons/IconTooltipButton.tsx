@@ -16,8 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { Button } from "@components/Button";
 import { Flex } from "@components/Flex";
-import { Button, Tooltip } from "@webpack/common";
+import { Tooltip } from "@webpack/common";
 import React, { JSX } from "react";
 
 export interface IconTooltipButtonProps {
@@ -29,8 +30,8 @@ export const IconTooltipButton = (props: React.ComponentProps<typeof Button> & I
     return (
         <Tooltip text={props.tooltipText}>
             {tooltipProps => <Button
-                size={Button.Sizes.MIN}
-                {...props as any}
+                size="min"
+                {...props}
                 style={{ aspectRatio: 1, maxHeight: "32px", boxSizing: "border-box", ...props.style }}
             >
                 <Flex style={{ justifyContent: "center", alignItems: "center", width: 24, height: 24 }}>

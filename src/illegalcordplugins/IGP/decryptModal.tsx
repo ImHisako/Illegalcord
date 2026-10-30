@@ -5,16 +5,17 @@
  */
 
 import ErrorBoundary from "@components/ErrorBoundary";
+import { Heading } from "@components/Heading";
 import { copyWithToast } from "@utils/discord";
 import type { RenderModalProps } from "@vencord/discord-types";
-import { Forms, Modal, openModal, TextArea } from "@webpack/common";
+import { Modal, openModal, TextArea } from "@webpack/common";
 
 function DecryptModal(props: RenderModalProps & { message: string; verified: boolean; }) {
     return (
         <Modal
             {...props}
             size="lg"
-            title={<Forms.FormTitle tag="h4">Decrypted Message</Forms.FormTitle>}
+            title={<Heading tag="h4">Decrypted Message</Heading>}
             actions={[{ text: "Copy message", variant: "primary", onClick: () => void copyWithToast(props.message) }]}
             subtitle={
                 <div style={{ color: props.verified ? "green" : "red", fontWeight: "bold", marginTop: "8px" }}>

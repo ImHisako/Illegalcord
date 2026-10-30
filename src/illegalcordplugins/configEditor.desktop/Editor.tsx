@@ -5,11 +5,12 @@
  */
 
 import { useSettings } from "@api/Settings";
+import { Button } from "@components/Button";
 import { CodeBlock } from "@components/CodeBlock";
 import { FormSwitch } from "@components/FormSwitch";
 import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
-import { Button, lodash, React, TextArea, TextInput, useEffect, useMemo, useRef, useState } from "@webpack/common";
+import { lodash, React, TextArea, TextInput, useEffect, useMemo, useRef, useState } from "@webpack/common";
 
 import { type ActionProps, applyConfig, snapshot, validateConfig } from "./utils";
 
@@ -74,7 +75,7 @@ export function Editor({ busy, run, canApply, visible }: EditorProps) {
         {conflict ? <Notice.Warning>Settings changed elsewhere while you were editing. Copy any draft changes you want to keep, then reload the current configuration.</Notice.Warning> : null}
         <div className="vc-config-editor-toolbar">
             <TextInput value={search} onChange={setSearch} placeholder="Find a setting or value..." aria-label="Search configuration" />
-            <Button size={Button.Sizes.SMALL} disabled={!matches} onClick={findNext}>Find next</Button>
+            <Button size="small" disabled={!matches} onClick={findNext}>Find next</Button>
             <Paragraph>{matches} matches</Paragraph>
         </div>
         <TextArea
@@ -92,8 +93,8 @@ export function Editor({ busy, run, canApply, visible }: EditorProps) {
         <Paragraph id="vc-config-editor-validation" role="status">{validation || (draft.dirty ? "Valid JSON. Changes are pending." : "In sync with the client configuration.")}</Paragraph>
         <div className="vc-config-editor-toolbar">
             <Button onClick={() => void apply()} disabled={busy || !draft.dirty || conflict || Boolean(validation)}>Apply now</Button>
-            <Button color={Button.Colors.PRIMARY} disabled={busy} onClick={() => setDraft({ text: source, base: source, dirty: false })}>Reload current configuration</Button>
-            <Button color={Button.Colors.PRIMARY} onClick={() => setPreview(!preview)}>{preview ? "Hide highlighted preview" : "Show highlighted preview"}</Button>
+            <Button variant="secondary" disabled={busy} onClick={() => setDraft({ text: source, base: source, dirty: false })}>Reload current configuration</Button>
+            <Button variant="secondary" onClick={() => setPreview(!preview)}>{preview ? "Hide highlighted preview" : "Show highlighted preview"}</Button>
         </div>
         {preview ? <div className="vc-config-editor-preview"><CodeBlock lang="json" content={draft.text} /></div> : null}
     </div>;

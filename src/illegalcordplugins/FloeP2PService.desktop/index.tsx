@@ -6,6 +6,7 @@
 
 import { ApplicationCommandInputType, ApplicationCommandOptionType, findOption, sendBotMessage } from "@api/Commands";
 import type { NavContextMenuPatchCallback } from "@api/ContextMenu";
+import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
 import { HeadingSecondary } from "@components/Heading";
@@ -17,7 +18,7 @@ import { Logger } from "@utils/Logger";
 import { Margins } from "@utils/margins";
 import definePlugin, { type PluginNative, ReporterTestable } from "@utils/types";
 import type { CommandArgument, CommandContext, RenderModalProps } from "@vencord/discord-types";
-import { Button, MaskedLink, Menu, Modal, openModal, showToast, TextInput, useState } from "@webpack/common";
+import { MaskedLink, Menu, Modal, openModal, showToast, TextInput, useState } from "@webpack/common";
 
 import type { FloeCommandResult, FloeSession, NativeResult } from "./native";
 
@@ -231,7 +232,7 @@ function ReceiveModal({ modalProps }: { modalProps: RenderModalProps; }) {
             <section className={Margins.bottom16}>
                 <HeadingSecondary>Download folder</HeadingSecondary>
                 <Paragraph>{outputDir || "Downloads will be used."}</Paragraph>
-                <Button color={Button.Colors.PRIMARY} onClick={() => void chooseFolder()} disabled={busy}>
+                <Button variant="secondary" onClick={() => void chooseFolder()} disabled={busy}>
                     Choose folder
                 </Button>
             </section>

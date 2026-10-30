@@ -16,8 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { Button } from "@components/Button";
 import { classes } from "@utils/misc";
-import { Button } from "@webpack/common";
 import React, { JSX } from "react";
 
 import { panelClasses } from "../../../philsPluginLibrary";
@@ -30,7 +30,7 @@ export interface SettingsPanelButtonProps extends Partial<React.ComponentProps<t
 export const SettingsPanelButton = (props: SettingsPanelButtonProps) => {
     return (
         <Button
-            size={Button.Sizes.SMALL}
+            size="small"
             className={classes(panelClasses.button, panelClasses.buttonColor)}
             {...props}
         >

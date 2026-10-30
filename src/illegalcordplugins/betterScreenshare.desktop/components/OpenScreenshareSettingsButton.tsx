@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { Button } from "@webpack/common";
+import { Button } from "@components/Button";
 import React from "react";
 
 import { openScreenshareModal } from "../../betterScreenshare.desktop/modals";
@@ -28,8 +28,8 @@ export interface OpenScreenshareSettingsButtonProps {
 export const OpenScreenshareSettingsButton = (props: OpenScreenshareSettingsButtonProps) => {
     return (
         <Button
-            size={Button.Sizes.SMALL}
-            color={Button.Colors.PRIMARY}
+            size="small"
+            variant="secondary"
             onClick={openScreenshareModal}
         >
             {props.title ? props.title : "Screenshare Settings"}

@@ -5,6 +5,7 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
+import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
 import { Paragraph } from "@components/Paragraph";
@@ -12,7 +13,7 @@ import { EquicordDevs, IS_LINUX, IS_WINDOWS } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType, type PluginNative } from "@utils/types";
 import { chooseFile } from "@utils/web";
-import { Button, useEffect, useState } from "@webpack/common";
+import { useEffect, useState } from "@webpack/common";
 
 import type { IconMode, IconResult } from "./native";
 

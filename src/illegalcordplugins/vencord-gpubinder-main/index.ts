@@ -5,10 +5,12 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
+import { Heading } from "@components/Heading";
+import { Paragraph } from "@components/Paragraph";
 import { EquicordDevs } from "@utils/constants";
 import { useAwaiter } from "@utils/react";
 import definePlugin, { OptionType, type PluginNative } from "@utils/types";
-import { Forms, React, Select, showToast, useState } from "@webpack/common";
+import { React, Select, showToast, useState } from "@webpack/common";
 
 import type { GpuInfo, GpuState } from "./native";
 
@@ -49,9 +51,9 @@ function GpuSelector({ setValue }: { setValue(newValue: string): void; }) {
     return React.createElement(
         "div",
         null,
-        React.createElement(Forms.FormTitle, { tag: "h5" }, "GPU"),
+        React.createElement(Heading, { tag: "h5" }, "GPU"),
         React.createElement(
-            Forms.FormText,
+            Paragraph,
             { style: { marginBottom: 8 } },
             "Pick the detected Windows graphics adapter Discord should be pinned to.",
         ),
@@ -66,15 +68,15 @@ function GpuSelector({ setValue }: { setValue(newValue: string): void; }) {
             isDisabled: pending || Boolean(error) || options.length === 0,
         }),
         React.createElement(
-            Forms.FormText,
+            Paragraph,
             { style: { marginTop: 8 } },
             "After switching GPUs, fully close Discord with Alt+F4 or Quit Discord from the tray, then reopen it. Ctrl+R is not enough.",
         ),
         error
-            ? React.createElement(Forms.FormText, { style: { color: "var(--text-danger)", marginTop: 8 } }, "Failed to detect GPUs. Check the console for details.")
+            ? React.createElement(Paragraph, { style: { color: "var(--text-danger)", marginTop: 8 } }, "Failed to detect GPUs. Check the console for details.")
             : null,
         !pending && !error && options.length === 0
-            ? React.createElement(Forms.FormText, { style: { marginTop: 8 } }, "No Windows GPUs were detected.")
+            ? React.createElement(Paragraph, { style: { marginTop: 8 } }, "No Windows GPUs were detected.")
             : null,
     );
 }

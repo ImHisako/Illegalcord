@@ -19,13 +19,15 @@
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { DataStore } from "@api/index";
 import { definePluginSettings } from "@api/Settings";
+import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { ImageIcon } from "@components/Icons";
+import { Text } from "@components/Text";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import type { RenderModalProps } from "@vencord/discord-types";
 import { findComponentByCodeLazy } from "@webpack";
-import { Alerts, Button, Menu, Modal, openModal, React, showToast, Text, useEffect, useRef, UserStore, useState } from "@webpack/common";
+import { Alerts, Menu, Modal, openModal, React, showToast, useEffect, useRef, UserStore, useState } from "@webpack/common";
 
 // Компонент кнопки в панели
 const PanelButton = findComponentByCodeLazy(".GREEN,positionKeyStemOverride:");
@@ -897,7 +899,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
             size="lg"
             title="Stream Preview"
             actionBarInput={
-                <Text variant="text-xs/normal" style={{ color: "var(--text-muted)" }}>
+                <Text size="xs" weight="normal" style={{ color: "var(--text-muted)" }}>
                     📁 {profiles.get(currentProfileId)?.name || "Default"}: {images.length} / {MAX_IMAGES_PER_PROFILE} images
                 </Text>
             }
@@ -1001,10 +1003,10 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                                 backdropFilter: "blur(8px)"
                             }}>
                             <div style={{ fontSize: "48px", marginBottom: "12px" }}>📥</div>
-                            <Text variant="heading-lg/bold" style={{ color: "white", marginBottom: "4px" }}>
+                            <Text size="xl" weight="bold" style={{ color: "white", marginBottom: "4px" }}>
                                 Drop to upload
                             </Text>
-                            <Text variant="text-sm/normal" style={{ color: "rgba(255,255,255,0.7)" }}>
+                            <Text size="sm" weight="normal" style={{ color: "rgba(255,255,255,0.7)" }}>
                                 Supports PNG, JPEG, WebP
                             </Text>
                         </div>
@@ -1055,7 +1057,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                         }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                                 <span style={{ fontSize: "20px" }}>📁</span>
-                                <Text variant="text-md/semibold" style={{ color: "#ffffff" }}>
+                                <Text size="md" weight="semibold" style={{ color: "#ffffff" }}>
                                     Profiles
                                 </Text>
                                 <span style={{
@@ -1558,7 +1560,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                             📁+ Multiple
                         </Button>
                         <Button
-                            color={Button.Colors.RED}
+                            variant="dangerPrimary"
                             onClick={handleClearAll}
                             disabled={images.length === 0}
                             style={{ padding: "10px 16px" }}
@@ -1827,10 +1829,10 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                             border: "2px dashed var(--background-modifier-accent)"
                         }}>
                             <div style={{ fontSize: "48px", marginBottom: "12px" }}>📷</div>
-                            <Text variant="text-lg/semibold" style={{ color: "var(--text-normal)", marginBottom: "8px" }}>
+                            <Text size="lg" weight="semibold" style={{ color: "var(--text-normal)", marginBottom: "8px" }}>
                                 No images
                             </Text>
-                            <Text variant="text-sm/normal" style={{ color: "var(--text-muted)" }}>
+                            <Text size="sm" weight="normal" style={{ color: "var(--text-muted)" }}>
                                 Drag images here or click "Add Image"
                             </Text>
                         </div>
@@ -1847,7 +1849,7 @@ function ImagePickerModal({ rootProps }: { rootProps: RenderModalProps; }) {
                         gap: "8px"
                     }}>
                         <span style={{ fontSize: "16px" }}>💾</span>
-                        <Text variant="text-xs/normal" style={{ color: "var(--text-muted)" }}>
+                        <Text size="xs" weight="normal" style={{ color: "var(--text-muted)" }}>
                             Images stored locally • Limit: {MAX_IMAGES_PER_PROFILE} images per profile
                         </Text>
                     </div>
