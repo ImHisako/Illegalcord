@@ -5,6 +5,7 @@
  */
 
 import { BaseText } from "@components/BaseText";
+import { Button } from "@components/Button";
 import { Heading } from "@components/Heading";
 import { HiddenServersStore } from "@equicordplugins/hideServers/HiddenServersStore";
 import { classNameFactory } from "@utils/css";
@@ -12,7 +13,7 @@ import { getGuildAcronym } from "@utils/discord";
 import { classes } from "@utils/misc";
 import { Guild, RenderModalProps } from "@vencord/discord-types";
 import { findCssClassesLazy } from "@webpack";
-import { Button, closeModal, IconUtils, Modal, openModal, SortedGuildStore, useStateFromStores } from "@webpack/common";
+import { closeModal, IconUtils, Modal, openModal, SortedGuildStore, useStateFromStores } from "@webpack/common";
 
 const cl = classNameFactory("vc-hideservers-");
 const IconClasses = findCssClassesLazy("icon", "acronym", "childWrapper");
@@ -77,7 +78,7 @@ function GuildRow({ guild }) {
             </Heading>
             <Button
                 className="row-button"
-                color={Button.Colors.PRIMARY}
+                variant="secondary"
                 onClick={() => restoreGuild(guild, SortedGuildStore)}
             >
                 Remove
@@ -111,11 +112,11 @@ export function HiddenServersMenu({ guilds }: { guilds: Guild[]; }) {
                     <div className={cl("folder-header")}>
                         <BaseText size="sm" weight="medium">{folder.folderName || "Folder"}</BaseText>
                         <Button
-                            color={Button.Colors.PRIMARY}
+                            variant="secondary"
                             onClick={() => {
                                 folderGuilds.forEach(g => restoreGuild(g, SortedGuildStore));
                             }}
-                            size={Button.Sizes.SMALL}
+                            size="small"
                             className={cl("restore-all")}
                         >
                             Remove All

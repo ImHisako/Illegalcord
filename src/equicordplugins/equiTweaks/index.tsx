@@ -330,7 +330,7 @@ export default definePlugin({
             predicate: () => settings.store.jsonGateway
         },
         {
-            find: "DirectMessage: getSpringConfigs()",
+            find: "getRecipientId()):null;",
             replacement: [
                 {
                     match: /("data-drop-hovering".{0,100}selected:(?:\i|!0),upperBadge:)(\i)(?=,lowerBadge:\i)/g,
