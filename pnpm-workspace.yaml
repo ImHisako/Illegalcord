@@ -37,7 +37,6 @@ catalog:
     "lodash": "^4.18.1"
     "md5": "^2.3.0"
     "moment": "2.30.1"
-    "monaco-editor": "^0.57.0"
     "nanoid": "^5.1.16"
     "native-file-system-adapter": "^3.0.1"
     "p-limit": "^7.3.3"
@@ -56,6 +55,7 @@ catalog:
     "ws": "^8.21.0"
     "yaml-js": "^0.3.1"
     "zip-local": "^0.3.5"
+    "@vencord/monaco-editor": "0.57.0-beta.4"
 
 strictPeerDependencies: false
 peerDependencyRules:

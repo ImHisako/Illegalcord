@@ -9,7 +9,7 @@ import "./styles.css";
 import { BaseText } from "@components/BaseText";
 import { Button, TextButton } from "@components/Button";
 import { Card } from "@components/Card";
-import { Heading, HeadingTertiary } from "@components/Heading";
+import { Heading } from "@components/Heading";
 import { CogWheel, DeleteIcon, LogIcon, MagnifyingGlassIcon, OpenExternalIcon } from "@components/Icons";
 import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
@@ -1346,7 +1346,7 @@ function SendTrailTab() {
             <Card className={cl("history-shell")} defaultPadding>
                 <div className={cl("history-shell-header")}>
                     <div className={cl("history-shell-copy")}>
-                        <HeadingTertiary className={Margins.reset}>Sent Messages</HeadingTertiary>
+                        <Heading tag="h4" className={Margins.reset}>Sent Messages</Heading>
                         <Paragraph className={cl("history-subtitle")}>
                             Review your global send history, narrow it down, and purge the exact set you want.
                         </Paragraph>
@@ -1464,14 +1464,14 @@ function SendTrailTab() {
                     {pending && !shouldHideLoadingState && (
                         <Card className={cl("empty-card")} defaultPadding>
                             <LogIcon className={cl("empty-icon")} />
-                            <HeadingTertiary>Loading Send Trail history...</HeadingTertiary>
+                            <Heading tag="h4">Loading Send Trail history...</Heading>
                         </Card>
                     )}
 
                     {!pending && records.length === 0 && (
                         <Card className={cl("empty-card")} defaultPadding>
                             <LogIcon className={cl("empty-icon")} />
-                            <HeadingTertiary>No saved sends yet</HeadingTertiary>
+                            <Heading tag="h4">No saved sends yet</Heading>
                             <Paragraph>
                                 Send a message, image, GIF, video, or direct media link from this client and it will start appearing here.
                             </Paragraph>
@@ -1481,7 +1481,7 @@ function SendTrailTab() {
                     {!pending && records.length > 0 && filteredRecords.length === 0 && (
                         <Card className={cl("empty-card")} defaultPadding>
                             <LogIcon className={cl("empty-icon")} />
-                            <HeadingTertiary>No results match this view</HeadingTertiary>
+                            <Heading tag="h4">No results match this view</Heading>
                             <Paragraph>
                                 Broaden the destination, type, period, or search query to bring more sent messages into view.
                             </Paragraph>
@@ -1491,7 +1491,7 @@ function SendTrailTab() {
                     {groupedRecords.map(group => (
                         <div key={group.label} className={cl("group")}>
                             <div className={cl("group-header")}>
-                                <HeadingTertiary className={Margins.reset}>{group.label}</HeadingTertiary>
+                                <Heading tag="h4" className={Margins.reset}>{group.label}</Heading>
                                 <span className={cl("group-count")}>
                                     {group.records.length} entr{group.records.length === 1 ? "y" : "ies"}
                                 </span>

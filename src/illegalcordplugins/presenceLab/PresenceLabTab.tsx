@@ -8,7 +8,7 @@ import "./styles.css";
 
 import { Button, TextButton } from "@components/Button";
 import { Card } from "@components/Card";
-import { Heading, HeadingTertiary } from "@components/Heading";
+import { Heading } from "@components/Heading";
 import { ClockIcon, CogWheel, ComponentsIcon, LogIcon, MagnifyingGlassIcon, Microphone } from "@components/Icons";
 import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
@@ -131,7 +131,7 @@ function GaugeCard({
 
             <div className={cl("gauge-copy")}>
                 <Paragraph className={cl("gauge-label")}>{title}</Paragraph>
-                <HeadingTertiary className={Margins.reset}>{subtitle}</HeadingTertiary>
+                <Heading tag="h4" className={Margins.reset}>{subtitle}</Heading>
             </div>
         </Card>
     );
@@ -165,7 +165,7 @@ function ActivityStrip({
     return (
         <Card className={cl("strip-card")}>
             <div className={cl("strip-header")}>
-                <HeadingTertiary className={Margins.reset}>Weekly Activity</HeadingTertiary>
+                <Heading tag="h4" className={Margins.reset}>Weekly Activity</Heading>
                 <Paragraph className={cl("strip-copy")}>Last seven days of locally logged call minutes.</Paragraph>
             </div>
 
@@ -195,7 +195,7 @@ function PairList({
     return (
         <Card className={cl("pair-card")}>
             <div className={cl("pair-header")}>
-                <HeadingTertiary className={Margins.reset}>Top Interaction Pairs</HeadingTertiary>
+                <Heading tag="h4" className={Margins.reset}>Top Interaction Pairs</Heading>
                 <Paragraph className={cl("strip-copy")}>Which operator-target combinations have the most local test sessions.</Paragraph>
             </div>
 
@@ -239,7 +239,7 @@ function IdentityRow({
             <img className={cl("identity-avatar")} src={avatarUrl} alt="" />
             <div className={cl("identity-copy")}>
                 <div className={cl("identity-title-row")}>
-                    <HeadingTertiary className={Margins.reset}>{label}</HeadingTertiary>
+                    <Heading tag="h4" className={Margins.reset}>{label}</Heading>
                     <span className={cl("identity-meta")}>{meta}</span>
                 </div>
                 <Paragraph className={cl("identity-details")}>{details}</Paragraph>
@@ -562,7 +562,7 @@ function PresenceLabTab() {
                     </div>
 
                     <div className={cl("cadence-copy")}>
-                        <HeadingTertiary className={Margins.reset}>Delay, Jitter, Dwell</HeadingTertiary>
+                        <Heading tag="h4" className={Margins.reset}>Delay, Jitter, Dwell</Heading>
                         <Paragraph className={cl("section-copy")}>A local timing strip for simulated sessions and manual runtime planning.</Paragraph>
                     </div>
 
@@ -634,14 +634,14 @@ function PresenceLabTab() {
                         {pending && (
                             <Card className={cl("empty-card")}>
                                 <LogIcon className={cl("empty-icon")} />
-                                <HeadingTertiary>Loading Presence Lab...</HeadingTertiary>
+                                <Heading tag="h4">Loading Presence Lab...</Heading>
                             </Card>
                         )}
 
                         {!pending && filteredGroups.length === 0 && (
                             <Card className={cl("empty-card")}>
                                 <Microphone className={cl("empty-icon")} />
-                                <HeadingTertiary>No local sessions yet</HeadingTertiary>
+                                <Heading tag="h4">No local sessions yet</Heading>
                                 <Paragraph>Save a manual or simulated session and it will start building the dashboard instantly.</Paragraph>
                             </Card>
                         )}
@@ -651,7 +651,7 @@ function PresenceLabTab() {
                                 {filteredGroups.map(group => (
                                     <div key={group.key} className={cl("session-group")}>
                                         <div className={cl("session-group-header")}>
-                                            <HeadingTertiary className={Margins.reset}>{group.label}</HeadingTertiary>
+                                            <Heading tag="h4" className={Margins.reset}>{group.label}</Heading>
                                             <span className={cl("session-group-count")}>
                                                 {group.sessions.length} entr{group.sessions.length === 1 ? "y" : "ies"}
                                             </span>
@@ -700,7 +700,7 @@ function PresenceLabTab() {
                 <Card className={cl("runtime-card")} defaultPadding>
                     <div className={cl("section-head")}>
                         <div>
-                            <HeadingTertiary className={Margins.reset}>Runtime Profile</HeadingTertiary>
+                            <Heading tag="h4" className={Margins.reset}>Runtime Profile</Heading>
                             <Paragraph className={cl("section-copy")}>Keep the future experimental adapter settings local and ready.</Paragraph>
                         </div>
                         <Button size="iconOnly" variant="secondary" className={cl("section-icon")} aria-label="Runtime profile">
@@ -712,7 +712,7 @@ function PresenceLabTab() {
                         {runtimeOptions.map(option => (
                             <div key={option.label} className={cl("runtime-stat")}>
                                 <Paragraph className={cl("runtime-label")}>{option.label}</Paragraph>
-                                <HeadingTertiary className={Margins.reset}>{option.value}</HeadingTertiary>
+                                <Heading tag="h4" className={Margins.reset}>{option.value}</Heading>
                                 <Paragraph className={cl("metric-hint")}>{option.hint}</Paragraph>
                             </div>
                         ))}
@@ -739,7 +739,7 @@ function PresenceLabTab() {
 
                     <div className={cl("toggle-row")}>
                         <div>
-                            <HeadingTertiary className={Margins.reset}>Neutral test profile</HeadingTertiary>
+                            <Heading tag="h4" className={Margins.reset}>Neutral test profile</Heading>
                             <Paragraph className={cl("section-copy")}>Preserve a local flag for generic name/avatar experiments without enabling automation.</Paragraph>
                         </div>
                         <Switch checked={data.config.neutralProfile} onChange={(checked: boolean) => void updatePresenceLabConfig(currentUserId, { neutralProfile: checked })} />

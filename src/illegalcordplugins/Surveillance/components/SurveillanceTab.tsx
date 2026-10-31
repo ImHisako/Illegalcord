@@ -7,7 +7,7 @@
 import "./styles.css";
 
 import ErrorBoundary from "@components/ErrorBoundary";
-import { HeadingPrimary, HeadingTertiary } from "@components/Heading";
+import { Heading } from "@components/Heading";
 import { SettingsTab, wrapTab } from "@components/settings";
 import { copyToClipboard } from "@utils/clipboard";
 import { classNameFactory } from "@utils/css";
@@ -325,7 +325,7 @@ const EventDetailsModal = ErrorBoundary.wrap(function EventDetailsModal({ event,
         <Modal
             {...modalProps}
             size="md"
-            title={<HeadingPrimary className={cl("modal-title")}>Event Details</HeadingPrimary>}
+            title={<Heading tag="h2" className={cl("modal-title")}>Event Details</Heading>}
         >
             <div className={cl("modal-content")}>
                 <div className={cl("modal-grid")}>
@@ -684,7 +684,7 @@ function SurveillanceTab() {
         <SettingsTab>
             <div className={cl("root")}>
                 <div className={cl("header")}>
-                    <HeadingPrimary>Surveillance</HeadingPrimary>
+                    <Heading tag="h2">Surveillance</Heading>
                     <div className={cl("actions")}>
                         <button className={cl("action")} onClick={copyEvents}>{exportLabel}</button>
                         <button className={classes(cl("action"), cl("danger"))} onClick={resetEvents}>{clearEventsLabel}</button>
@@ -718,7 +718,7 @@ function SurveillanceTab() {
 
                 <section className={cl("panel")}>
                     <div className={cl("section-head")}>
-                        <HeadingTertiary>{pageHeading}</HeadingTertiary>
+                        <Heading tag="h4">{pageHeading}</Heading>
                         <div className={cl("actions")}>
                             <button className={cl("action")} onClick={toggleTargetPanel}>
                                 {targetPanelCollapsed ? "Open" : "Close"}
@@ -791,7 +791,7 @@ function SurveillanceTab() {
 
                 <section className={cl("panel")}>
                     <div className={cl("timeline-head")}>
-                        <HeadingTertiary>{pageHeading} Timeline</HeadingTertiary>
+                        <Heading tag="h4">{pageHeading} Timeline</Heading>
                         <TextInput value={query} placeholder={`Search ${selectedPageLabel} events...`} onChange={setQuery} />
                     </div>
                     <div className={cl("filters")}>

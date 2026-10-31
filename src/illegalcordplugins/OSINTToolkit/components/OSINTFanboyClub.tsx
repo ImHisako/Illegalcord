@@ -8,7 +8,7 @@ import "./styles.css";
 
 import * as DataStore from "@api/DataStore";
 import { Button } from "@components/Button";
-import { HeadingPrimary, HeadingTertiary } from "@components/Heading";
+import { Heading } from "@components/Heading";
 import { SettingsTab, wrapTab } from "@components/settings";
 import { classNameFactory } from "@utils/css";
 import { copyWithToast, openUserProfile } from "@utils/discord";
@@ -86,7 +86,7 @@ function ToolCard({ title, description, children }: ToolCardProps) {
     return (
         <section className={cl("card")}>
             <div className={cl("card-head")}>
-                <HeadingTertiary>{title}</HeadingTertiary>
+                <Heading tag="h4">{title}</Heading>
                 <span>{description}</span>
             </div>
             <div className={cl("card-body")}>{children}</div>
@@ -238,7 +238,7 @@ function ResultSection({ title, subtitle, children }: ResultSectionProps) {
     return (
         <section className={cl("visual-section")}>
             <div className={cl("visual-section-head")}>
-                <HeadingTertiary>{title}</HeadingTertiary>
+                <Heading tag="h4">{title}</Heading>
                 {subtitle ? <span>{subtitle}</span> : null}
             </div>
             <div className={cl("visual-section-body")}>{children}</div>
@@ -344,7 +344,7 @@ function ProfileResult({ data }: ProfileResultProps) {
                 )}
                 <div className={cl("profile-title")}>
                     <span>Discord identity</span>
-                    <HeadingPrimary>{displayName}</HeadingPrimary>
+                    <Heading tag="h2">{displayName}</Heading>
                     <p>@{username}{userId ? ` · ${userId}` : ""}</p>
                 </div>
                 {userId ? (
@@ -506,7 +506,7 @@ function ResultVisual({ entry }: ResultVisualProps) {
         return (
             <div className={cl("error-state")}>
                 <span>Lookup failed</span>
-                <HeadingTertiary>{error ?? "The service did not return a usable result."}</HeadingTertiary>
+                <Heading tag="h4">{error ?? "The service did not return a usable result."}</Heading>
                 <p>Check the input and API key, then retry. CordCat profile lookups automatically fall back to the full query endpoint when its lightweight endpoint rejects a valid ID.</p>
             </div>
         );
@@ -635,7 +635,7 @@ function OSINTFanboyClub() {
                 <header className={cl("hero")}>
                     <div>
                         <span className={cl("eyebrow")}>OSINT TOOLKIT WORKSPACE</span>
-                        <HeadingPrimary>Osint Fanboy club</HeadingPrimary>
+                        <Heading tag="h2">Osint Fanboy club</Heading>
                         <p>A unified investigation desk for Discord intelligence, public infrastructure and image analysis.</p>
                     </div>
                     <div className={cl("health")}>
@@ -844,7 +844,7 @@ function OSINTFanboyClub() {
                         <div className={cl("results-head")}>
                             <div>
                                 <span className={cl("eyebrow")}>INVESTIGATION BOARD</span>
-                                <HeadingTertiary>{busy ?? result?.title ?? "Ready for a lookup"}</HeadingTertiary>
+                                <Heading tag="h4">{busy ?? result?.title ?? "Ready for a lookup"}</Heading>
                             </div>
                             {result ? (
                                 <div className={cl("result-actions")}>

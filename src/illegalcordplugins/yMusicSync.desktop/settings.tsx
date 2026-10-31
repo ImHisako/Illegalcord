@@ -5,7 +5,8 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
-import { Divider, Heading, Notice } from "@components/index";
+import { Heading } from "@components/Heading";
+import { Divider, Notice } from "@components/index";
 import { Margins } from "@utils/margins";
 import { OptionType } from "@utils/types";
 import { MaskedLink } from "@webpack/common";

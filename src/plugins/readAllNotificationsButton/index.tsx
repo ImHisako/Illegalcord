@@ -18,12 +18,22 @@
 
 import "./style.css";
 
-import { addServerListElement, removeServerListElement, ServerListRenderPosition } from "@api/ServerList";
+import { addServerListElement, removeServerListElement, ServerListItem, ServerListRenderPosition } from "@api/ServerList";
+import { definePluginSettings } from "@api/Settings";
 import { TextButton } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
+import { DoubleCheckmarkIcon } from "@components/Icons";
 import { Devs, EquicordDevs } from "@utils/constants";
-import definePlugin from "@utils/types";
+import definePlugin, { OptionType } from "@utils/types";
 import { ActiveJoinedThreadsStore, FluxDispatcher, GuildChannelStore, GuildStore, React, ReadStateStore } from "@webpack/common";
+
+const settings = definePluginSettings({
+    compact: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        description: "Show a small text button instead of a server list icon"
+    }
+});
 
 function onClick() {
     const channels: Array<any> = [];
@@ -53,15 +63,26 @@ function onClick() {
     });
 }
 
-const ReadAllButton = () => (
-    <TextButton
-        variant="secondary"
-        onClick={onClick}
-        className="vc-ranb-button"
-    >
-        Read All
-    </TextButton>
-);
+function ReadAllButton() {
+    const { compact } = settings.use(["compact"]);
+
+    return compact ? (
+        <TextButton
+            variant="secondary"
+            onClick={onClick}
+            className="vc-ranb-button"
+        >
+            Read All
+        </TextButton>
+    ) : (
+        <ServerListItem
+            id="vc-ranb-button-container"
+            icon={DoubleCheckmarkIcon}
+            tooltip="Read All"
+            onClick={onClick}
+        />
+    );
+}
 
 export default definePlugin({
     name: "ReadAllNotificationsButton",
@@ -69,6 +90,7 @@ export default definePlugin({
     tags: ["Notifications", "Shortcuts"],
     authors: [Devs.kemo, EquicordDevs.KrystalSkull],
     dependencies: ["ServerListAPI"],
+    settings,
 
     renderReadAllButton: ErrorBoundary.wrap(ReadAllButton, { noop: true }),
 

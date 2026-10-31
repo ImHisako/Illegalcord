@@ -9,7 +9,7 @@ import "./styles.css";
 import { BaseText } from "@components/BaseText";
 import { Button, TextButton } from "@components/Button";
 import { Card } from "@components/Card";
-import { Heading, HeadingTertiary } from "@components/Heading";
+import { Heading } from "@components/Heading";
 import { ClockIcon, CloudUploadIcon, FolderIcon, LinkIcon, LogIcon, MagnifyingGlassIcon, RestartIcon } from "@components/Icons";
 import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
@@ -311,7 +311,7 @@ function MatchRow({ match, compact = false }: { match: MutualScannerMatch; compa
                     >
                         <img className={cl("avatar")} src={match.avatarUrl} alt="" />
                         <div className={cl("match-copy")}>
-                            <HeadingTertiary className={`${Margins.reset} ${cl("match-label")}`}>{match.label}</HeadingTertiary>
+                            <Heading tag="h4" className={`${Margins.reset} ${cl("match-label")}`}>{match.label}</Heading>
                             <Paragraph className={cl("muted-copy", "match-details")}>{match.details}</Paragraph>
                         </div>
                     </button>
@@ -387,7 +387,7 @@ function RunCard({
         <Card className={cl("run-card")} defaultPadding>
             <div className={cl("run-header")}>
                 <div>
-                    <HeadingTertiary className={Margins.reset}>{run.scopeLabel}</HeadingTertiary>
+                    <Heading tag="h4" className={Margins.reset}>{run.scopeLabel}</Heading>
                     <Paragraph className={cl("muted-copy")}>
                         {formatDateTime(run.startedAt)} / {formatDurationMs(duration)}
                     </Paragraph>
@@ -473,7 +473,7 @@ function RuntimePreviewRunCard({
         <Card className={cl("run-card", "runtime-preview-card")} defaultPadding>
             <div className={cl("run-header")}>
                 <div>
-                    <HeadingTertiary className={Margins.reset}>{scopeLabel}</HeadingTertiary>
+                    <Heading tag="h4" className={Margins.reset}>{scopeLabel}</Heading>
                     <Paragraph className={cl("muted-copy")}>
                         {formatDateTime(startedAt)} / {formatDurationMs(duration)}
                     </Paragraph>
@@ -526,7 +526,7 @@ function HydrationCacheRow({
         <Card className={cl("run-card", "cache-card")} defaultPadding>
             <div className={cl("run-header")}>
                 <div>
-                    <HeadingTertiary className={Margins.reset}>{guildLabel}</HeadingTertiary>
+                    <Heading tag="h4" className={Margins.reset}>{guildLabel}</Heading>
                     <Paragraph className={cl("muted-copy")}>
                         {formatDateTime(snapshot.warmedAt)} / {formatRelativeWindow(snapshot.expiresAt)}
                     </Paragraph>
@@ -1105,7 +1105,7 @@ function MutualScannerTab() {
                                 <Card className={cl("warmup-progress-card")} defaultPadding>
                                     <div className={cl("section-head", "warmup-progress-head")}>
                                         <div>
-                                            <HeadingTertiary className={Margins.reset}>Manual Cache Warmup</HeadingTertiary>
+                                            <Heading tag="h4" className={Margins.reset}>Manual Cache Warmup</Heading>
                                             <Paragraph className={cl("muted-copy")}>
                                                 {renderedManualWarmupProgress.guildLabel} / guild {renderedManualWarmupProgress.guildIndex} of {renderedManualWarmupProgress.totalGuilds}
                                             </Paragraph>
@@ -1168,7 +1168,7 @@ function MutualScannerTab() {
                                                     ? <img className={cl("guild-icon")} src={option.iconUrl} alt="" />
                                                     : <div className={cl("guild-fallback-icon")}>{option.label.slice(0, 1)}</div>}
                                                 <div>
-                                                    <HeadingTertiary className={Margins.reset}>{option.label}</HeadingTertiary>
+                                                    <Heading tag="h4" className={Margins.reset}>{option.label}</Heading>
                                                     <Paragraph className={cl("muted-copy")}>
                                                         {option.memberCount} cached members / {option.id}
                                                     </Paragraph>
@@ -1257,7 +1257,7 @@ function MutualScannerTab() {
                             <div className={cl("toggle-grid")}>
                                 <div className={cl("toggle-row")}>
                                     <div>
-                                        <HeadingTertiary className={Margins.reset}>Include bots</HeadingTertiary>
+                                        <Heading tag="h4" className={Margins.reset}>Include bots</Heading>
                                         <Paragraph className={cl("muted-copy")}>Leave off if you only care about human accounts.</Paragraph>
                                     </div>
                                     <Switch checked={data.config.includeBots} onChange={(checked: boolean) => void updateConfig({ includeBots: checked })} />
@@ -1265,7 +1265,7 @@ function MutualScannerTab() {
 
                                 <div className={cl("toggle-row")}>
                                     <div>
-                                        <HeadingTertiary className={Margins.reset}>Skip users already in your friends</HeadingTertiary>
+                                        <Heading tag="h4" className={Margins.reset}>Skip users already in your friends</Heading>
                                         <Paragraph className={cl("muted-copy")}>Useful if you only want new or non-friend candidates.</Paragraph>
                                     </div>
                                     <Switch checked={data.config.skipExistingFriends} onChange={(checked: boolean) => void updateConfig({ skipExistingFriends: checked })} />
@@ -1273,7 +1273,7 @@ function MutualScannerTab() {
 
                                 <div className={cl("toggle-row")}>
                                     <div>
-                                        <HeadingTertiary className={Margins.reset}>Warm member cache before scan</HeadingTertiary>
+                                        <Heading tag="h4" className={Margins.reset}>Warm member cache before scan</Heading>
                                         <Paragraph className={cl("muted-copy")}>Attempts to expand each selected guild beyond what is already in GuildMemberStore before scanning.</Paragraph>
                                     </div>
                                     <Switch checked={data.config.warmMemberCacheBeforeScan} onChange={(checked: boolean) => void updateConfig({ warmMemberCacheBeforeScan: checked })} />
@@ -1356,7 +1356,7 @@ function MutualScannerTab() {
                             {liveRuntimeMatches.length === 0 && !isRunning && (
                                 <Card className={cl("empty-card")} defaultPadding>
                                     <MagnifyingGlassIcon className={cl("empty-icon")} />
-                                    <HeadingTertiary>Run a scan to populate live matches</HeadingTertiary>
+                                    <Heading tag="h4">Run a scan to populate live matches</Heading>
                                     <Paragraph className={cl("muted-copy")}>Results appear here as soon as the scanner finds profiles with any mutual friend relationship, then fade out after 30s while the saved run stays in history.</Paragraph>
                                 </Card>
                             )}
@@ -1428,7 +1428,7 @@ function MutualScannerTab() {
                             {!pending && filteredRuns.length === 0 && !shouldShowRuntimeHistoryPreview && (
                                 <Card className={cl("empty-card")} defaultPadding>
                                     <LogIcon className={cl("empty-icon")} />
-                                    <HeadingTertiary>No saved runs match this filter</HeadingTertiary>
+                                    <Heading tag="h4">No saved runs match this filter</Heading>
                                     <Paragraph className={cl("muted-copy")}>Broaden the search or run a new scan to build a stronger local history.</Paragraph>
                                 </Card>
                             )}
@@ -1474,7 +1474,7 @@ function MutualScannerTab() {
                             {!hydrationPending && hydrationSnapshots.length === 0 && (
                                 <Card className={cl("empty-card")} defaultPadding>
                                     <CloudUploadIcon className={cl("empty-icon")} />
-                                    <HeadingTertiary>No hydration snapshots yet</HeadingTertiary>
+                                    <Heading tag="h4">No hydration snapshots yet</Heading>
                                     <Paragraph className={cl("muted-copy")}>Run a warmup-enabled scan and the selected guilds will start building temporary local member indexes here.</Paragraph>
                                 </Card>
                             )}
