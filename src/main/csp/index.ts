@@ -55,7 +55,7 @@ export const CspPolicies: PolicyMap = {
     // CDNs used for some things by Vencord.
     // FIXME: we really should not be using CDNs anymore
     "cdnjs.cloudflare.com": ImageScriptsAndCssSrc,
-    "cdn.jsdelivr.net": ImageScriptsAndCssSrc,
+    "cdn.jsdelivr.net": [...ImageScriptsAndCssSrc, "media-src"],
 
     // Function Specific
     "api.github.com": ConnectSrc, // used for updating Vencord itself

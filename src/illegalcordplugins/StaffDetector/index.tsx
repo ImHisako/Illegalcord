@@ -4,46 +4,52 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { type AudioPlayerInterface, createAudioPlayer } from "@api/AudioPlayer";
 import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
 import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
+import { parseUrl } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import { chooseFile } from "@utils/web";
-import { findStoreLazy } from "@webpack";
 import {
+    ApplicationStreamingStore,
     ChannelStore,
     GuildMemberStore,
     GuildRoleStore,
     GuildStore,
     IconUtils,
+    MediaEngineStore,
     PermissionsBits,
     React,
+    RTCConnectionStore,
     showToast,
+    StreamerModeStore,
     UserStore,
     useStateFromStores,
     VoiceStateStore,
 } from "@webpack/common";
 import type { ReactNode } from "react";
 
-const SelectedChannelStore = findStoreLazy("SelectedChannelStore");
 const logger = new Logger("StaffDetector");
 const currentChannelStaff = new Set<string>();
 const emptyIdSet = new Set<string>();
 const idSetCache = new Map<string, Set<string>>();
+const soundPlayers = new Map<string, AudioPlayerInterface>();
 let currentVoiceChannelId: string | null = null;
-const SOUND_BASE_URL = "https://raw.githubusercontent.com/ImHisako/Illegalcord/main/src/illegalcordplugins/StaffDetector/sounds";
+let running = false;
+const SOUND_BASE_URL = "https://cdn.jsdelivr.net/gh/ImHisako/Illegalcord@1836289f81814327c30065904362f2fabcdc7700/src/illegalcordplugins/StaffDetector/sounds/";
 
 const DEFAULT_SOUND_URLS = {
-    join: `${SOUND_BASE_URL}/among-us-role-reveal-sound-effect.mp3`,
-    leave: `${SOUND_BASE_URL}/leave.wav`,
+    join: `${SOUND_BASE_URL}among-us-role-reveal-sound-effect.mp3`,
+    leave: `${SOUND_BASE_URL}leave.wav`,
 };
 
 const CUSTOM_DEFAULT_URLS = {
-    join: `${SOUND_BASE_URL}/trollface-smile.mp3`,
-    leave: `${SOUND_BASE_URL}/death-note-light-yagami-is-sus.mp3`,
+    join: `${SOUND_BASE_URL}trollface-smile.mp3`,
+    leave: `${SOUND_BASE_URL}death-note-light-yagami-is-sus.mp3`,
 };
 
 type AudioDataKey = "customJoinSoundData" | "customLeaveSoundData";
@@ -203,6 +209,13 @@ const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         default: true,
         description: "Play audio alert on staff join/leave.",
+        onChange: refreshSounds,
+    },
+    muteWhileStreaming: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        description: "Mute alert sounds while sharing your screen or using streamer mode.",
+        onChange: updateSoundPlayback,
     },
     soundVolume: {
         type: OptionType.SLIDER,
@@ -210,11 +223,13 @@ const settings = definePluginSettings({
         description: "Master volume for all StaffDetector sounds (0% - 100%).",
         markers: [0, 0.25, 0.5, 0.75, 1],
         stickToMarkers: false,
+        onChange: updateSoundPlayback,
     },
     useCustomSounds: {
         type: OptionType.BOOLEAN,
         default: false,
         description: "OFF - built-in sounds. ON - use an uploaded file or direct audio URL below (uploaded file takes priority).",
+        onChange: refreshSounds,
     },
 
     customJoinSoundData: {
@@ -222,6 +237,7 @@ const settings = definePluginSettings({
         default: "",
         description: "",
         hidden: true,
+        onChange: refreshSounds,
     },
     customJoinSoundDataName: {
         type: OptionType.STRING,
@@ -233,6 +249,8 @@ const settings = definePluginSettings({
         type: OptionType.STRING,
         default: "",
         description: "JOIN fallback URL (https://...) — used only if no file is uploaded above. Empty = built-in custom MP3.",
+        isValid: isValidSoundUrl,
+        onChange: refreshSounds,
     },
     customJoinUpload: {
         type: OptionType.COMPONENT,
@@ -245,6 +263,7 @@ const settings = definePluginSettings({
         default: "",
         description: "",
         hidden: true,
+        onChange: refreshSounds,
     },
     customLeaveSoundDataName: {
         type: OptionType.STRING,
@@ -256,6 +275,8 @@ const settings = definePluginSettings({
         type: OptionType.STRING,
         default: "",
         description: "LEAVE fallback URL (https://...) — used only if no file is uploaded above. Empty = built-in custom MP3.",
+        isValid: isValidSoundUrl,
+        onChange: refreshSounds,
     },
     customLeaveUpload: {
         type: OptionType.COMPONENT,
@@ -292,6 +313,14 @@ const settings = definePluginSettings({
         type: OptionType.COMPONENT,
         description: "",
         component: () => <SettingsSep title="User Filter" color={C.user} />,
+    },
+    ignoreBots: {
+        type: OptionType.BOOLEAN,
+        default: true,
+        description: "Ignore bots, including bots in the user include list.",
+        onChange: () => {
+            if (currentVoiceChannelId) scanChannelStaff(currentVoiceChannelId, false);
+        },
     },
     userIncludeIds: {
         type: OptionType.STRING,
@@ -339,7 +368,7 @@ const permChecks = [
 ] satisfies Array<[StaffPermissionSetting, PermissionBitName]>;
 
 const VOICE_NAME_SETTINGS_KEYS = [
-    "userIncludeIds", "userExcludeIds", "serverFilterMode", "serverIncludeIds", "serverExcludeIds",
+    "ignoreBots", "userIncludeIds", "userExcludeIds", "serverFilterMode", "serverIncludeIds", "serverExcludeIds",
     ...permChecks.map(([key]) => key)
 ] satisfies Array<keyof typeof settings.def>;
 
@@ -352,7 +381,7 @@ interface VoiceNameProps {
 const StaffVoiceName = ErrorBoundary.wrap(({ user, guildId, children }: VoiceNameProps) => {
     const options = settings.use(VOICE_NAME_SETTINGS_KEYS);
     const isStaff = useStateFromStores(
-        [GuildStore, GuildRoleStore, GuildMemberStore],
+        [GuildStore, GuildRoleStore, GuildMemberStore, UserStore],
         () => Boolean(guildId && shouldFlag(user.id, guildId, getStaffRoleIds(guildId))),
         [user.id, guildId, ...VOICE_NAME_SETTINGS_KEYS.map(key => options[key])]
     );
@@ -376,6 +405,8 @@ function parseIdSet(raw: string): Set<string> {
 }
 
 function shouldFlag(userId: string, guildId: string, staffRoleIds: Set<string>): boolean {
+    if (settings.store.ignoreBots && UserStore.getUser(userId)?.bot) return false;
+
     const excludedUsers = parseIdSet(settings.store.userExcludeIds);
     if (excludedUsers.size > 0 && excludedUsers.has(userId)) return false;
 
@@ -604,28 +635,86 @@ function notify(title: string, body: string, icon?: string): void {
         showNotification({ title, body, icon, permanent: false, onClick: () => { } });
 }
 
-function playSrc(src: string): void {
-    const audio = new Audio(src);
-    audio.volume = Math.min(1, Math.max(0, settings.store.soundVolume ?? 0.36));
-    audio.play().catch(e => {
-        if (settings.store.enableLogs) logger.error("StaffDetector: playSrc error:", e);
-    });
+function isValidSoundUrl(value: string): true | string {
+    return !value.trim() || parseUrl(value.trim())?.protocol === "https:" || "Enter a valid HTTPS audio URL.";
+}
+
+function getSoundSource(isJoin: boolean): string {
+    if (!settings.store.useCustomSounds) return isJoin ? DEFAULT_SOUND_URLS.join : DEFAULT_SOUND_URLS.leave;
+
+    const dataUri = isJoin ? settings.store.customJoinSoundData : settings.store.customLeaveSoundData;
+    if (dataUri) return dataUri;
+
+    const url = parseUrl((isJoin ? settings.store.customJoinSound : settings.store.customLeaveSound).trim());
+    return url?.protocol === "https:" ? url.href : isJoin ? CUSTOM_DEFAULT_URLS.join : CUSTOM_DEFAULT_URLS.leave;
+}
+
+function getSoundVolume(): number {
+    if (!settings.store.enableSounds || MediaEngineStore.isDeaf()) return 0;
+    if (StreamerModeStore.enabled && StreamerModeStore.disableSounds) return 0;
+    if (settings.store.muteWhileStreaming && (StreamerModeStore.enabled || ApplicationStreamingStore.getCurrentUserActiveStream())) return 0;
+
+    return Math.min(100, Math.max(0, settings.store.soundVolume * MediaEngineStore.getOutputVolume()));
+}
+
+function updateSoundPlayback(): void {
+    if (!soundPlayers.size) return;
+
+    const volume = getSoundVolume();
+    for (const player of soundPlayers.values()) {
+        if (player.volume !== volume) player.volume = volume;
+        if (!volume) player.stop();
+    }
+}
+
+function refreshSounds(): void {
+    if (!running) return;
+
+    const sources = settings.store.enableSounds ? [getSoundSource(true), getSoundSource(false)] : [];
+    for (const [source, player] of soundPlayers) {
+        if (sources.includes(source)) continue;
+        player.delete();
+        soundPlayers.delete(source);
+    }
+    for (const source of sources) {
+        if (soundPlayers.has(source)) continue;
+        const player = createAudioPlayer(source, {
+            preload: true,
+            persistent: true,
+            onError: error => {
+                if (settings.store.enableLogs) logger.warn("Could not load StaffDetector audio.", error);
+            }
+        });
+        player.volume = getSoundVolume();
+        soundPlayers.set(source, player);
+    }
 }
 
 function playStaffSound(isJoin: boolean): void {
-    if (!settings.store.enableSounds) return;
-    if (settings.store.useCustomSounds) {
-        const dataUri = isJoin ? settings.store.customJoinSoundData : settings.store.customLeaveSoundData;
-        if (dataUri) { playSrc(dataUri); return; }
-        const url = (isJoin ? settings.store.customJoinSound : settings.store.customLeaveSound)?.trim();
-        if (url) { playSrc(url); return; }
-        playSrc(isJoin ? CUSTOM_DEFAULT_URLS.join : CUSTOM_DEFAULT_URLS.leave);
-        return;
-    }
-    playSrc(isJoin ? DEFAULT_SOUND_URLS.join : DEFAULT_SOUND_URLS.leave);
+    const volume = getSoundVolume();
+    if (!volume) return;
+
+    const player = soundPlayers.get(getSoundSource(isJoin));
+    if (!player) return;
+
+    for (const sound of soundPlayers.values()) sound.stop();
+    player.volume = volume;
+    player.restart();
 }
 
-function scanChannelStaff(channelId: string, isInit: boolean): void {
+function syncVoiceChannel(): void {
+    const channelId = RTCConnectionStore.isConnected() ? RTCConnectionStore.getChannelId() ?? null : null;
+    if (channelId === currentVoiceChannelId) return;
+
+    currentVoiceChannelId = channelId;
+    currentChannelStaff.clear();
+    if (!channelId) return;
+
+    logVoiceChannelDetails(channelId);
+    scanChannelStaff(channelId, true);
+}
+
+function scanChannelStaff(channelId: string, notifyExisting: boolean): void {
     const channel = ChannelStore.getChannel(channelId);
     if (!channel?.guild_id) return;
 
@@ -636,32 +725,28 @@ function scanChannelStaff(channelId: string, isInit: boolean): void {
     if (!voiceStates) return;
 
     const userIds = Object.keys(voiceStates);
-    if (!userIds.length) return;
-
-    if (isInit) {
-        currentChannelStaff.clear();
-        const staffFound: string[] = [];
-        const staffRoleIds = getStaffRoleIds(channel.guild_id);
-        for (let i = 0; i < userIds.length; i++) {
-            const uid = userIds[i];
-            if (uid === myUserId) continue;
-            if (shouldFlag(uid, channel.guild_id, staffRoleIds)) {
-                currentChannelStaff.add(uid);
-                staffFound.push(uid);
-            }
+    currentChannelStaff.clear();
+    const staffFound: string[] = [];
+    const staffRoleIds = getStaffRoleIds(channel.guild_id);
+    for (let i = 0; i < userIds.length; i++) {
+        const uid = userIds[i];
+        if (uid === myUserId) continue;
+        if (shouldFlag(uid, channel.guild_id, staffRoleIds)) {
+            currentChannelStaff.add(uid);
+            staffFound.push(uid);
         }
-        if (!staffFound.length || !settings.store.notifyAlreadyInVc) return;
-        const ctx = getChannelContext(channelId);
-        playStaffSound(true);
-        if (staffFound.length === 1) {
-            const name = getUsername(staffFound[0]);
-            if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" already in VC - ${ctx}`);
-            notify("⚠️ StaffDetector:", `"${name}" already here - ${ctx}`, getAvatarUrl(staffFound[0]));
-        } else {
-            const names = staffFound.map(id => `"${getUsername(id)}"`).join(", ");
-            if (settings.store.enableLogs) logger.info(`StaffDetector: ${staffFound.length} staff already in VC - ${ctx}`);
-            notify("⚠️ StaffDetector:", `${staffFound.length} staff: ${names} - ${ctx}`, getAvatarUrl(staffFound[0]));
-        }
+    }
+    if (!notifyExisting || !staffFound.length || !settings.store.notifyAlreadyInVc) return;
+    const ctx = getChannelContext(channelId);
+    playStaffSound(true);
+    if (staffFound.length === 1) {
+        const name = getUsername(staffFound[0]);
+        if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" already in VC - ${ctx}`);
+        notify("⚠️ StaffDetector:", `"${name}" already here - ${ctx}`, getAvatarUrl(staffFound[0]));
+    } else {
+        const names = staffFound.map(id => `"${getUsername(id)}"`).join(", ");
+        if (settings.store.enableLogs) logger.info(`StaffDetector: ${staffFound.length} staff already in VC - ${ctx}`);
+        notify("⚠️ StaffDetector:", `${staffFound.length} staff: ${names} - ${ctx}`, getAvatarUrl(staffFound[0]));
     }
 }
 
@@ -673,6 +758,7 @@ export default definePlugin({
         EquicordDevs.irritably,
         EquicordDevs.zFrxncesck1,
     ],
+    dependencies: ["AudioPlayerAPI"],
     settings,
 
     patches: [{
@@ -688,27 +774,21 @@ export default definePlugin({
     },
 
     start() {
-        const vcId: string | null = SelectedChannelStore.getVoiceChannelId?.() ?? null;
-        currentVoiceChannelId = vcId;
-        if (vcId) scanChannelStaff(vcId, true);
+        running = true;
+        refreshSounds();
+        MediaEngineStore.addChangeListener(updateSoundPlayback);
+        StreamerModeStore.addChangeListener(updateSoundPlayback);
+        ApplicationStreamingStore.addChangeListener(updateSoundPlayback);
+        syncVoiceChannel();
     },
 
     flux: {
-        VOICE_CHANNEL_SELECT({ channelId }: { channelId: string | null; }) {
-            if (channelId === currentVoiceChannelId) return;
-            currentVoiceChannelId = channelId;
-            currentChannelStaff.clear();
-            if (!channelId) return;
-            const channel = ChannelStore.getChannel(channelId);
-            if (!channel?.guild_id) return;
-            if (settings.store.enableLogs) {
-                logger.debug(`StaffDetector: joined VC ${channelId}`);
-                logVoiceChannelDetails(channelId);
-            }
-            scanChannelStaff(channelId, true);
-        },
+        CONNECTION_OPEN: syncVoiceChannel,
+        RTC_CONNECTION_STATE: syncVoiceChannel,
+        VOICE_CHANNEL_SELECT: syncVoiceChannel,
 
         VOICE_STATE_UPDATES({ voiceStates }: { voiceStates: Array<{ userId: string; channelId?: string; oldChannelId?: string; guildId?: string; }>; }) {
+            syncVoiceChannel();
             const channelId = currentVoiceChannelId;
             if (!channelId) return;
             const relevantState = voiceStates.find(state => (state.channelId === channelId && state.oldChannelId !== channelId)
@@ -722,6 +802,7 @@ export default definePlugin({
 
             let context: string | undefined;
             let staffRoleIds: Set<string> | undefined;
+            let soundIsJoin: boolean | undefined;
             for (let i = 0; i < voiceStates.length; i++) {
                 const { userId, channelId: nextChannelId, oldChannelId } = voiceStates[i];
                 if (userId === myUserId) continue;
@@ -737,7 +818,7 @@ export default definePlugin({
                     const name = getUsername(userId);
                     context ??= getChannelContext(channelId);
                     if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" joined - ${context}`);
-                    playStaffSound(true);
+                    soundIsJoin = true;
                     notify("🚨 StaffDetector:", `"${name}" joined - ${context}`, getAvatarUrl(userId));
                     continue;
                 }
@@ -749,14 +830,21 @@ export default definePlugin({
                     const remaining = currentChannelStaff.size;
                     const suffix = remaining > 0 ? ` - ${remaining} staff remaining` : " - No staff remaining";
                     if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" left - ${context} (${remaining} remaining)`);
-                    playStaffSound(false);
+                    soundIsJoin ??= false;
                     notify("✅ StaffDetector:", `"${name}" left - ${context}${suffix}`, getAvatarUrl(userId));
                 }
             }
+            if (soundIsJoin !== undefined) playStaffSound(soundIsJoin);
         },
     },
 
     stop() {
+        running = false;
+        MediaEngineStore.removeChangeListener(updateSoundPlayback);
+        StreamerModeStore.removeChangeListener(updateSoundPlayback);
+        ApplicationStreamingStore.removeChangeListener(updateSoundPlayback);
+        for (const player of soundPlayers.values()) player.delete();
+        soundPlayers.clear();
         currentChannelStaff.clear();
         currentVoiceChannelId = null;
         idSetCache.clear();
