@@ -344,7 +344,14 @@ function getNameServers(nameServers: unknown): string[] {
 }
 
 async function getDomainInfo(domain: string): Promise<DomainInfo | undefined> {
-    const data = await fetchJson(`https://rdap.org/domain/${encodeURIComponent(domain)}`);
+    let data: unknown;
+    if (IS_WEB) {
+        data = await fetchJson(`https://rdap.org/domain/${encodeURIComponent(domain)}`);
+    } else {
+        const result = await Native.lookupDomain(domain);
+        if (!result.success) throw new Error(result.error);
+        data = result.data;
+    }
     if (!isRecord(data)) return undefined;
 
     const { secureDNS } = data;

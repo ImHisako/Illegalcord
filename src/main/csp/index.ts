@@ -59,8 +59,6 @@ export const CspPolicies: PolicyMap = {
 
     // Function Specific
     "api.github.com": ConnectSrc, // used for updating Vencord itself
-    "rdap.org": ConnectSrc,
-    "rdap.nic.ly": ConnectSrc,
     "free.freeipapi.com": ConnectSrc,
     "ws.audioscrobbler.com": ConnectSrc, // Last.fm API
     "musicbrainz.org": ConnectSrc,
