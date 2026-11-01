@@ -98,10 +98,11 @@ let nextGeoSeeerApiKey = 0;
 let recentInvestigationsReady = Promise.resolve();
 
 export const OSINT_TOOLS = [
-    { id: "see-know", name: "See-Know", url: "https://see-know.vip/", description: "Searches public web signals." },
+    { id: "see-know", name: "See-Know", url: "https://see-know.ru/", description: "Searches public web signals." },
     { id: "epieos", name: "Epieos", url: "https://epieos.com/", description: "Checks public email and phone traces." },
     { id: "osintx", name: "Osintx_", url: "https://www.osintx.io/", description: "Collects OSINT links and workflows." },
-    { id: "socialeye", name: "SocialEye", url: "https://socialeye.net/", description: "Searches usernames across public sites." },
+    { id: "osintly", name: "Osintly", url: "https://osint.ly/", description: "Searches public profiles and infrastructure." },
+    { id: "theick", name: "The Ick", url: "https://theick.io/", description: "Tracks follow activity on public Instagram profiles." },
     { id: "cloudsint", name: "Cloudsint", url: "https://cloudsint.net/", description: "Checks cloud storage exposure." },
     { id: "proximity", name: "Proximity OSINT", url: "https://www.proximityosint.com/", description: "Provides OSINT workflows and resources." },
     { id: "deadeye", name: "DeadEye", url: "https://deadeye.cc/", description: "Searches public profile signals." },
@@ -127,10 +128,6 @@ export const PRIVACY_BROWSERS = [
     { id: "mullvad", name: "Mullvad Browser", url: "https://mullvad.net/en/download/browser/windows", description: "Privacy browser developed with the Tor Project." },
     { id: "librewolf", name: "LibreWolf", url: "https://librewolf.net/", description: "Privacy-focused Firefox fork." }
 ] as const;
-
-const BREACH_VIP_FIELDS: readonly string[] = [
-    "uuid", "username", "ip", "domain", "discordid", "steamid", "email", "password", "name", "phone"
-];
 
 export const settings = definePluginSettings({
     cordCatApiKey: {
@@ -169,8 +166,8 @@ function OSINTToolkitSettingsAbout() {
         <Notice.Warning className={Margins.bottom8}>
             <strong>Lawful and authorized OSINT use only.</strong>
             <p>You are responsible for having a specific lawful purpose and any required legal basis, consent, or notice before searching for another person. Do not use this plugin for stalking, doxxing, harassment, credential attacks, unlawful profiling, investigations involving minors, or decisions based only on unverified results.</p>
-            <p>Queries can send identifiers, search terms, images, your IP address, and request metadata to independent services including CordCat, Breach.vip, and GeoSeeer. Review each provider&apos;s terms and privacy notice before use. Illegalcord does not control their data, retention, accuracy, or legal compliance. Nothing in this notice excludes liability that cannot be excluded under applicable law.</p>
-            <p>Commands: /domain, /iplookup, /myip, /usersearch, /breachvip, /cordcat, /cordcatuser, /cordcatinvite, /cordcatguild and /cordcatstatus.</p>
+            <p>Queries can send identifiers, search terms, images, your IP address, and request metadata to independent services including CordCat and GeoSeeer. Review each provider&apos;s terms and privacy notice before use. Illegalcord does not control their data, retention, accuracy, or legal compliance. Nothing in this notice excludes liability that cannot be excluded under applicable law.</p>
+            <p>Commands: /domain, /iplookup, /myip, /usersearch, /cordcat, /cordcatuser, /cordcatinvite, /cordcatguild and /cordcatstatus.</p>
             <p>Get a CordCat API key from <MaskedLink href="https://dis.cord.cat/dashboard">the CordCat dashboard</MaskedLink> and see <MaskedLink href="https://dis.cord.cat/docs#intro">the API documentation</MaskedLink>. The status command works without a key.</p>
             <p>Right click a message to copy author identifiers, open username searches and browse OSINT resource lists.</p>
             <p>Right click an image and choose Geo Osint to analyze its likely location privately in your client.</p>
@@ -472,25 +469,6 @@ function createUserSearchMessage(username: string): string {
     ].join("\n"), "txt");
 }
 
-function createBreachVipMessage(results: unknown[], total: number): string {
-    if (!total) return makeCodeblock("[BREACH.VIP]\nNo matching records found.", "txt");
-
-    const lines = ["[BREACH.VIP]", `Results: ${total}`, ""];
-    let shown = 0;
-
-    for (const result of results.slice(0, 10)) {
-        const serialized = JSON.stringify(result) ?? String(result);
-        const line = `${shown + 1}. ${serialized.slice(0, 600)}${serialized.length > 600 ? "..." : ""}`;
-        if (lines.join("\n").length + line.length > 1_750) break;
-
-        lines.push(line);
-        shown++;
-    }
-
-    if (shown < total) lines.push("", `Showing ${shown} of ${total} results.`);
-    return makeCodeblock(lines.join("\n"), "json");
-}
-
 function createCordCatMessage(tool: CordCatTool, data: unknown): string {
     const serialized = JSON.stringify(data, null, 2) ?? "null";
     const truncated = serialized.length > 1_750
@@ -535,18 +513,6 @@ export function lookupUsername(input: string) {
     const username = normalizeUsername(input);
     if (!username) throw new Error("Invalid username.");
     return getUsernameSearchUrls(username);
-}
-
-export async function lookupBreachVip(
-    term: string,
-    fields: string[],
-    minecraft: boolean,
-    wildcard: boolean,
-    caseSensitive: boolean
-): Promise<{ results: unknown[]; total: number; }> {
-    const result = await Native.searchBreachVip(term, fields, minecraft, wildcard, caseSensitive);
-    if (!result.success) throw new Error(result.error);
-    return { results: result.results, total: result.total };
 }
 
 export async function lookupCordCat(tool: CordCatTool, value: string, refresh: boolean): Promise<unknown> {
@@ -976,77 +942,6 @@ export default definePlugin({
 
                 debug("Generating username search links", username);
                 sendBotMessage(ctx.channel.id, { content: createUserSearchMessage(username) });
-            }
-        },
-        {
-            name: "breachvip",
-            description: "Searches Breach.vip records by one or more fields.",
-            inputType: ApplicationCommandInputType.BUILT_IN,
-            options: [
-                {
-                    name: "term",
-                    description: "Search term between 1 and 100 characters.",
-                    type: ApplicationCommandOptionType.STRING,
-                    required: true
-                },
-                {
-                    name: "fields",
-                    description: "Comma-separated fields, like email,username or discordid.",
-                    type: ApplicationCommandOptionType.STRING,
-                    required: true
-                },
-                {
-                    name: "minecraft",
-                    description: "Only searches records in the Minecraft category.",
-                    type: ApplicationCommandOptionType.BOOLEAN
-                },
-                {
-                    name: "wildcard",
-                    description: "Enables * and ? wildcard operators.",
-                    type: ApplicationCommandOptionType.BOOLEAN
-                },
-                {
-                    name: "case_sensitive",
-                    description: "Makes the search case-sensitive.",
-                    type: ApplicationCommandOptionType.BOOLEAN
-                }
-            ],
-            execute: async (args: CommandArgument[], ctx: CommandContext) => {
-                const term = findOption<string>(args, "term", "").trim();
-                const fields = [...new Set(findOption<string>(args, "fields", "")
-                    .toLowerCase()
-                    .split(",")
-                    .map(field => field.trim())
-                    .filter(Boolean))];
-                const minecraft = findOption<boolean>(args, "minecraft", false);
-                const wildcard = findOption<boolean>(args, "wildcard", false);
-                const caseSensitive = findOption<boolean>(args, "case_sensitive", false);
-
-                if (!term || term.length > 100) {
-                    sendBotMessage(ctx.channel.id, { content: "The search term must contain between 1 and 100 characters." });
-                    return;
-                }
-
-                const invalidFields = fields.filter(field => !BREACH_VIP_FIELDS.includes(field));
-                if (!fields.length || fields.length > 10 || invalidFields.length) {
-                    sendBotMessage(ctx.channel.id, {
-                        content: `Invalid fields. Choose up to 10 comma-separated values from: ${BREACH_VIP_FIELDS.join(", ")}.`
-                    });
-                    return;
-                }
-
-                if (wildcard && (term.startsWith("*") || term.startsWith("?"))) {
-                    sendBotMessage(ctx.channel.id, { content: "Wildcard searches cannot begin with * or ?." });
-                    return;
-                }
-
-                debug("Searching Breach.vip", { fields, minecraft, wildcard, caseSensitive });
-                const result = await Native.searchBreachVip(term, fields, minecraft, wildcard, caseSensitive);
-                if (!pluginActive) return;
-
-                sendBotMessage(ctx.channel.id, {
-                    content: result.success ? createBreachVipMessage(result.results, result.total) : result.error
-                });
             }
         },
         {

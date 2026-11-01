@@ -7,24 +7,14 @@
 import type { IpcMainInvokeEvent } from "electron";
 
 type GeoAnalyzeResult = { success: true; data: unknown; } | { success: false; error: string; retryable?: boolean; };
-type BreachVipSearchResult =
-    | { success: true; results: unknown[]; total: number; }
-    | { success: false; error: string; };
 type CordCatResult = { success: true; data: unknown; } | { success: false; error: string; };
 
 const GEO_API_URL = "https://geoseeer.com/api/v1/analyze";
-const BREACH_VIP_API_URL = "https://breach.vip/api/search";
 const CORDCAT_API_URL = "https://api.cord.cat";
 const GEO_REQUEST_TIMEOUT_MS = 120_000;
-const BREACH_VIP_REQUEST_TIMEOUT_MS = 12_000;
 const CORDCAT_REQUEST_TIMEOUT_MS = 12_000;
 const MAX_RESPONSE_BYTES = 1_048_576;
-const MAX_BREACH_VIP_RESPONSE_BYTES = 20_971_520;
 const MAX_CORDCAT_RESPONSE_BYTES = 4_194_304;
-const BREACH_VIP_FIELDS = new Set([
-    "uuid", "username", "ip", "domain", "discordid", "steamid", "email", "password", "name", "phone"
-]);
-
 async function readResponse(response: Response, maxBytes = MAX_RESPONSE_BYTES): Promise<unknown> {
     if (!response.body) return;
 
@@ -161,86 +151,6 @@ export async function queryCordCat(
             error: error instanceof Error && error.name === "AbortError"
                 ? "The CordCat request timed out."
                 : "Could not reach CordCat."
-        };
-    } finally {
-        clearTimeout(timeout);
-    }
-}
-
-export async function searchBreachVip(
-    _event: IpcMainInvokeEvent,
-    term: unknown,
-    fields: unknown,
-    minecraft: unknown,
-    wildcard: unknown,
-    caseSensitive: unknown
-): Promise<BreachVipSearchResult> {
-    if (typeof term !== "string" || !term.trim() || term.length > 100) {
-        return { success: false, error: "The Breach.vip search term is invalid." };
-    }
-
-    if (
-        !Array.isArray(fields)
-        || !fields.length
-        || fields.length > 10
-        || fields.some(field => typeof field !== "string" || !BREACH_VIP_FIELDS.has(field))
-    ) {
-        return { success: false, error: "The Breach.vip search fields are invalid." };
-    }
-
-    if (typeof minecraft !== "boolean" || typeof wildcard !== "boolean" || typeof caseSensitive !== "boolean") {
-        return { success: false, error: "The Breach.vip search options are invalid." };
-    }
-
-    if (wildcard && (term.startsWith("*") || term.startsWith("?"))) {
-        return { success: false, error: "Wildcard searches cannot begin with * or ?." };
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), BREACH_VIP_REQUEST_TIMEOUT_MS);
-
-    try {
-        const response = await fetch(BREACH_VIP_API_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                term: term.trim(),
-                fields,
-                categories: minecraft ? ["minecraft"] : null,
-                wildcard,
-                case_sensitive: caseSensitive
-            }),
-            redirect: "error",
-            signal: controller.signal
-        });
-
-        if (response.status === 429) {
-            return { success: false, error: "Breach.vip rate limit reached. Try again in one minute." };
-        }
-
-        if (response.status === 403 && response.headers.get("cf-mitigated") === "challenge") {
-            return {
-                success: false,
-                error: "Breach.vip blocked the API request with Cloudflare. The command cannot search until the site allows API clients again."
-            };
-        }
-
-        if (!response.ok) {
-            return { success: false, error: `Breach.vip rejected the search with HTTP ${response.status}.` };
-        }
-
-        const data = await readResponse(response, MAX_BREACH_VIP_RESPONSE_BYTES);
-        if (!isRecord(data) || !Array.isArray(data.results)) {
-            return { success: false, error: "Breach.vip returned an invalid response." };
-        }
-
-        return { success: true, results: data.results, total: data.results.length };
-    } catch (error) {
-        return {
-            success: false,
-            error: error instanceof Error && error.name === "AbortError"
-                ? "The Breach.vip search timed out."
-                : "Could not reach Breach.vip."
         };
     } finally {
         clearTimeout(timeout);
