@@ -228,7 +228,11 @@ test("Ignores known Discord rejections without hiding other errors or window fai
         openCrashSupportModal: () => calls.push("popup")
     });
     const rateLimited = Object.assign(new Error("Ton nombre d'actions est limité."), { status: 429, retryAfter: 10 });
+    const discordRequestError = "Oops! You've caught an ultra rare error. This is probably our fault, so please try again or check our status page.";
     for (const reason of [
+        new Error(discordRequestError),
+        discordRequestError,
+        { message: discordRequestError, stack: `Error: ${discordRequestError}\n    at ei (https://discord.com/assets/web.48946ead1e279bd2.js:172:259799)` },
         new TypeError("Failed to fetch"),
         "Failed to fetch",
         { message: "Failed to fetch", stack: "TypeError: Failed to fetch" },
@@ -252,6 +256,7 @@ test("Ignores known Discord rejections without hiding other errors or window fai
     handleGlobalError({ error: new TypeError("Failed to fetch") });
     handleGlobalError({ error: rateLimited });
     handleGlobalError({ error: new Error("Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION") });
+    handleGlobalError({ error: new Error(discordRequestError) });
     assert.deepEqual(calls, [
         ["unhandled-rejection", "Cannot read properties of undefined"], "save", "log", "popup",
         ["unhandled-rejection", "Failed to fetch user profile"], "save", "log", "popup",
@@ -260,7 +265,8 @@ test("Ignores known Discord rejections without hiding other errors or window fai
         ["unhandled-rejection", "Cannot set setting key: OTHER_SETTING"], "save", "log", "popup",
         ["window-error", "Failed to fetch"], "save", "log", "popup",
         ["window-error", "Ton nombre d'actions est limité."], "save", "log", "popup",
-        ["window-error", "Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION"], "save", "log", "popup"
+        ["window-error", "Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION"], "save", "log", "popup",
+        ["window-error", discordRequestError], "save", "log", "popup"
     ]);
 });
 

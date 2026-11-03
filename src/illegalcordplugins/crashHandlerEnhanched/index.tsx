@@ -1422,6 +1422,7 @@ function isIgnorableDiscordRejection(error: unknown) {
     const message = getErrorMessage(error);
 
     if (message === "Aborted" || message === "Failed to fetch") return true;
+    if (message === "Oops! You've caught an ultra rare error. This is probably our fault, so please try again or check our status page.") return true;
     if (message.startsWith("Request has been terminated\n")) return true;
     if (message === "This gift has been redeemed already.") return true;
     if (message === "Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION") return true;
