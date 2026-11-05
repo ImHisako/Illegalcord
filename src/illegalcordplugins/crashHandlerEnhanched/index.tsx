@@ -1941,6 +1941,13 @@ export default definePlugin({
 
     patches: [
         {
+            find: "Document head was null",
+            replacement: {
+                match: /function \i\(\i,\i,\i\)\{(?=let \i=\i\.document,)/,
+                replace: "$&if(arguments[0].document.head==null)return;"
+            }
+        },
+        {
             find: "#{intl::ERRORS_UNEXPECTED_CRASH}",
             replacement: {
                 match: /(?:this\.setState\(|Vencord\.Plugins\.plugins\["CrashHandler"\]\.handleCrash\(this,)(.{0,300}?)\)/,

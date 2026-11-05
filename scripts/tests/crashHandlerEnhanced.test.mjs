@@ -309,3 +309,37 @@ test("Preserves browser error locations in saved reports and disk logs", () => {
     assert.equal(log.sourceLocation, undefined);
     assert.ok(!log.reportText.includes("Source:"));
 });
+
+test("Skips stylesheet injection until a popout has a document head", () => {
+    const start = source.indexOf("    patches: [");
+    const end = source.indexOf("\n    handleCrash,", start);
+    const { patches } = load("return {" + source.slice(start, end) + "};", {});
+    const { replacement } = patches.find(patch => patch.find === "Document head was null");
+    const match = new RegExp(replacement.match.source.replaceAll("\\i", "(?:[A-Za-z_$][\\w$]*)"), replacement.match.flags);
+    const code = 'function D(e,t,i){let a=e.document,s=new URL(t).origin,l=new URL(`${window.location.protocol}//${window.location.host}`).origin,o=URL.canParse(n.p)?new URL(n.p).origin:"";if(s!==l&&s!==o)return void p.warn("Not injecting stylesheet, unrecognized origin",s);let d=a.createElement("link");d.href=t,d.rel="stylesheet",d.integrity=i,r()(null!=a.head,"Document head was null"),a.head.appendChild(d)}';
+    const patched = code.replace(match, replacement.replace);
+    assert.notEqual(patched, code);
+    const appended = [];
+    const warnings = [];
+    let created = 0;
+    const inject = load(patched + "\nreturn D;", {
+        URL, window: { location: new URL("https://discord.com/channels/@me") },
+        n: { p: "https://cdn.discordapp.com/assets/" },
+        p: { warn: (...args) => warnings.push(args) },
+        r: () => (condition, message) => assert.ok(condition, message)
+    });
+    const pending = { document: { head: null, createElement: () => { created++; return {}; } } };
+    const ready = { document: { head: { appendChild: link => appended.push(link) }, createElement: pending.document.createElement } };
+    const url = "https://discord.com/assets/popout.css";
+    for (const popout of [pending, ready]) inject(popout, url, "sha256-test");
+    assert.equal(created, 1);
+    assert.deepEqual(appended, [{ href: url, rel: "stylesheet", integrity: "sha256-test" }]);
+    pending.document.head = ready.document.head;
+    inject(pending, url, "sha256-test");
+    assert.equal(appended.length, 2);
+    inject(ready, "https://example.com/untrusted.css", "");
+    assert.equal(appended.length, 2);
+    assert.equal(warnings.length, 1);
+    ready.document.createElement = () => { throw new Error("Unrelated failure"); };
+    assert.throws(() => inject(ready, url, ""), /Unrelated failure/);
+});
