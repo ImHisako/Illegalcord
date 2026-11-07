@@ -1426,6 +1426,7 @@ function isIgnorableDiscordRejection(error: unknown) {
     if (message.startsWith("Request has been terminated\n")) return true;
     if (message === "This gift has been redeemed already.") return true;
     if (message === "Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION") return true;
+    if (message === "could not play audio: asset_404") return true;
 
     return MESSAGE_SEND_FORBIDDEN_RE.test(message) ||
         GUILD_VANITY_FORBIDDEN_RE.test(message) ||

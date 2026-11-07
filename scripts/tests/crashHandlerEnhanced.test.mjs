@@ -236,6 +236,7 @@ test("Ignores known Discord rejections without hiding other errors or window fai
         new TypeError("Failed to fetch"),
         "Failed to fetch",
         { message: "Failed to fetch", stack: "TypeError: Failed to fetch" },
+        new Error("could not play audio: asset_404"),
         new Error("Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION"),
         "Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION",
         { message: "Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION", stack: "Error: Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION" },
@@ -253,7 +254,9 @@ test("Ignores known Discord rejections without hiding other errors or window fai
     handleUnhandledRejection({ reason: Object.assign(new Error("Server error"), { status: 500 }) });
     handleUnhandledRejection({ reason: new Error("You are being rate limited.") });
     handleUnhandledRejection({ reason: new Error("Cannot set setting key: OTHER_SETTING") });
+    handleUnhandledRejection({ reason: new Error("could not play audio: another_asset") });
     handleGlobalError({ error: new TypeError("Failed to fetch") });
+    handleGlobalError({ error: new Error("could not play audio: asset_404") });
     handleGlobalError({ error: rateLimited });
     handleGlobalError({ error: new Error("Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION") });
     handleGlobalError({ error: new Error(discordRequestError) });
@@ -263,7 +266,9 @@ test("Ignores known Discord rejections without hiding other errors or window fai
         ["unhandled-rejection", "Server error"], "save", "log", "popup",
         ["unhandled-rejection", "You are being rate limited."], "save", "log", "popup",
         ["unhandled-rejection", "Cannot set setting key: OTHER_SETTING"], "save", "log", "popup",
+        ["unhandled-rejection", "could not play audio: another_asset"], "save", "log", "popup",
         ["window-error", "Failed to fetch"], "save", "log", "popup",
+        ["window-error", "could not play audio: asset_404"], "save", "log", "popup",
         ["window-error", "Ton nombre d'actions est limité."], "save", "log", "popup",
         ["window-error", "Cannot set setting key: DESKTOP_FULLSCREEN_POPUP_OCCLUSION"], "save", "log", "popup",
         ["window-error", discordRequestError], "save", "log", "popup"

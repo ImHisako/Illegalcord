@@ -7,15 +7,13 @@
 import { Settings } from "@api/Settings";
 import { reporterData } from "@debug/reporterData";
 import { traceFunctionWithResults } from "@debug/Tracer";
-import { hash as h64 } from "@intrnl/xxhash64";
-import { makeLazy } from "@utils/lazy";
 import { Logger } from "@utils/Logger";
 import { interpolateIfDefined } from "@utils/misc";
 import { Patch, PatchReplacement } from "@utils/types";
 import { WebpackRequire } from "@vencord/discord-types/webpack";
 
 import { AnyModuleFactory, AnyWebpackRequire, MaybePatchedModuleFactory, PatchedModuleFactory } from "./types";
-import { _blacklistBadModules, _initWebpack, factoryListeners, findModuleFactory, moduleListeners, waitForSubscriptions, wreq } from "./webpack";
+import { _blacklistBadModules, _initWebpack, factoryListeners, moduleListeners, waitForSubscriptions, wreq } from "./webpack";
 
 export const patches = [] as Patch[];
 
@@ -33,35 +31,6 @@ let patchedFactoryId = 0;
 export function getPatchedModulePlugins(sourceId: string) {
     return patchedModulePlugins.get(sourceId) ?? [];
 }
-
-export const getBuildNumber = makeLazy(() => {
-    try {
-        function matchBuildNumber(factoryStr: string) {
-            const buildNumberMatch = factoryStr.match(/"Trying to open a changelog for an invalid build number (\d+?)"\)/);
-            if (buildNumberMatch == null) {
-                return -1;
-            }
-
-            return Number(buildNumberMatch[1]);
-        }
-
-        const hardcodedFactoryStr = String(wreq.m[927815]);
-        if (hardcodedFactoryStr.includes("Trying to open a changelog for an invalid build number")) {
-            const hardcodedBuildNumber = matchBuildNumber(hardcodedFactoryStr);
-
-            if (hardcodedBuildNumber !== -1) {
-                return hardcodedBuildNumber;
-            }
-        } else if (IS_DEV || IS_REPORTER) {
-            logger.error("Hardcoded build number module id is invalid");
-        }
-
-        const moduleFactory = findModuleFactory("Trying to open a changelog for an invalid build number");
-        return matchBuildNumber(String(moduleFactory));
-    } catch {
-        return -1;
-    }
-});
 
 export function getFactoryPatchedSource(moduleId: PropertyKey, webpackRequire = wreq as AnyWebpackRequire) {
     return webpackRequire.m[moduleId]?.[SYM_PATCHED_SOURCE];
@@ -530,7 +499,7 @@ function patchFactory(moduleId: PropertyKey, originalFactory: AnyModuleFactory):
     for (let i = 0; i < patches.length; i++) {
         const patch = patches[i];
 
-        const buildNumber = getBuildNumber();
+        const buildNumber = window.GLOBAL_ENV.BUILD_NUMBER || -1;
         const shouldCheckBuildNumber = buildNumber !== -1;
 
         if (
