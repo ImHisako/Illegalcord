@@ -12,7 +12,6 @@ import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
 import { settings as musicControlsSettings } from "@equicordplugins/musicControls/settings";
-import { clearLyricsCache, getLyrics } from "@equicordplugins/musicControls/spotify/lyrics/api";
 import type { SyncedLyric } from "@equicordplugins/musicControls/spotify/lyrics/providers/types";
 import { SpotifyStore as SpotifyPlayerStore } from "@equicordplugins/musicControls/spotify/SpotifyStore";
 import { EquicordDevs } from "@utils/constants";
@@ -100,8 +99,7 @@ const ReactionEmojiPicker = findComponentByCodeLazy<ReactionEmojiPickerProps>(
 let active = false;
 let intervalId: ReturnType<typeof setInterval> | undefined;
 let lyricsTimeoutId: ReturnType<typeof setTimeout> | undefined;
-let loadingSpotifyTrackId: string | undefined;
-let spotifyLyricsCacheReset: Promise<void> | undefined;
+let spotifyLyricsRequest: AbortController | undefined;
 let spotifyLyrics: SyncedLyric[] = [];
 let spotifyLyricsTrackId: string | undefined;
 let spotifyOverrideActive = false;
@@ -483,6 +481,38 @@ function resumePhraseRotation() {
     restartRotation();
 }
 
+async function getSpotifyLyrics(track: SpotifyTrack, signal: AbortSignal): Promise<SyncedLyric[]> {
+    if (track.type === "episode") return [];
+
+    const artist = track.artists[0];
+    if (!artist) return [];
+
+    const titles = new Set([track.name, track.name.replace(/\s+\((?:feat|ft)\.?\s+[^)]+\)$/i, "")]);
+    const params = new URLSearchParams({
+        artist_name: artist.name,
+        album_name: track.album.name,
+        duration: String(track.duration / 1_000)
+    });
+
+    for (const title of titles) {
+        params.set("track_name", title);
+        const response = await fetch(`https://lrclib.net/api/get?${params}`, { signal });
+        if (response.status === 404) continue;
+        if (!response.ok) throw new Error(`LRCLIB returned HTTP ${response.status}.`);
+
+        const { syncedLyrics } = await response.json() as { syncedLyrics: string | null; };
+        if (!syncedLyrics) continue;
+
+        const lyrics = Array.from(syncedLyrics.matchAll(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/gm), ([, minutes, seconds, text]) => ({
+            time: Number(minutes) * 60 + Number(seconds),
+            text: text.trim()
+        })).filter(lyric => lyric.text && lyric.text !== "♪");
+        if (lyrics.length) return lyrics.sort((a, b) => a.time - b.time);
+    }
+
+    return [];
+}
+
 async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
     if (phrasesHavePriority()) return;
 
@@ -498,6 +528,8 @@ async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
     intervalId = undefined;
 
     if (trackChanged) {
+        spotifyLyricsRequest?.abort();
+        spotifyLyricsRequest = undefined;
         spotifyLyrics = [];
         spotifyLyricsTrackId = undefined;
         spotifyTimeline++;
@@ -517,41 +549,19 @@ async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
         return;
     }
 
-    if (loadingSpotifyTrackId === track.id) return;
-    loadingSpotifyTrackId = track.id;
-
-    const lyricsTrack = {
-        ...track,
-        album: {
-            ...track.album,
-            image: track.album.image ?? { height: 0, width: 0, url: "" }
-        },
-        artists: track.artists.map(artist => ({
-            ...artist,
-            href: "",
-            type: "artist",
-            uri: `spotify:artist:${artist.id}`
-        }))
-    };
-    const previousCacheReset = spotifyLyricsCacheReset;
-    const lyricsInfo = await getLyrics(lyricsTrack).catch(async (error: unknown) => {
-        if (!(error instanceof DOMException) || error.name !== "NotReadableError") throw error;
-
-        if (previousCacheReset === spotifyLyricsCacheReset) spotifyLyricsCacheReset = clearLyricsCache();
-        await spotifyLyricsCacheReset;
-        return getLyrics(lyricsTrack);
-    }).catch((error: unknown) => {
-        logger.error("Could not load Spotify lyrics.", error);
-        return null;
+    if (spotifyLyricsRequest) return;
+    const request = spotifyLyricsRequest = new AbortController();
+    const lyrics = await getSpotifyLyrics(track, request.signal).catch((error: unknown) => {
+        if (!request.signal.aborted) logger.warn("Could not load Spotify lyrics.", error);
+        return [];
     });
-    if (loadingSpotifyTrackId === track.id) loadingSpotifyTrackId = undefined;
+    if (request.signal.aborted) return;
+    spotifyLyricsRequest = undefined;
 
     if (!active || !settings.plain.useSpotifyLyrics || phrasesHavePriority() || !spotifyPlaybackActive || DiscordSpotifyStore.getTrack()?.id !== track.id) return;
 
     spotifyLyricsTrackId = track.id;
-    spotifyLyrics = lyricsInfo?.lyricsVersions[lyricsInfo.useLyric]
-        ?.filter(lyric => lyric.text?.trim())
-        .sort((a, b) => a.time - b.time) ?? [];
+    spotifyLyrics = lyrics;
 
     if (!spotifyLyrics.length) {
         resumePhraseRotation();
@@ -563,7 +573,8 @@ async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
 
 function stopSpotifyLyrics() {
     spotifyPlaybackActive = false;
-    loadingSpotifyTrackId = undefined;
+    spotifyLyricsRequest?.abort();
+    spotifyLyricsRequest = undefined;
     resumePhraseRotation();
 }
 
@@ -863,7 +874,8 @@ export default definePlugin({
         active = false;
         spotifyPlaybackActive = false;
         spotifyOverrideActive = false;
-        loadingSpotifyTrackId = undefined;
+        spotifyLyricsRequest?.abort();
+        spotifyLyricsRequest = undefined;
         spotifyTimeline++;
         lastSpotifyLyricIndex = undefined;
         lastSpotifyStatusText = undefined;
