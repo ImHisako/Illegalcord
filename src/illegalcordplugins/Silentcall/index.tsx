@@ -1,5 +1,10 @@
 /*
  * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+/*
  * SilentGroupCall — start DM/group calls without ringing the other members.
  *
  * When you start a call, Discord's client sends a separate

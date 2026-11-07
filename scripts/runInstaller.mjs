@@ -18,8 +18,8 @@
 
 import "./checkNodeVersion.js";
 
-import { execFileSync, execSync } from "child_process";
-import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync } from "fs";
+import { execFileSync } from "child_process";
+import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { Readable } from "stream";
 import { finished } from "stream/promises";
@@ -29,7 +29,6 @@ const BASE_URL = process.platform === "darwin"
     ? "https://github.com/Equicord/Equilotl/releases/latest/download/"
     : "https://github.com/ImHisako/IllegalcordInstaller/releases/latest/download/";
 const INSTALLER_PATH_DARWIN = "Equilotl.app/Contents/MacOS/Equilotl";
-const INSTALLER_APP_DARWIN = "Equilotl.app";
 
 const BASE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FILE_DIR = join(BASE_DIR, "dist", "Installer");
@@ -109,8 +108,6 @@ async function ensureBinary() {
 
     return outputFile;
 }
-
-
 
 const installerBin = await ensureBinary();
 

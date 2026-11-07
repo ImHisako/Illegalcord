@@ -6,14 +6,26 @@
     --vc-mutual-scanner-danger-soft: rgb(237 66 69 / 14%);
     --vc-mutual-scanner-border: color-mix(in oklab, var(--border-subtle) 82%, #000 18%);
     --vc-mutual-scanner-surface: color-mix(in oklab, var(--background-secondary) 92%, #000 8%);
-    --vc-mutual-scanner-surface-alt: color-mix(in oklab, var(--background-secondary) 82%, #0c1016 18%);
+    --vc-mutual-scanner-surface-alt: color-mix(
+        in oklab,
+        var(--background-secondary) 82%,
+        #0c1016 18%
+    );
     --vc-mutual-scanner-shell: linear-gradient(
         180deg,
         color-mix(in oklab, var(--background-secondary) 76%, #7d8798 24%),
         color-mix(in oklab, var(--background-primary) 42%, var(--background-secondary) 58%)
     );
-    --vc-mutual-scanner-shell-panel: color-mix(in oklab, var(--background-secondary) 86%, #9aa4b3 14%);
-    --vc-mutual-scanner-card-surface: color-mix(in oklab, var(--background-primary) 52%, var(--background-secondary) 48%);
+    --vc-mutual-scanner-shell-panel: color-mix(
+        in oklab,
+        var(--background-secondary) 86%,
+        #9aa4b3 14%
+    );
+    --vc-mutual-scanner-card-surface: color-mix(
+        in oklab,
+        var(--background-primary) 52%,
+        var(--background-secondary) 48%
+    );
 }
 
 .vc-mutual-scanner-shell {
@@ -161,7 +173,9 @@
     position: relative;
     overflow: hidden;
     background: var(--vc-mutual-scanner-shell);
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%), 0 18px 40px rgb(0 0 0 / 16%);
+    box-shadow:
+        inset 0 1px 0 rgb(255 255 255 / 4%),
+        0 18px 40px rgb(0 0 0 / 16%);
 }
 
 .vc-mutual-scanner-filter-surface {
@@ -226,7 +240,10 @@
     border-radius: 8px;
     background: color-mix(in oklab, var(--background-primary) 64%, var(--background-secondary) 36%);
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
-    transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+    transition:
+        border-color 180ms ease,
+        background-color 180ms ease,
+        box-shadow 180ms ease;
     margin-bottom: 16px;
 }
 
@@ -281,7 +298,11 @@
 }
 
 .vc-mutual-scanner-search-shell:focus-within {
-    border-color: color-mix(in oklab, var(--vc-mutual-scanner-accent) 34%, var(--vc-mutual-scanner-border) 66%);
+    border-color: color-mix(
+        in oklab,
+        var(--vc-mutual-scanner-accent) 34%,
+        var(--vc-mutual-scanner-border) 66%
+    );
     background: color-mix(in oklab, var(--background-primary) 56%, var(--background-secondary) 44%);
     box-shadow: 0 0 0 1px rgb(244 189 106 / 14%);
 }
@@ -314,7 +335,11 @@
     padding: 0 12px;
     border: 1px solid var(--vc-mutual-scanner-border);
     border-radius: 8px;
-    background: color-mix(in oklab, var(--background-primary) 58%, var(--background-secondary) 42%) !important;
+    background: color-mix(
+        in oklab,
+        var(--background-primary) 58%,
+        var(--background-secondary) 42%
+    ) !important;
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
     appearance: textfield;
 }
@@ -379,7 +404,9 @@
     font-size: 0.9rem;
     font-weight: 700;
     letter-spacing: 0.015em;
-    box-shadow: 0 10px 24px rgb(7 18 11 / 24%), inset 0 1px 0 rgb(255 255 255 / 8%);
+    box-shadow:
+        0 10px 24px rgb(7 18 11 / 24%),
+        inset 0 1px 0 rgb(255 255 255 / 8%);
 }
 
 .vc-mutual-scanner-primary-action:hover {
@@ -714,7 +741,10 @@
 .vc-mutual-scanner-guild-card {
     align-items: center;
     box-shadow: 0 10px 22px rgb(0 0 0 / 10%);
-    transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+    transition:
+        border-color 160ms ease,
+        transform 160ms ease,
+        box-shadow 160ms ease;
 }
 
 .vc-mutual-scanner-guild-card:hover,
@@ -793,7 +823,10 @@
     flex-direction: column;
     gap: 12px;
     box-shadow: 0 10px 22px rgb(0 0 0 / 10%);
-    transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+    transition:
+        border-color 160ms ease,
+        transform 160ms ease,
+        box-shadow 160ms ease;
 }
 
 .vc-mutual-scanner-match-context {
@@ -1188,25 +1221,37 @@
         justify-content: flex-start;
     }
 
-    .vc-mutual-scanner-history-panel .vc-mutual-scanner-match-card-compact .vc-mutual-scanner-avatar {
+    .vc-mutual-scanner-history-panel
+        .vc-mutual-scanner-match-card-compact
+        .vc-mutual-scanner-avatar {
         width: 24px;
         height: 24px;
         border-radius: 7px;
         flex-basis: 24px;
     }
 
-    .vc-mutual-scanner-history-panel .vc-mutual-scanner-match-card-compact .vc-mutual-scanner-match-profile-trigger,
-    .vc-mutual-scanner-history-panel .vc-mutual-scanner-match-card-compact .vc-mutual-scanner-match-identity {
+    .vc-mutual-scanner-history-panel
+        .vc-mutual-scanner-match-card-compact
+        .vc-mutual-scanner-match-profile-trigger,
+    .vc-mutual-scanner-history-panel
+        .vc-mutual-scanner-match-card-compact
+        .vc-mutual-scanner-match-identity {
         gap: 6px;
     }
 
-    .vc-mutual-scanner-history-panel .vc-mutual-scanner-match-card-compact .vc-mutual-scanner-match-label {
+    .vc-mutual-scanner-history-panel
+        .vc-mutual-scanner-match-card-compact
+        .vc-mutual-scanner-match-label {
         font-size: 0.8rem;
         line-height: 1.05;
     }
 
-    .vc-mutual-scanner-history-panel .vc-mutual-scanner-match-card-compact .vc-mutual-scanner-match-context,
-    .vc-mutual-scanner-history-panel .vc-mutual-scanner-match-card-compact .vc-mutual-scanner-muted-copy {
+    .vc-mutual-scanner-history-panel
+        .vc-mutual-scanner-match-card-compact
+        .vc-mutual-scanner-match-context,
+    .vc-mutual-scanner-history-panel
+        .vc-mutual-scanner-match-card-compact
+        .vc-mutual-scanner-muted-copy {
         font-size: 0.68rem;
         line-height: 1.1;
     }

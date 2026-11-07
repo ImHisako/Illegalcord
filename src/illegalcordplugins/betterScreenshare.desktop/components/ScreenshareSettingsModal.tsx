@@ -111,7 +111,6 @@ export const ScreenshareSettingsModal = (props: ScreenshareSettingsModalProps) =
 
     const {
         currentProfile,
-        profiles,
         simpleMode,
         setVideoBitrateEnabled,
         setVideoCodec,
@@ -124,19 +123,11 @@ export const ScreenshareSettingsModal = (props: ScreenshareSettingsModalProps) =
         setResolutionEnabled,
         setVideoBitrate,
         setWidth,
-        setCurrentProfile,
-        getProfile,
-        saveProfile,
         setHdrEnabled,
-        setSimpleMode,
-        deleteProfile,
-        duplicateProfile,
-        getCurrentProfile,
-        getProfiles
+        setSimpleMode
     } = screenshareStore.use();
 
     const {
-        name,
         framerate,
         framerateEnabled,
         height,

@@ -17,7 +17,8 @@
 .vc-client-diagnostics-surface-list,
 .vc-client-diagnostics-snippet-code {
     scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thin-thumb, var(--interactive-muted)) var(--scrollbar-thin-track, transparent);
+    scrollbar-color: var(--scrollbar-thin-thumb, var(--interactive-muted))
+        var(--scrollbar-thin-track, transparent);
 }
 
 .vc-client-diagnostics-health-history {
@@ -84,7 +85,9 @@
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
     background: var(--background-secondary);
-    transition: border-color 120ms ease, background-color 120ms ease;
+    transition:
+        border-color 120ms ease,
+        background-color 120ms ease;
 }
 
 .vc-client-diagnostics-metric:hover {
@@ -102,7 +105,10 @@
 .vc-client-diagnostics-row {
     display: grid;
     min-width: 1040px;
-    grid-template-columns: minmax(190px, 1.4fr) 72px 82px 78px 70px 96px 92px 86px minmax(150px, 1fr) 74px;
+    grid-template-columns: minmax(190px, 1.4fr) 72px 82px 78px 70px 96px 92px 86px minmax(
+            150px,
+            1fr
+        ) 74px;
     align-items: center;
     gap: 10px;
     padding: 9px 12px;
@@ -265,7 +271,9 @@
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
     background: var(--background-primary);
-    transition: border-color 120ms ease, background-color 120ms ease;
+    transition:
+        border-color 120ms ease,
+        background-color 120ms ease;
 }
 
 .vc-client-diagnostics-monitor-result:hover {
@@ -302,7 +310,9 @@
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
     background: var(--background-secondary);
-    transition: border-color 120ms ease, background-color 120ms ease;
+    transition:
+        border-color 120ms ease,
+        background-color 120ms ease;
 }
 
 .vc-client-diagnostics-selected {

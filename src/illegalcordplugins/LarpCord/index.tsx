@@ -1942,7 +1942,7 @@ export default definePlugin({
                 _avatarDecorationOrig = origDeco;
                 decoMod.getAvatarDecorationURL = (opts: any) => {
                     try {
-                        const { avatarDecoration, userId, canAnimate } = opts ?? {};
+                        const { avatarDecoration, userId } = opts ?? {};
 
                         if (isEnabled && storedData.decorationAsset) {
                             const storedAsset = getString(storedData.decorationAsset);

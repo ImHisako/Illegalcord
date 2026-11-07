@@ -14,7 +14,10 @@
     --si-border: color-mix(in srgb, var(--si-text) 12%, var(--si-panel));
     --si-border-strong: color-mix(in srgb, var(--si-text) 22%, var(--si-panel));
     --si-surface: var(--si-base);
-    --si-surface-raised: var(--background-base-lower, var(--background-secondary-alt, var(--si-panel)));
+    --si-surface-raised: var(
+        --background-base-lower,
+        var(--background-secondary-alt, var(--si-panel))
+    );
     --si-shadow: 0 10px 28px color-mix(in srgb, var(--black-500, #000) 20%, transparent);
 
     box-sizing: border-box;
@@ -40,7 +43,11 @@
     border: 1px solid color-mix(in srgb, var(--status-warning) 76%, var(--si-line));
     border-radius: 12px;
     background:
-        linear-gradient(110deg, color-mix(in srgb, var(--status-warning) 13%, transparent), transparent 65%),
+        linear-gradient(
+            110deg,
+            color-mix(in srgb, var(--status-warning) 13%, transparent),
+            transparent 65%
+        ),
         var(--si-surface);
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--si-text) 10%, transparent);
 }
@@ -103,7 +110,7 @@
 
 .vc-stereo-installer-select-row {
     display: grid;
-    grid-template-columns: minmax(170px, .42fr) minmax(220px, 1fr);
+    grid-template-columns: minmax(170px, 0.42fr) minmax(220px, 1fr);
     gap: 16px;
     align-items: center;
     min-width: 0;
@@ -193,7 +200,7 @@
 
 .vc-stereo-installer-info-line {
     display: grid;
-    grid-template-columns: minmax(120px, .28fr) minmax(0, 1fr);
+    grid-template-columns: minmax(120px, 0.28fr) minmax(0, 1fr);
     gap: 16px;
     align-items: start;
     padding: 9px 0;

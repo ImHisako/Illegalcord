@@ -152,7 +152,7 @@ test("Blocks external main frame navigation and redirects while allowing Discord
 test("Security switches work independently without identity spoofing or a proxy", async () => {
     for (const [navigation, webviews] of [[true, false], [false, true], [false, false]]) {
         const { sender, configure, blocked } = await fixture();
-        const agent = sender.agent;
+        const { agent } = sender;
         assert.equal(await configure(navigation, webviews), navigation || webviews);
         assert.equal(blocked("will-navigate", "https://attacker.test"), navigation);
         assert.equal(blocked("will-attach-webview"), webviews);
@@ -197,7 +197,7 @@ test("Destroying the window releases native listeners", async () => {
 
 test("A native setup failure rolls back listeners and identity without exposing its error", async () => {
     const { native, event, sender } = await fixture();
-    const agent = sender.agent;
+    const { agent } = sender;
     sender.session.setProxy = async () => { throw new Error("Private native path"); };
     assert.equal(await native.configure(event, true, false, false, false, true, "127.0.0.1:8080", "", true, true), false);
     assert.equal(sender.agent, agent);

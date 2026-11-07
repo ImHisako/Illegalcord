@@ -7,6 +7,7 @@
 import { Settings } from "@api/Settings";
 import { reporterData } from "@debug/reporterData";
 import { traceFunctionWithResults } from "@debug/Tracer";
+import { makeLazy } from "@utils/lazy";
 import { Logger } from "@utils/Logger";
 import { interpolateIfDefined } from "@utils/misc";
 import { Patch, PatchReplacement } from "@utils/types";
@@ -25,6 +26,10 @@ export const SYM_PATCHED_BY = Symbol("WebpackPatcher.patchedBy");
 export const allWebpackInstances = new Set<AnyWebpackRequire>();
 
 export const patchTimings = [] as Array<[plugin: string, moduleId: PropertyKey, match: PatchReplacement["match"], totalTime: number]>;
+
+export const getBuildNumber = makeLazy(() => {
+    return Number(window.GLOBAL_ENV?.BUILD_NUMBER ?? -1);
+});
 
 export function getFactoryPatchedSource(moduleId: PropertyKey, webpackRequire = wreq as AnyWebpackRequire) {
     return webpackRequire.m[moduleId]?.[SYM_PATCHED_SOURCE];
@@ -492,7 +497,7 @@ function patchFactory(moduleId: PropertyKey, originalFactory: AnyModuleFactory):
     for (let i = 0; i < patches.length; i++) {
         const patch = patches[i];
 
-        const buildNumber = window.GLOBAL_ENV.BUILD_NUMBER || -1;
+        const buildNumber = getBuildNumber();
         const shouldCheckBuildNumber = buildNumber !== -1;
 
         if (

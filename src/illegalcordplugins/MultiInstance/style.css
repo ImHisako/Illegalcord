@@ -15,7 +15,10 @@
     --mi-border: color-mix(in srgb, var(--mi-text) 12%, var(--mi-panel));
     --mi-border-strong: color-mix(in srgb, var(--mi-text) 22%, var(--mi-panel));
     --mi-surface: var(--mi-base);
-    --mi-surface-raised: var(--background-base-lower, var(--background-secondary-alt, var(--mi-panel)));
+    --mi-surface-raised: var(
+        --background-base-lower,
+        var(--background-secondary-alt, var(--mi-panel))
+    );
     --mi-shadow: 0 12px 32px color-mix(in srgb, var(--black-500, #000) 22%, transparent);
 
     position: relative;
@@ -51,7 +54,11 @@
     border: 1px solid var(--mi-border-strong);
     border-radius: 16px;
     background:
-        radial-gradient(circle at 88% 0%, color-mix(in srgb, var(--mi-accent) 24%, transparent), transparent 45%),
+        radial-gradient(
+            circle at 88% 0%,
+            color-mix(in srgb, var(--mi-accent) 24%, transparent),
+            transparent 45%
+        ),
         linear-gradient(135deg, var(--mi-surface-raised), var(--mi-panel));
     box-shadow:
         var(--mi-shadow),
@@ -111,7 +118,7 @@
     color: var(--mi-accent);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: .07em;
+    letter-spacing: 0.07em;
     line-height: 15px;
     text-transform: uppercase;
 }
@@ -180,12 +187,19 @@
     border: 1px solid var(--mi-border-strong);
     border-radius: 14px;
     background:
-        linear-gradient(115deg, color-mix(in srgb, var(--mi-accent) 8%, transparent), transparent 52%),
+        linear-gradient(
+            115deg,
+            color-mix(in srgb, var(--mi-accent) 8%, transparent),
+            transparent 52%
+        ),
         var(--mi-surface);
     box-shadow:
         0 4px 14px color-mix(in srgb, var(--black-500, #000) 15%, transparent),
         inset 0 1px 0 color-mix(in srgb, var(--mi-text) 9%, transparent);
-    transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+    transition:
+        border-color 0.16s ease,
+        box-shadow 0.16s ease,
+        background 0.16s ease;
 }
 
 .vc-multi-instance-mode-card::after {
@@ -194,13 +208,17 @@
     width: 3px;
     background: var(--mi-accent);
     content: "";
-    opacity: .8;
+    opacity: 0.8;
 }
 
 .vc-multi-instance-mode-card:hover {
     border-color: color-mix(in srgb, var(--mi-accent) 78%, var(--mi-line));
     background:
-        linear-gradient(115deg, color-mix(in srgb, var(--mi-accent) 13%, transparent), transparent 58%),
+        linear-gradient(
+            115deg,
+            color-mix(in srgb, var(--mi-accent) 13%, transparent),
+            transparent 58%
+        ),
         var(--mi-surface-raised);
     box-shadow: 0 7px 20px color-mix(in srgb, var(--black-500, #000) 16%, transparent);
 }
@@ -301,19 +319,30 @@
     border: 1px solid var(--mi-border-strong);
     border-radius: 13px;
     background:
-        linear-gradient(110deg, color-mix(in srgb, var(--mi-accent) 4%, transparent), transparent 46%),
+        linear-gradient(
+            110deg,
+            color-mix(in srgb, var(--mi-accent) 4%, transparent),
+            transparent 46%
+        ),
         var(--mi-surface);
     box-shadow:
         0 4px 14px color-mix(in srgb, var(--black-500, #000) 14%, transparent),
         inset 0 1px 0 color-mix(in srgb, var(--mi-text) 8%, transparent);
     cursor: context-menu;
-    transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+    transition:
+        border-color 0.16s ease,
+        box-shadow 0.16s ease,
+        background 0.16s ease;
 }
 
 .vc-multi-instance-row:hover {
     border-color: var(--mi-border-strong);
     background:
-        linear-gradient(110deg, color-mix(in srgb, var(--mi-accent) 9%, transparent), transparent 54%),
+        linear-gradient(
+            110deg,
+            color-mix(in srgb, var(--mi-accent) 9%, transparent),
+            transparent 54%
+        ),
         var(--mi-surface-raised);
     box-shadow: 0 7px 18px color-mix(in srgb, var(--black-500, #000) 14%, transparent);
 }
@@ -321,7 +350,11 @@
 .vc-multi-instance-row-open {
     border-color: color-mix(in srgb, var(--mi-accent) 82%, var(--mi-line));
     background:
-        linear-gradient(110deg, color-mix(in srgb, var(--mi-accent) 13%, transparent), transparent 58%),
+        linear-gradient(
+            110deg,
+            color-mix(in srgb, var(--mi-accent) 13%, transparent),
+            transparent 58%
+        ),
         var(--mi-surface-raised);
     box-shadow:
         inset 4px 0 0 var(--mi-accent),
@@ -360,7 +393,11 @@
     border-radius: 50%;
     color: var(--mi-text);
     background:
-        radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--mi-accent) 32%, transparent), transparent 55%),
+        radial-gradient(
+            circle at 30% 20%,
+            color-mix(in srgb, var(--mi-accent) 32%, transparent),
+            transparent 55%
+        ),
         var(--mi-surface-raised);
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mi-text) 13%, transparent);
 }
@@ -455,7 +492,11 @@
     border: 1px dashed color-mix(in srgb, var(--mi-accent) 76%, var(--mi-line));
     border-radius: 14px;
     background:
-        linear-gradient(115deg, color-mix(in srgb, var(--mi-accent) 10%, transparent), transparent 60%),
+        linear-gradient(
+            115deg,
+            color-mix(in srgb, var(--mi-accent) 10%, transparent),
+            transparent 60%
+        ),
         var(--mi-surface);
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mi-text) 10%, transparent);
 }

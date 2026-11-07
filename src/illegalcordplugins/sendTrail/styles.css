@@ -12,7 +12,11 @@
         color-mix(in oklab, var(--background-primary) 42%, var(--background-secondary) 58%)
     );
     --vc-send-trail-shell-panel: color-mix(in oklab, var(--background-secondary) 86%, #9aa4b3 14%);
-    --vc-send-trail-record-surface: color-mix(in oklab, var(--background-primary) 52%, var(--background-secondary) 48%);
+    --vc-send-trail-record-surface: color-mix(
+        in oklab,
+        var(--background-primary) 52%,
+        var(--background-secondary) 48%
+    );
 }
 
 .vc-send-trail-hero-metrics,
@@ -105,7 +109,9 @@
     position: relative;
     overflow: hidden;
     background: var(--vc-send-trail-shell);
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%), 0 18px 40px rgb(0 0 0 / 16%);
+    box-shadow:
+        inset 0 1px 0 rgb(255 255 255 / 4%),
+        0 18px 40px rgb(0 0 0 / 16%);
 }
 
 .vc-send-trail-history-shell-header {
@@ -198,7 +204,10 @@
 
 .vc-send-trail-history-chip-button {
     cursor: pointer;
-    transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+    transition:
+        border-color 160ms ease,
+        background-color 160ms ease,
+        transform 160ms ease;
 }
 
 .vc-send-trail-history-chip-button:hover {
@@ -253,7 +262,9 @@
     min-height: 36px;
     padding-inline: 10px;
     justify-content: center;
-    box-shadow: 0 10px 22px rgb(237 66 69 / 18%), inset 0 1px 0 rgb(255 255 255 / 6%);
+    box-shadow:
+        0 10px 22px rgb(237 66 69 / 18%),
+        inset 0 1px 0 rgb(255 255 255 / 6%);
 }
 
 .vc-send-trail-action-icon-button {
@@ -339,11 +350,18 @@
     border-radius: 8px;
     background: color-mix(in oklab, var(--background-primary) 64%, var(--background-secondary) 36%);
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
-    transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+    transition:
+        border-color 180ms ease,
+        background-color 180ms ease,
+        box-shadow 180ms ease;
 }
 
 .vc-send-trail-search-shell:focus-within {
-    border-color: color-mix(in oklab, var(--vc-send-trail-accent) 34%, var(--vc-send-trail-border) 66%);
+    border-color: color-mix(
+        in oklab,
+        var(--vc-send-trail-accent) 34%,
+        var(--vc-send-trail-border) 66%
+    );
     background: color-mix(in oklab, var(--background-primary) 56%, var(--background-secondary) 44%);
     box-shadow: 0 0 0 1px rgb(244 189 106 / 14%);
 }
@@ -476,7 +494,10 @@
     border-radius: 6px;
     background: transparent;
     color: var(--interactive-normal);
-    transition: background-color 160ms ease, color 160ms ease, opacity 160ms ease;
+    transition:
+        background-color 160ms ease,
+        color 160ms ease,
+        opacity 160ms ease;
 }
 
 .vc-send-trail-pagination-nav-button:hover:not(:disabled) {
@@ -737,7 +758,10 @@
     gap: 12px;
     background: var(--vc-send-trail-record-surface);
     box-shadow: 0 10px 22px rgb(0 0 0 / 10%);
-    transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+    transition:
+        border-color 160ms ease,
+        transform 160ms ease,
+        box-shadow 160ms ease;
     cursor: pointer;
 }
 

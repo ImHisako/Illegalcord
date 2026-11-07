@@ -21,8 +21,13 @@
     pointer-events: auto;
     isolation: isolate;
     transform: translateX(-50%);
-    animation: vc-illegalcord-dynamic-island-arrive 700ms cubic-bezier(.16, 1, .3, 1);
-    transition: width 560ms cubic-bezier(.16, 1, .3, 1), border-radius 480ms cubic-bezier(.16, 1, .3, 1), box-shadow 400ms ease, transform 400ms cubic-bezier(.16, 1, .3, 1), background-color 300ms ease;
+    animation: vc-illegalcord-dynamic-island-arrive 700ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition:
+        width 560ms cubic-bezier(0.16, 1, 0.3, 1),
+        border-radius 480ms cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 400ms ease,
+        transform 400ms cubic-bezier(0.16, 1, 0.3, 1),
+        background-color 300ms ease;
     app-region: no-drag;
     -webkit-app-region: no-drag;
 }
@@ -41,7 +46,13 @@
 
 .vc-illegalcord-dynamic-island-root::before {
     inset: -160% -60%;
-    background: conic-gradient(from 0deg, transparent 0 36%, color-mix(in srgb, var(--brand-500) 42%, transparent) 45%, color-mix(in srgb, var(--green-360) 35%, transparent) 52%, transparent 61% 100%);
+    background: conic-gradient(
+        from 0deg,
+        transparent 0 36%,
+        color-mix(in srgb, var(--brand-500) 42%, transparent) 45%,
+        color-mix(in srgb, var(--green-360) 35%, transparent) 52%,
+        transparent 61% 100%
+    );
     opacity: 0;
     transform: rotate(0deg);
     transition: opacity 500ms ease;
@@ -49,7 +60,12 @@
 
 .vc-illegalcord-dynamic-island-root::after {
     inset: 0;
-    background: linear-gradient(105deg, transparent 18%, rgb(255 255 255 / 12%) 42%, transparent 62%);
+    background: linear-gradient(
+        105deg,
+        transparent 18%,
+        rgb(255 255 255 / 12%) 42%,
+        transparent 62%
+    );
     opacity: 0;
     transform: translateX(-110%);
 }
@@ -127,7 +143,9 @@
 .vc-illegalcord-dynamic-island-root:hover,
 .vc-illegalcord-dynamic-island-root:focus-visible,
 .vc-illegalcord-dynamic-island-root-expanded {
-    box-shadow: var(--shadow-high), 0 0 0 1px var(--border-strong);
+    box-shadow:
+        var(--shadow-high),
+        0 0 0 1px var(--border-strong);
 }
 
 .vc-illegalcord-dynamic-island-root:hover {
@@ -135,11 +153,11 @@
 }
 
 .vc-illegalcord-dynamic-island-root:hover::after {
-    animation: vc-illegalcord-dynamic-island-shine 900ms cubic-bezier(.16, 1, .3, 1);
+    animation: vc-illegalcord-dynamic-island-shine 900ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .vc-illegalcord-dynamic-island-root:active {
-    transform: translateX(-50%) scale(.992);
+    transform: translateX(-50%) scale(0.992);
     transition-duration: 120ms;
 }
 
@@ -157,17 +175,23 @@
     width: min(420px, calc(100vw - 360px));
     border-color: color-mix(in srgb, var(--brand-500) 65%, var(--border-subtle));
     border-radius: 18px;
-    box-shadow: var(--shadow-high), 0 0 28px color-mix(in srgb, var(--brand-500) 28%, transparent);
-    animation: vc-illegalcord-dynamic-island-arrive 700ms cubic-bezier(.16, 1, .3, 1), vc-illegalcord-dynamic-island-notification-expire 1ms 5s forwards;
+    box-shadow:
+        var(--shadow-high),
+        0 0 28px color-mix(in srgb, var(--brand-500) 28%, transparent);
+    animation:
+        vc-illegalcord-dynamic-island-arrive 700ms cubic-bezier(0.16, 1, 0.3, 1),
+        vc-illegalcord-dynamic-island-notification-expire 1ms 5s forwards;
 }
 
 .vc-illegalcord-dynamic-island-root-sharing {
     border-color: color-mix(in srgb, var(--brand-500) 55%, var(--border-subtle));
-    box-shadow: var(--shadow-high), 0 0 24px color-mix(in srgb, var(--brand-500) 18%, transparent);
+    box-shadow:
+        var(--shadow-high),
+        0 0 24px color-mix(in srgb, var(--brand-500) 18%, transparent);
 }
 
 .vc-illegalcord-dynamic-island-root-expanded::before {
-    opacity: .55;
+    opacity: 0.55;
     animation: vc-illegalcord-dynamic-island-aurora 8s linear infinite;
 }
 
@@ -180,7 +204,9 @@
     cursor: grab;
     touch-action: pan-y;
     user-select: none;
-    transition: height 450ms cubic-bezier(.16, 1, .3, 1), padding 450ms cubic-bezier(.16, 1, .3, 1);
+    transition:
+        height 450ms cubic-bezier(0.16, 1, 0.3, 1),
+        padding 450ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .vc-illegalcord-dynamic-island-summary:active {
@@ -214,19 +240,25 @@
     height: 34px;
     border: 2px solid color-mix(in srgb, var(--brand-500) 70%, white);
     box-shadow: 0 0 16px color-mix(in srgb, var(--brand-500) 42%, transparent);
-    animation: vc-illegalcord-dynamic-island-notification-avatar 700ms cubic-bezier(.16, 1, .3, 1), vc-illegalcord-dynamic-island-notification-avatar-expire 1ms 5s forwards;
+    animation:
+        vc-illegalcord-dynamic-island-notification-avatar 700ms cubic-bezier(0.16, 1, 0.3, 1),
+        vc-illegalcord-dynamic-island-notification-avatar-expire 1ms 5s forwards;
 }
 
 .vc-illegalcord-dynamic-island-summary-cover {
     width: 32px;
     height: 32px;
-    animation: vc-illegalcord-dynamic-island-art-enter 650ms cubic-bezier(.16, 1, .3, 1);
+    animation: vc-illegalcord-dynamic-island-art-enter 650ms cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: 0 4px 12px rgb(0 0 0 / 24%);
-    transition: border-radius 450ms cubic-bezier(.16, 1, .3, 1), transform 450ms cubic-bezier(.16, 1, .3, 1);
+    transition:
+        border-radius 450ms cubic-bezier(0.16, 1, 0.3, 1),
+        transform 450ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .vc-illegalcord-dynamic-island-root-playing .vc-illegalcord-dynamic-island-summary-cover {
-    animation: vc-illegalcord-dynamic-island-art-enter 650ms cubic-bezier(.16, 1, .3, 1), vc-illegalcord-dynamic-island-art-float 4s 650ms ease-in-out infinite;
+    animation:
+        vc-illegalcord-dynamic-island-art-enter 650ms cubic-bezier(0.16, 1, 0.3, 1),
+        vc-illegalcord-dynamic-island-art-float 4s 650ms ease-in-out infinite;
 }
 
 .vc-illegalcord-dynamic-island-root-expanded .vc-illegalcord-dynamic-island-summary-cover {
@@ -266,7 +298,7 @@
 }
 
 .vc-illegalcord-dynamic-island-summary-copy {
-    animation: vc-illegalcord-dynamic-island-copy-enter 500ms cubic-bezier(.16, 1, .3, 1);
+    animation: vc-illegalcord-dynamic-island-copy-enter 500ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .vc-illegalcord-dynamic-island-summary-copy strong,
@@ -357,8 +389,11 @@
     height: 4px;
     background: var(--text-muted);
     border-radius: 50%;
-    opacity: .45;
-    transition: width 350ms cubic-bezier(.16, 1, .3, 1), background-color 250ms ease, opacity 250ms ease;
+    opacity: 0.45;
+    transition:
+        width 350ms cubic-bezier(0.16, 1, 0.3, 1),
+        background-color 250ms ease,
+        opacity 250ms ease;
 }
 
 .vc-illegalcord-dynamic-island-page-active {
@@ -368,7 +403,9 @@
     opacity: 1;
 }
 
-.vc-illegalcord-dynamic-island-root:not(.vc-illegalcord-dynamic-island-root-playing) .vc-illegalcord-dynamic-island-visualizer span {
+.vc-illegalcord-dynamic-island-root:not(.vc-illegalcord-dynamic-island-root-playing)
+    .vc-illegalcord-dynamic-island-visualizer
+    span {
     animation-play-state: paused;
 }
 
@@ -377,9 +414,13 @@
     grid-template-rows: 0fr;
     opacity: 0;
     visibility: hidden;
-    transform: translateY(-8px) scale(.975);
+    transform: translateY(-8px) scale(0.975);
     transform-origin: top center;
-    transition: grid-template-rows 560ms cubic-bezier(.16, 1, .3, 1), opacity 260ms ease, transform 560ms cubic-bezier(.16, 1, .3, 1), visibility 0s linear 560ms;
+    transition:
+        grid-template-rows 560ms cubic-bezier(0.16, 1, 0.3, 1),
+        opacity 260ms ease,
+        transform 560ms cubic-bezier(0.16, 1, 0.3, 1),
+        visibility 0s linear 560ms;
 }
 
 .vc-illegalcord-dynamic-island-root-expanded .vc-illegalcord-dynamic-island-panel-shell {
@@ -387,7 +428,11 @@
     opacity: 1;
     visibility: visible;
     transform: translateY(0) scale(1);
-    transition: grid-template-rows 620ms cubic-bezier(.16, 1, .3, 1), opacity 350ms 80ms ease, transform 620ms cubic-bezier(.16, 1, .3, 1), visibility 0s;
+    transition:
+        grid-template-rows 620ms cubic-bezier(0.16, 1, 0.3, 1),
+        opacity 350ms 80ms ease,
+        transform 620ms cubic-bezier(0.16, 1, 0.3, 1),
+        visibility 0s;
 }
 
 .vc-illegalcord-dynamic-island-panel-clip {
@@ -413,14 +458,22 @@
     border-radius: 14px;
     box-shadow: inset 0 1px rgb(255 255 255 / 5%);
     opacity: 0;
-    transform: translateY(-10px) scale(.96);
-    transition: background-color 250ms ease, box-shadow 250ms ease, opacity 250ms ease, transform 250ms ease;
+    transform: translateY(-10px) scale(0.96);
+    transition:
+        background-color 250ms ease,
+        box-shadow 250ms ease,
+        opacity 250ms ease,
+        transform 250ms ease;
 }
 
 .vc-illegalcord-dynamic-island-root-expanded .vc-illegalcord-dynamic-island-section {
     opacity: 1;
     transform: translateY(0) scale(1);
-    transition: background-color 250ms ease, box-shadow 250ms ease, opacity 420ms 120ms ease, transform 600ms 80ms cubic-bezier(.16, 1, .3, 1);
+    transition:
+        background-color 250ms ease,
+        box-shadow 250ms ease,
+        opacity 420ms 120ms ease,
+        transform 600ms 80ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .vc-illegalcord-dynamic-island-root-expanded .vc-illegalcord-dynamic-island-section:nth-child(2) {
@@ -433,7 +486,9 @@
 
 .vc-illegalcord-dynamic-island-section:hover {
     background: var(--background-mod-strong);
-    box-shadow: inset 0 1px rgb(255 255 255 / 8%), 0 8px 24px rgb(0 0 0 / 12%);
+    box-shadow:
+        inset 0 1px rgb(255 255 255 / 8%),
+        0 8px 24px rgb(0 0 0 / 12%);
 }
 
 .vc-illegalcord-dynamic-island-section-info {
@@ -458,7 +513,11 @@
     color: var(--interactive-normal);
     background: var(--background-mod-strong);
     border-radius: 50%;
-    transition: color 200ms ease, background-color 200ms ease, box-shadow 250ms ease, transform 400ms cubic-bezier(.16, 1, .3, 1);
+    transition:
+        color 200ms ease,
+        background-color 200ms ease,
+        box-shadow 250ms ease,
+        transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .vc-illegalcord-dynamic-island-control-compact {
@@ -477,7 +536,7 @@
 }
 
 .vc-illegalcord-dynamic-island-control:active {
-    transform: scale(.86);
+    transform: scale(0.86);
     transition-duration: 100ms;
 }
 
@@ -510,10 +569,14 @@
     height: 22px;
     background: currentcolor;
     border-radius: 3px;
-    box-shadow: 0 0 0 1.5px var(--background-mod-strong), 0 0 8px currentcolor;
+    box-shadow:
+        0 0 0 1.5px var(--background-mod-strong),
+        0 0 8px currentcolor;
     opacity: 0;
     transform: rotate(45deg) scaleY(0);
-    transition: opacity 160ms ease, transform 500ms cubic-bezier(.34, 1.56, .64, 1);
+    transition:
+        opacity 160ms ease,
+        transform 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .vc-illegalcord-dynamic-island-voice-icon-slashed .vc-illegalcord-dynamic-island-slash {
@@ -568,7 +631,9 @@
     color: var(--brand-500);
     background: color-mix(in srgb, var(--brand-500) 18%, var(--background-mod-strong));
     border-radius: 12px;
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-500) 30%, transparent), 0 0 18px color-mix(in srgb, var(--brand-500) 16%, transparent);
+    box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--brand-500) 30%, transparent),
+        0 0 18px color-mix(in srgb, var(--brand-500) 16%, transparent);
     place-items: center;
 }
 
@@ -591,7 +656,7 @@
 @keyframes vc-illegalcord-dynamic-island-arrive {
     from {
         opacity: 0;
-        transform: translateX(-50%) translateY(-18px) scale(.86);
+        transform: translateX(-50%) translateY(-18px) scale(0.86);
     }
 }
 
@@ -612,18 +677,22 @@
 }
 
 @keyframes vc-illegalcord-dynamic-island-aurora {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 @keyframes vc-illegalcord-dynamic-island-art-enter {
     from {
         opacity: 0;
-        transform: scale(.5) rotate(-18deg);
+        transform: scale(0.5) rotate(-18deg);
     }
 }
 
 @keyframes vc-illegalcord-dynamic-island-art-float {
-    50% { transform: translateY(-1px) rotate(2deg) scale(1.04); }
+    50% {
+        transform: translateY(-1px) rotate(2deg) scale(1.04);
+    }
 }
 
 @keyframes vc-illegalcord-dynamic-island-copy-enter {
@@ -645,18 +714,20 @@
 @keyframes vc-illegalcord-dynamic-island-live {
     50% {
         box-shadow: 0 0 14px var(--green-360);
-        transform: scale(.72);
+        transform: scale(0.72);
     }
 }
 
 @keyframes vc-illegalcord-dynamic-island-equalize {
-    to { height: 14px; }
+    to {
+        height: 14px;
+    }
 }
 
 @keyframes vc-illegalcord-dynamic-island-call-wave {
     from {
-        opacity: .8;
-        transform: scale(.3);
+        opacity: 0.8;
+        transform: scale(0.3);
     }
 
     to {
@@ -668,10 +739,12 @@
 @keyframes vc-illegalcord-dynamic-island-notification-avatar {
     0% {
         opacity: 0;
-        transform: scale(.3) rotate(-20deg);
+        transform: scale(0.3) rotate(-20deg);
     }
 
-    60% { transform: scale(1.12) rotate(3deg); }
+    60% {
+        transform: scale(1.12) rotate(3deg);
+    }
 }
 
 @keyframes vc-illegalcord-dynamic-island-notification-avatar-expire {
@@ -683,11 +756,15 @@
 }
 
 @keyframes vc-illegalcord-dynamic-island-notification-expire {
-    100% { display: none; }
+    100% {
+        display: none;
+    }
 }
 
 @keyframes vc-illegalcord-dynamic-island-notification-progress {
-    to { transform: scaleX(0); }
+    to {
+        transform: scaleX(0);
+    }
 }
 
 @keyframes vc-illegalcord-dynamic-island-stream-icon {
@@ -698,8 +775,9 @@
 }
 
 @keyframes vc-illegalcord-dynamic-island-stream-scan {
-    0%, 100% {
-        opacity: .2;
+    0%,
+    100% {
+        opacity: 0.2;
         transform: translateY(-12px);
     }
 

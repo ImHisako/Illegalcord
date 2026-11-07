@@ -72,7 +72,6 @@ class BlazingOpossumCipher {
 
         // Use prime-derived constants for key expansion
         const PRIME_MUL = 0x9E3779B9; // Golden Ratio derived
-        const PRIME_ADD = 0xBB67AE85; // Sqrt(3) derived
 
         const temp = new Uint8Array(BlazingOpossumCipher.BLOCK_SIZE);
 

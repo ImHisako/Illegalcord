@@ -16,14 +16,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { Dirent, readdirSync, readFileSync, writeFileSync } from "fs";
+import { PluginTarget, PluginTargets } from "@utils/pluginTargets";
+import { Dirent, readFileSync } from "fs";
 import { access, readFile } from "fs/promises";
 import { join, sep } from "path";
 import { normalize as posixNormalize, sep as posixSep } from "path/posix";
 import { BigIntLiteral, type CallExpression, createSourceFile, Identifier, isArrayLiteralExpression, isCallExpression, isExportAssignment, isIdentifier, isObjectLiteralExpression, isPropertyAccessExpression, isPropertyAssignment, isSatisfiesExpression, isStringLiteral, isVariableStatement, NamedDeclaration, NodeArray, ObjectLiteralExpression, PropertyAssignment, ScriptTarget, StringLiteral, SyntaxKind } from "typescript";
 
 import { getPluginTarget } from "./utils.mjs";
-import { PluginTarget, PluginTargets } from "@utils/pluginTargets";
 
 export interface Dev {
     name: string;
@@ -190,7 +190,7 @@ export async function parseFile(fileName: string) {
                 case "commands":
                     data.hasCommands = true;
                     if (isArrayLiteralExpression(value)) {
-                        data.commands = value.elements.map((e) => {
+                        data.commands = value.elements.map(e => {
                             if (isObjectLiteralExpression(e)) {
                                 const nameProperty = e.properties.find((p): p is PropertyAssignment =>
                                     isPropertyAssignment(p) && isIdentifier(p.name) && p.name.escapedText === "name"

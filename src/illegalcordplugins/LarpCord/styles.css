@@ -96,11 +96,11 @@
     width: 100%;
     border-top: 1px solid rgb(255 255 255 / 6%);
     scrollbar-width: none;
-    }
+}
 
 .cp-account-selector-header::-webkit-scrollbar {
     display: none;
-    }
+}
 
 .cp-account-header-item {
     cursor: pointer;
@@ -232,7 +232,9 @@
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
+    transition:
+        background 0.15s,
+        border-color 0.15s;
 }
 
 .cp-file-btn:hover {
@@ -408,7 +410,9 @@
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: opacity 0.15s, background 0.15s;
+    transition:
+        opacity 0.15s,
+        background 0.15s;
     color: #fff;
 }
 

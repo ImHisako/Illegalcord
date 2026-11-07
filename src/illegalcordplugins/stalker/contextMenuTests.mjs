@@ -49,7 +49,7 @@ test("Repeated suspension and restoration keeps one Stalker entry in reused menu
     const { plugin, patch } = fixture();
     const native = [item("apps"), item("ignore"), item("block")];
     const group = [...native];
-    const children = [createElement("group", { children: group })];
+    const children = [{ type: "group", props: { children: group } }];
     for (let cycle = 0; cycle < 8; cycle++) {
         patch(children, { user: { id: "42" } });
         assert.deepEqual(group.map(child => child.props.id), ["apps", "vc-st-stalk", "ignore", "block"]);

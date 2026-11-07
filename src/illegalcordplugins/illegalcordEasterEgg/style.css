@@ -10,10 +10,23 @@
 }
 
 @keyframes vc-illegalcord-easter-egg-spectrum {
-    0%, 100% { color: hsl(0deg 100% 70%); }
-    16.67% { color: hsl(60deg 100% 70%); }
-    33.33% { color: hsl(120deg 100% 70%); }
-    50% { color: hsl(180deg 100% 70%); }
-    66.67% { color: hsl(240deg 100% 70%); }
-    83.33% { color: hsl(300deg 100% 70%); }
+    0%,
+    100% {
+        color: hsl(0deg 100% 70%);
+    }
+    16.67% {
+        color: hsl(60deg 100% 70%);
+    }
+    33.33% {
+        color: hsl(120deg 100% 70%);
+    }
+    50% {
+        color: hsl(180deg 100% 70%);
+    }
+    66.67% {
+        color: hsl(240deg 100% 70%);
+    }
+    83.33% {
+        color: hsl(300deg 100% 70%);
+    }
 }

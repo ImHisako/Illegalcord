@@ -36,7 +36,6 @@ const DATASTORE_KEY = "CustomStreamTopQ_ImageData";
 const DATASTORE_KEY_SLIDESHOW = "CustomStreamTopQ_Slideshow";
 const DATASTORE_KEY_INDEX = "CustomStreamTopQ_SlideIndex";
 const DATASTORE_KEY_PROFILES = "CustomStreamTopQ_Profiles";
-const DATASTORE_KEY_ACTIVE_PROFILE = "CustomStreamTopQ_ActiveProfile";
 const MAX_IMAGES = 50;
 const MAX_IMAGES_PER_PROFILE = 50;
 const MAX_PROFILES = 5; // Maximum number of profiles allowed
@@ -319,20 +318,6 @@ async function saveSlideIndex(index: number): Promise<void> {
 async function loadSlideIndex(): Promise<number> {
     const index = await DataStore.get(DATASTORE_KEY_INDEX);
     return typeof index === "number" ? index : 0;
-}
-
-async function saveImagesToDataStore(blobs: Blob[]): Promise<void> {
-    const profile = getActiveProfile();
-    profile.images = blobs;
-
-    // Обновляем dataUris
-    profile.dataUris = [];
-    for (const blob of blobs) {
-        profile.dataUris.push(await blobToDataUrl(blob));
-    }
-
-    syncCacheWithActiveProfile();
-    await saveProfilesToDataStore();
 }
 
 // loadImagesFromDataStore удалена - теперь используется getActiveProfile().images напрямую
