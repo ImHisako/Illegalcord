@@ -46,6 +46,7 @@ const SECURITY_CONSTANTS = {
 };
 const encoder = new TextEncoder();
 const specialCharacterPattern = /[^A-Za-z0-9]/;
+const PRIME_ADD = 0xBB67AE85; // Sqrt(3) derived
 
 // BlazingOpossum Cipher - High-Performance, Post-Quantum Resilient Symmetric Cipher
 class BlazingOpossumCipher {
@@ -128,7 +129,6 @@ class BlazingOpossumCipher {
         this.writeUint32LE(state, 12, ivLow + counter + 1);
 
         const PRIME_MUL = 0x9E3779B9;
-        const PRIME_ADD = 0xBB67AE85;
 
         for (let r = 0; r < BlazingOpossumCipher.ROUNDS; r++) {
             const roundKey = this.roundKeys[r];
@@ -168,7 +168,6 @@ class BlazingOpossumCipher {
         acc.set(iv.subarray(0, Math.min(iv.length, BlazingOpossumCipher.BLOCK_SIZE)));
 
         const PRIME_MUL = 0x9E3779B9;
-        const PRIME_ADD = 0xBB67AE85;
 
         // Process data in chunks
         for (let i = 0; i < data.length; i += BlazingOpossumCipher.BLOCK_SIZE) {
