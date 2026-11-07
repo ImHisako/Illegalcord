@@ -315,6 +315,28 @@ test("Preserves browser error locations in saved reports and disk logs", () => {
     assert.ok(!log.reportText.includes("Source:"));
 });
 
+test("Uses upstream module IDs and groups crashes with legacy fingerprints", () => {
+    const start = source.indexOf("function getPatchedModules(");
+    const end = source.indexOf("function isPromiseLike(", start);
+    const allWebpackInstances = new Set([
+        new Map([["123", new Set(["FirstPlugin"])]]),
+        new Map([["123", new Set(["FirstPlugin", "SecondPlugin"])]])
+    ]);
+    const { getPatchedModules, getCrashFingerprint, normalizeCrashSourceIds } = load(source.slice(start, end)
+        + "\nreturn { getPatchedModules, getCrashFingerprint, normalizeCrashSourceIds };", {
+        IS_DEV: true, allWebpackInstances, getFactoryPatchedBy: (id, instance) => instance.get(id)
+    });
+    const frame = id => `    at render (file:///WebpackModule${id}:12:34)`;
+    const stack = `Error: Crash\n${frame("123")}`;
+    assert.deepEqual(getPatchedModules(stack, `${frame("124")}\n${frame("123")}`), [
+        { sourceId: "123", plugins: ["FirstPlugin", "SecondPlugin"] }
+    ]);
+    const fingerprint = getCrashFingerprint("render", "Crash", stack);
+    assert.equal(fingerprint, normalizeCrashSourceIds(`render\nCrash\n${frame("123-Factory4")}`));
+    assert.equal(fingerprint, normalizeCrashSourceIds(`render\nCrash\n${frame("123-Sourceabc123")}`));
+    assert.notEqual(fingerprint, getCrashFingerprint("render", "Crash", `Error: Crash\n${frame("124")}`));
+});
+
 test("Skips stylesheet injection until a popout has a document head", () => {
     const start = source.indexOf("    patches: [");
     const end = source.indexOf("\n    handleCrash,", start);

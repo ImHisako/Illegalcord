@@ -7,7 +7,6 @@
 import { Settings } from "@api/Settings";
 import { reporterData } from "@debug/reporterData";
 import { traceFunctionWithResults } from "@debug/Tracer";
-import { hash as h64 } from "@intrnl/xxhash64";
 import { Logger } from "@utils/Logger";
 import { interpolateIfDefined } from "@utils/misc";
 import { Patch, PatchReplacement } from "@utils/types";
@@ -26,12 +25,6 @@ export const SYM_PATCHED_BY = Symbol("WebpackPatcher.patchedBy");
 export const allWebpackInstances = new Set<AnyWebpackRequire>();
 
 export const patchTimings = [] as Array<[plugin: string, moduleId: PropertyKey, match: PatchReplacement["match"], totalTime: number]>;
-const patchedModulePlugins = new Map<string, string[]>();
-let patchedFactoryId = 0;
-
-export function getPatchedModulePlugins(sourceId: string) {
-    return patchedModulePlugins.get(sourceId) ?? [];
-}
 
 export function getFactoryPatchedSource(moduleId: PropertyKey, webpackRequire = wreq as AnyWebpackRequire) {
     return webpackRequire.m[moduleId]?.[SYM_PATCHED_SOURCE];
@@ -487,7 +480,6 @@ function runFactoryWithWrap(patchedFactory: PatchedModuleFactory, moduleId: Prop
  */
 function patchFactory(moduleId: PropertyKey, originalFactory: AnyModuleFactory): PatchedModuleFactory {
     const originalFactoryCode = String(originalFactory);
-    let sourceId: string | undefined;
     const isArrowFunction = originalFactoryCode.startsWith("(");
 
     // 0, prefix to turn it into an expression: 0,function(){} would be invalid syntax without the 0,
@@ -591,8 +583,7 @@ function patchFactory(moduleId: PropertyKey, originalFactory: AnyModuleFactory):
                     pluginsList.push(patch.plugin);
                 }
 
-                sourceId ??= `${String(moduleId)}-Source${h64(originalFactoryCode).toString(16)}-Factory${++patchedFactoryId}`;
-                const newPatchedSource = `// Webpack Module ${String(moduleId)} - Patched by ${pluginsList.join(", ")}\n${newPatchedCode}\n//# sourceURL=file:///WebpackModule${sourceId}`;
+                const newPatchedSource = `// Webpack Module ${String(moduleId)} - Patched by ${pluginsList.join(", ")}\n${newPatchedCode}\n//# sourceURL=file:///WebpackModule${String(moduleId)}`;
                 const newPatchedFactory = (0, eval)(newPatchedSource);
 
                 if (!patchedBy.has(patch.plugin)) {
@@ -651,8 +642,6 @@ function patchFactory(moduleId: PropertyKey, originalFactory: AnyModuleFactory):
     }
 
     patchedFactory[SYM_ORIGINAL_FACTORY] = originalFactory;
-
-    if (patchedBy.size && sourceId) patchedModulePlugins.set(sourceId, [...patchedBy]);
 
     if (IS_DEV && patchedFactory !== originalFactory) {
         originalFactory[SYM_PATCHED_SOURCE] = patchedSource;

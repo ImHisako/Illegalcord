@@ -39,7 +39,7 @@ import { checkForUpdates, isNewer, maybePromptToUpdate, update as updateIllegalc
 import type { RenderModalProps } from "@vencord/discord-types";
 import { filters, findBulk, proxyLazyWebpack } from "@webpack";
 import { closeAllModals, DraftType, ExpressionPickerStore, FluxDispatcher, NavigationRouter, React, ScrollerThin, SelectedChannelStore } from "@webpack/common";
-import { getPatchedModulePlugins } from "@webpack/patcher";
+import { allWebpackInstances, getFactoryPatchedBy } from "@webpack/patcher";
 import type { ReactNode } from "react";
 
 import { PluginMeta } from "~plugins";
@@ -509,13 +509,22 @@ function getPossiblePlugins(now: number) {
 }
 
 function getPatchedModules(stack?: string, componentStack?: string): PatchedModule[] {
-    const sourceIds = new Set([...`${stack ?? ""}\n${componentStack ?? ""}`.matchAll(/WebpackModule(\d+-Source[0-9a-f]+-Factory\d+)/g)].map(match => match[1]));
-    return [...sourceIds].map(sourceId => ({ sourceId, plugins: getPatchedModulePlugins(sourceId) }))
-        .filter(({ plugins }) => plugins.length > 0);
+    if (!IS_DEV) return [];
+
+    const sourceIds = new Set(Array.from(`${stack ?? ""}\n${componentStack ?? ""}`.matchAll(/file:\/\/\/WebpackModule(\d+)(?=:\d+:\d+)/g), match => match[1]));
+    const instances = [...allWebpackInstances];
+    return [...sourceIds].map(sourceId => {
+        const plugins = instances.flatMap(instance => Array.from(getFactoryPatchedBy(sourceId, instance) ?? []));
+        return { sourceId, plugins: [...new Set(plugins)] };
+    }).filter(({ plugins }) => plugins.length > 0);
+}
+
+function normalizeCrashSourceIds(stack: string) {
+    return stack.replace(/(file:\/\/\/WebpackModule\d+)(?:-Source[0-9a-f]+(?:-Factory\d+)?|-Factory\d+)(?=:\d+:\d+)/g, "$1");
 }
 
 function getCrashFingerprint(kind: CrashKind, message: string, stack?: string) {
-    return `${kind}\n${message}\n${stack?.split("\n").slice(1, 4).join("\n").replace(/(WebpackModule\d+-Source[0-9a-f]+)-Factory\d+/g, "$1") ?? ""}`;
+    return `${kind}\n${message}\n${normalizeCrashSourceIds(stack?.split("\n").slice(1, 4).join("\n") ?? "")}`;
 }
 
 function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
@@ -756,14 +765,14 @@ function createReport(errorState: CrashErrorState, kind: CrashKind = "render"): 
     const componentStack = getComponentStack(errorState.info);
     const channelId = getChannelId();
     const fingerprint = getCrashFingerprint(kind, message, stack);
-    const similar = readCrashHistory().filter(entry => entry.fingerprint === fingerprint && entry.channelId === channelId);
+    const similar = readCrashHistory().filter(entry => entry.fingerprint != null && normalizeCrashSourceIds(entry.fingerprint) === fingerprint && entry.channelId === channelId);
     const recentPluginNames = [...new Set(pluginBreadcrumbs.filter(entry => now - entry.timestamp <= BREADCRUMB_DETECTION_AGE && isPluginEnabled(entry.pluginName)).map(entry => entry.pluginName).reverse())];
     const recurringPlugins = recentPluginNames.map(name => ({
         name,
         crashes: 1 + similar.filter(entry => entry.recentPluginNames?.includes(name)).length
     })).filter(({ crashes }) => crashes > 1).sort((a, b) => b.crashes - a.crashes).slice(0, 5);
     const test = readDiagnosticTest();
-    if ((test?.status === "active" || test?.status === "no-crash") && test.fingerprint === fingerprint && test.channelId === channelId) {
+    if ((test?.status === "active" || test?.status === "no-crash") && normalizeCrashSourceIds(test.fingerprint) === fingerprint && test.channelId === channelId) {
         settings.store.diagnosticTest = JSON.stringify({ ...test, status: "crashed" });
         recordDiagnosticEvent("test-result", test.plugin, "The same crash happened with this plugin disabled.");
     }
