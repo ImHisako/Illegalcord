@@ -12,7 +12,7 @@ import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
 import { settings as musicControlsSettings } from "@equicordplugins/musicControls/settings";
-import { getLyrics } from "@equicordplugins/musicControls/spotify/lyrics/api";
+import { clearLyricsCache, getLyrics } from "@equicordplugins/musicControls/spotify/lyrics/api";
 import type { SyncedLyric } from "@equicordplugins/musicControls/spotify/lyrics/providers/types";
 import { SpotifyStore as SpotifyPlayerStore } from "@equicordplugins/musicControls/spotify/SpotifyStore";
 import { EquicordDevs } from "@utils/constants";
@@ -101,6 +101,7 @@ let active = false;
 let intervalId: ReturnType<typeof setInterval> | undefined;
 let lyricsTimeoutId: ReturnType<typeof setTimeout> | undefined;
 let loadingSpotifyTrackId: string | undefined;
+let spotifyLyricsCacheReset: Promise<void> | undefined;
 let spotifyLyrics: SyncedLyric[] = [];
 let spotifyLyricsTrackId: string | undefined;
 let spotifyOverrideActive = false;
@@ -532,7 +533,14 @@ async function startSpotifyLyrics(track: SpotifyTrack, position?: number) {
             uri: `spotify:artist:${artist.id}`
         }))
     };
-    const lyricsInfo = await getLyrics(lyricsTrack).catch(error => {
+    const previousCacheReset = spotifyLyricsCacheReset;
+    const lyricsInfo = await getLyrics(lyricsTrack).catch(async (error: unknown) => {
+        if (!(error instanceof DOMException) || error.name !== "NotReadableError") throw error;
+
+        if (previousCacheReset === spotifyLyricsCacheReset) spotifyLyricsCacheReset = clearLyricsCache();
+        await spotifyLyricsCacheReset;
+        return getLyrics(lyricsTrack);
+    }).catch((error: unknown) => {
         logger.error("Could not load Spotify lyrics.", error);
         return null;
     });
