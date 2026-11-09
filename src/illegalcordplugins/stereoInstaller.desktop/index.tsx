@@ -7,9 +7,11 @@
 import "./style.css";
 
 import { showNotification } from "@api/Notifications";
+import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
 import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
+import { FormSwitch } from "@components/FormSwitch";
 import { Heading } from "@components/Heading";
 import { DeleteIcon, HeadphonesIcon, NoEntrySignIcon, WarningIcon } from "@components/Icons";
 import { Paragraph } from "@components/Paragraph";
@@ -24,6 +26,7 @@ import type { ActionInfo, InstallInfo, NativeResult } from "./native";
 const Native = VencordNative.pluginHelpers.StereoInstaller as PluginNative<typeof import("./native")>;
 const SETTINGS_ENTRY_KEY = "illegalcord_stereo_installer";
 const LOG_RETENTION_RESTARTS = 5;
+const AUTO_INSTALL_KEYS: ["autoStereoInstaller"] = ["autoStereoInstaller"];
 const DISCORD_AUDIO_COLLECTIVE_SOURCE_URL = "https://github.com/ProdHallow/Discord-Stereo-Windows-MacOS-Linux";
 const VOICE_PLAYGROUND_SOURCE_URL = "https://codeberg.org/UnpackedX/Discord-Experimental-Subsystem";
 const VOICE_PLAYGROUND_FILES_URL = "https://github.com/ImHisako/ImHisako/tree/main/Images/StereoMethods";
@@ -93,6 +96,27 @@ async function maintainInstallerLogs(): Promise<void> {
 
     const result = await Native.clearLogs().catch(() => null);
     settings.store.logRestartCount = result?.success ? 0 : LOG_RETENTION_RESTARTS - 1;
+}
+
+async function checkStereoOnStartup(): Promise<void> {
+    const firstStart = !launchCounted;
+    await maintainInstallerLogs();
+
+    if (firstStart && settings.plain.autoStereoInstaller && isPluginEnabled("StereoInstaller")) {
+        const result = await Native.autoInstall();
+        if (!result.success) {
+            showToast({ text: result.error, variant: "critical" });
+            return;
+        }
+        if (result.data) {
+            settings.store.logRestartCount = 0;
+            showToast({ text: "Discord will restart to restore stereo audio.", variant: "success" });
+            return;
+        }
+    }
+
+    const result = await Native.autoDetect();
+    if (result.success) notifyRepatchIfNeeded(result.data);
 }
 
 function StereoWarning() {
@@ -179,6 +203,7 @@ function LogLine({ entry }: { entry: LogEntry; }) {
 }
 
 function StereoInstallerPanel() {
+    const { autoStereoInstaller } = settings.use(AUTO_INSTALL_KEYS);
     const [root, setRoot] = React.useState("");
     const [info, setInfo] = React.useState<InstallInfo | ActionInfo | null>(null);
     const [status, setStatus] = React.useState("Ready.");
@@ -258,6 +283,7 @@ function StereoInstallerPanel() {
         });
         if (!result) return;
 
+        if (kind === "revert") settings.store.autoStereoInstaller = false;
         settings.store.logRestartCount = 0;
         setInfo(result);
         setStatus("Discord will close now. Check the StereoInstaller log if it does not reopen.");
@@ -355,6 +381,12 @@ function StereoInstallerPanel() {
     return (
         <div className="vc-stereo-installer-root">
             <div className="vc-stereo-installer-controls">
+                <FormSwitch
+                    title="Auto stereo installer"
+                    description={settings.def.autoStereoInstaller.description}
+                    value={autoStereoInstaller}
+                    onChange={value => settings.store.autoStereoInstaller = value}
+                />
                 <div className="vc-stereo-installer-select-grid">
                     <div className="vc-stereo-installer-select-row">
                         <div>
@@ -524,6 +556,12 @@ function StereoInstallerPage() {
 }
 
 const settings = definePluginSettings({
+    autoStereoInstaller: {
+        type: OptionType.BOOLEAN,
+        description: "Restores your last stereo method when Discord starts without stereo. Discord restarts to apply it. Reverting to the backup turns this off.",
+        default: false,
+        hidden: true
+    },
     hideFromToolbox: {
         type: OptionType.BOOLEAN,
         description: "Hide this plugin from Equicord Toolbox.",
@@ -561,9 +599,7 @@ export default definePlugin({
             });
         }
 
-        void maintainInstallerLogs().then(() => Native.autoDetect()).then(result => {
-            if (result.success) notifyRepatchIfNeeded(result.data);
-        }, () => void 0);
+        void checkStereoOnStartup().catch(() => void 0);
     },
 
     stop() {
