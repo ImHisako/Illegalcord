@@ -6,11 +6,10 @@
 
 import { VENCORD_USER_AGENT } from "@shared/vencordUserAgent";
 import { spawn } from "child_process";
+import { createHash } from "crypto";
 import { app, dialog, type IpcMainInvokeEvent } from "electron";
-import method512 from "file://StereoMethods/Discord-Voice/(512) discord_voice.node?base64&trim=false";
-import method2Index from "file://StereoMethods/Discord-Voice/index.js?base64&trim=false";
 import { appendFileSync, constants, type Dirent, existsSync, mkdirSync } from "fs";
-import { access, chmod, cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "fs/promises";
+import { access, chmod, cp, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "fs/promises";
 import { arch, homedir, platform as osPlatform, release } from "os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "path";
 
@@ -20,6 +19,19 @@ const MAX_DOWNLOAD_BYTES = 160 * 1024 * 1024;
 const MAX_VISIBLE_LOG_LINES = 500;
 const PATCHED_WINDOWS_GITHUB_CONTENTS_API = "https://api.github.com/repos/ProdHallow/Discord-Stereo-Windows-MacOS-Linux/contents/Updates%2FNodes%2FPatched%20Nodes%20%28for%20Installer%29%2FWindows";
 const PATCHED_LINUX_GITHUB_CONTENTS_API = "https://api.github.com/repos/ProdHallow/Discord-Stereo-Windows-MacOS-Linux/contents/Updates%2FNodes%2FPatched%20Nodes%20%28for%20Installer%29%2FLinux";
+const VOICE_PLAYGROUND_URL = "https://raw.githubusercontent.com/ImHisako/ImHisako/28c7057f2242b70e4cd83430c59ddb4212ef7bed/Images/StereoMethods";
+const VOICE_PLAYGROUND_FILES = {
+    "discord_voice.node": {
+        fileName: "(512) discord_voice.node",
+        size: 14_470_072,
+        sha256: "e0dfcd5ef3ef0c2ac8042204be8758e109035c62dfe1ff1465c7697fbf7503e3"
+    },
+    "index.js": {
+        fileName: "index.js",
+        size: 21_718,
+        sha256: "656a4307555ebb6bc3922f8cd14c5f7e6deb8472c262117e71db9ca6a334ca81"
+    }
+};
 
 export interface InstallInfo {
     platformKey: string;
@@ -77,6 +89,13 @@ interface GithubContentFile {
     type: "file";
     name: string;
     download_url: string;
+}
+
+interface DownloadOptions {
+    accept?: string;
+    maxBytes?: number;
+    redirect?: RequestRedirect;
+    authenticated?: boolean;
 }
 
 interface RelaunchConfig {
@@ -285,7 +304,7 @@ export async function patchMethod2Index(_: IpcMainInvokeEvent, rootPath: string)
         }
 
         await ensurePermanentUnpatchedBackup(methodTarget, log);
-        const patchedIndexDir = await prepareMethod2IndexPayload(log);
+        const patchedIndexDir = await prepareMethod2Payload(log, false);
         await scheduleWorker("Patch", patchedIndexDir, methodTarget, undefined, log, "singleFile", "index.js");
         log.ok("Patch scheduled. Discord will close, install index.js, then reopen.");
 
@@ -981,7 +1000,7 @@ async function clearDirContents(pathValue: string, allowedParent: string): Promi
     }
 }
 
-async function downloadBytes(url: string, timeoutMs: number, accept?: string): Promise<Buffer> {
+async function downloadBytes(url: string, timeoutMs: number, { accept, maxBytes = MAX_DOWNLOAD_BYTES, redirect = "follow", authenticated = true }: DownloadOptions = {}): Promise<Buffer> {
     const parsedUrl = new URL(url);
     if (parsedUrl.protocol !== "https:") throw new Error("Download URL must use HTTPS.");
     if (!["api.github.com", "raw.githubusercontent.com"].includes(parsedUrl.hostname)) {
@@ -998,28 +1017,35 @@ async function downloadBytes(url: string, timeoutMs: number, accept?: string): P
 
     if (accept) headers.Accept = accept;
 
-    const token = (process.env.DISCORD_STEREO_GITHUB_TOKEN || process.env.GITHUB_TOKEN || "").trim();
+    const token = authenticated ? (process.env.DISCORD_STEREO_GITHUB_TOKEN || process.env.GITHUB_TOKEN || "").trim() : "";
     if (token) headers.Authorization = token.startsWith("github_pat_") ? `Bearer ${token}` : `token ${token}`;
 
     try {
         const response = await fetch(parsedUrl, {
             headers,
+            redirect,
             signal: controller.signal
         });
 
         if (!response.ok) throw new Error(`Download failed: ${response.status} ${response.statusText}`);
 
         const contentLength = Number(response.headers.get("content-length"));
-        if (Number.isFinite(contentLength) && contentLength > MAX_DOWNLOAD_BYTES) {
+        if (contentLength > maxBytes) {
             throw new Error("Download is too large.");
         }
 
-        const data = Buffer.from(await response.arrayBuffer());
-        if (data.byteLength > MAX_DOWNLOAD_BYTES) throw new Error("Download is too large.");
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        for await (const chunk of response.body ?? []) {
+            size += chunk.byteLength;
+            if (size > maxBytes) throw new Error("Download is too large.");
+            chunks.push(chunk);
+        }
 
-        return data;
+        return Buffer.concat(chunks, size);
     } finally {
         clearTimeout(timeout);
+        controller.abort();
     }
 }
 
@@ -1062,38 +1088,38 @@ async function method2Target(target: Target): Promise<Target> {
     };
 }
 
-async function prepareMethod2Payload(log: ActionLog): Promise<string> {
-    const staging = join(hubDataDir(), "staging", "method2_payload");
-    const voiceFile = join(staging, "discord_voice.node");
-    const indexFile = join(staging, "index.js");
+async function prepareMethod2Payload(log: ActionLog, includeVoice = true): Promise<string> {
+    const staging = join(hubDataDir(), "staging", includeVoice ? "method2_payload" : "method2_index_payload");
     assertPathInside(hubDataDir(), staging);
-    assertPathInside(staging, voiceFile);
-    assertPathInside(staging, indexFile);
+
+    const files: SingleFileName[] = includeVoice ? ["discord_voice.node", "index.js"] : ["index.js"];
+    log.info("Downloading Voice Playground Method files from GitHub.");
+    const payloads = await Promise.all(files.map(async name => {
+        const { fileName, size, sha256 } = VOICE_PLAYGROUND_FILES[name];
+        const data = await downloadBytes(`${VOICE_PLAYGROUND_URL}/${encodeURIComponent(fileName)}`, 120_000, {
+            maxBytes: size,
+            redirect: "error",
+            authenticated: false
+        });
+        if (createHash("sha256").update(data).digest("hex") !== sha256) {
+            throw new Error(`Integrity check failed for ${name}.`);
+        }
+        return [name, data] as const;
+    }));
 
     await mkdir(staging, { recursive: true });
-    await clearDirContents(staging, hubDataDir());
-    await writeFile(voiceFile, Buffer.from(method512, "base64"));
-    await writeFile(indexFile, Buffer.from(method2Index, "base64"));
-    validateDownloadPayload("discord_voice.node", await readFile(voiceFile));
-    validateDownloadPayload("index.js", await readFile(indexFile));
+    const tempDir = await mkdtemp(join(staging, "download-"));
+    try {
+        for (const [name, data] of payloads) {
+            const tempFile = join(tempDir, name);
+            await writeFile(tempFile, data);
+            await rename(tempFile, join(staging, name));
+        }
+    } finally {
+        await rm(tempDir, { recursive: true, force: true });
+    }
 
-    log.ok("Prepared Voice Playground Method payload with index.js: 512.");
-
-    return staging;
-}
-
-async function prepareMethod2IndexPayload(log: ActionLog): Promise<string> {
-    const staging = join(hubDataDir(), "staging", "method2_index_payload");
-    const targetFile = join(staging, "index.js");
-    assertPathInside(hubDataDir(), staging);
-    assertPathInside(staging, targetFile);
-
-    await mkdir(staging, { recursive: true });
-    await clearDirContents(staging, hubDataDir());
-    await writeFile(targetFile, Buffer.from(method2Index, "base64"));
-    validateDownloadPayload("index.js", await readFile(targetFile));
-
-    log.ok("Prepared Voice Playground Method index.js payload.");
+    log.ok(includeVoice ? "Prepared the 512 voice module and index.js." : "Prepared Voice Playground Method index.js.");
 
     return staging;
 }
@@ -1113,7 +1139,7 @@ function assertSafeRemoteFileName(name: string): void {
 }
 
 async function downloadGithubFolderToDir(apiUrl: string, dest: string, log: ActionLog): Promise<void> {
-    const raw = await downloadBytes(apiUrl, 60_000, "application/vnd.github.v3+json");
+    const raw = await downloadBytes(apiUrl, 60_000, { accept: "application/vnd.github.v3+json" });
     const parsed: unknown = JSON.parse(raw.toString("utf8"));
     if (!Array.isArray(parsed)) throw new Error("GitHub contents API returned unexpected JSON.");
 

@@ -227,10 +227,22 @@
 }
 
 .vc-surveillance-timeline {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
     margin-top: 12px;
+}
+
+.vc-surveillance-timeline-scroll {
+    max-height: min(60vh, 640px);
+    overflow-y: auto;
+    overflow-anchor: none;
+}
+
+.vc-surveillance-timeline-items {
+    position: relative;
+}
+
+.vc-surveillance-timeline-item {
+    position: absolute;
+    inset: 0 0 auto;
 }
 
 .vc-surveillance-timeline-footer {

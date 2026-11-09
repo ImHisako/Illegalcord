@@ -48,6 +48,7 @@
         "@intrnl/xxhash64": "catalog:",
         "@song-spotlight/api": "catalog:",
         "@streamparser/json": "catalog:",
+        "@tanstack/virtual-core": "catalog:",
         "@vap/core": "catalog:",
         "@vap/shiki": "catalog:",
         "@vencord/monaco-editor": "catalog:",

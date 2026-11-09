@@ -9,6 +9,7 @@ catalog:
     "@intrnl/xxhash64": "^0.1.2"
     "@song-spotlight/api": "^2.2.0"
     "@streamparser/json": "^0.0.22"
+    "@tanstack/virtual-core": "3.19.11"
     "@stylistic/eslint-plugin": "^5.10.0"
     "@types/chrome": "^0.3.6"
     "@types/fs-extra": "^11.0.4"

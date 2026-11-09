@@ -26,6 +26,7 @@ const SETTINGS_ENTRY_KEY = "illegalcord_stereo_installer";
 const LOG_RETENTION_RESTARTS = 5;
 const DISCORD_AUDIO_COLLECTIVE_SOURCE_URL = "https://github.com/ProdHallow/Discord-Stereo-Windows-MacOS-Linux";
 const VOICE_PLAYGROUND_SOURCE_URL = "https://codeberg.org/UnpackedX/Discord-Experimental-Subsystem";
+const VOICE_PLAYGROUND_FILES_URL = "https://github.com/ImHisako/ImHisako/tree/main/Images/StereoMethods";
 const VOICE_PLAYGROUND_TUTORIAL_URL = "https://www.youtube.com/watch?v=zSIIganbZxg";
 
 type InstallerMethod = "method1" | "method2";
@@ -273,7 +274,7 @@ function StereoInstallerPanel() {
                     {isMethod2 ? (
                         <>
                             <Paragraph>
-                                This will install the local 512 discord_voice.node and the bundled index.js into the detected discord_voice module.
+                                This will download the 512 discord_voice.node and index.js from GitHub and install them into the detected Discord voice module.
                             </Paragraph>
                             <Paragraph>
                                 Voice Playground Method replaces the local voice module to enable higher audio quality. Use only one method on the same Discord install.
@@ -304,7 +305,7 @@ function StereoInstallerPanel() {
             body: (
                 <div>
                     <Paragraph>
-                        This will copy index.js from StereoMethods/Discord-Voice into the detected discord_voice module.
+                        This will download index.js from GitHub and install it into the detected Discord voice module.
                     </Paragraph>
                     <Paragraph>
                         Discord will close while the file is replaced. Use this only if you are fixing Voice Playground Method files or know you need that index.js.
@@ -370,8 +371,8 @@ function StereoInstallerPanel() {
 
                     <div className="vc-stereo-installer-select-row">
                         <div>
-                            <span>Source code</span>
-                            <Paragraph>Each method has its own upstream source.</Paragraph>
+                            <span>Sources and files</span>
+                            <Paragraph>Open the upstream projects or browse the Voice Playground files.</Paragraph>
                         </div>
                         <div className="vc-stereo-installer-warning-actions">
                             <Button
@@ -388,6 +389,13 @@ function StereoInstallerPanel() {
                             >
                                 Voice Playground
                             </Button>
+                            <Button
+                                variant="secondary"
+                                size="small"
+                                onClick={() => VencordNative.native.openExternal(VOICE_PLAYGROUND_FILES_URL)}
+                            >
+                                Stereo files on GitHub
+                            </Button>
                         </div>
                     </div>
                 </div>
@@ -395,7 +403,7 @@ function StereoInstallerPanel() {
                 {installerMethod === "method2" && (
                     <div className="vc-stereo-installer-method2-note">
                         <Paragraph>
-                            Voice Playground Method automatically installs both discord_voice.node and index.js from StereoMethods/Discord-Voice. Do not install both methods on the same client. The separate index.js button remains available for repairs.
+                            Voice Playground Method downloads discord_voice.node and index.js from GitHub before installing them. Use one method per client. The separate index.js button remains available for repairs.
                         </Paragraph>
                         <div className="vc-stereo-installer-warning-actions">
                             <Button

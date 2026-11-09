@@ -9,12 +9,14 @@ import "./styles.css";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading } from "@components/Heading";
 import { SettingsTab, wrapTab } from "@components/settings";
+import { defaultRangeExtractor, elementScroll, observeElementOffset, observeElementRect, type Range, Virtualizer, type VirtualizerOptions } from "@tanstack/virtual-core";
 import { copyToClipboard } from "@utils/clipboard";
 import { classNameFactory } from "@utils/css";
 import { fetchUserProfile, openUserProfile } from "@utils/discord";
 import { classes } from "@utils/misc";
+import { useForceUpdater } from "@utils/react";
 import type { RenderModalProps, ToastVariant } from "@vencord/discord-types";
-import { ChannelStore, GuildStore, Modal, openModal, React, RelationshipStore, showToast, TextInput, useEffect, useMemo, UserProfileStore, UserStore, useState, useStateFromStores } from "@webpack/common";
+import { ChannelStore, GuildStore, Modal, openModal, React, RelationshipStore, showToast, TextInput, useCallback, useEffect, useLayoutEffect, useMemo, useRef, UserProfileStore, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 import { addServerTarget, getServerTargets, getTargets, removeServerTarget, removeTarget, setServerTargets, setTargets, settings, subscribeServerTargets, subscribeTargets } from "..";
 import { clearEvents, getEvents, loadEvents, subscribe } from "../store";
@@ -456,6 +458,78 @@ function EventRow({ event }: { event: SurveillanceEvent; }) {
     );
 }
 
+interface EventTimelineProps {
+    events: SurveillanceEvent[];
+    label: string;
+    emptyText: string;
+}
+
+function EventTimeline({ events, label, emptyText }: EventTimelineProps) {
+    const scroller = useRef<HTMLDivElement>(null);
+    const update = useForceUpdater();
+    const [focusedId, setFocusedId] = useState<string | null>(null);
+    const focusedIndex = useMemo(() => events.findIndex(event => event.id === focusedId), [events, focusedId]);
+    const getItemKey = useCallback((index: number) => events[index].id, [events]);
+    const rangeExtractor = useCallback((range: Range) => {
+        const indexes = defaultRangeExtractor(range);
+        if (focusedIndex < 0) return indexes;
+
+        const focusRange = [focusedIndex - 1, focusedIndex, focusedIndex + 1].filter(index => index >= 0 && index < range.count);
+        return [...new Set([...indexes, ...focusRange])].sort((a, b) => a - b);
+    }, [focusedIndex]);
+
+    const options: VirtualizerOptions<HTMLDivElement, HTMLDivElement> = {
+        count: events.length,
+        getScrollElement: () => scroller.current,
+        getItemKey,
+        estimateSize: () => 100,
+        gap: 8,
+        overscan: 4,
+        anchorTo: scroller.current?.scrollTop ? "end" : "start",
+        rangeExtractor,
+        observeElementRect,
+        observeElementOffset,
+        scrollToFn: elementScroll,
+        onChange: update,
+    };
+    const [virtualizer] = useState(() => new Virtualizer(options));
+    virtualizer.setOptions(options);
+    useLayoutEffect(virtualizer._didMount, [virtualizer]);
+    useLayoutEffect(virtualizer._willUpdate);
+
+    if (!events.length) return <div className={classes(cl("timeline"), cl("empty"))}>{emptyText}</div>;
+
+    return (
+        <div
+            className={classes(cl("timeline"), cl("timeline-scroll"))}
+            ref={scroller}
+            role="region"
+            aria-label={label}
+            onBlur={event => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setFocusedId(null);
+            }}
+        >
+            <div className={cl("timeline-items")} style={{ height: virtualizer.getTotalSize() }}>
+                {virtualizer.getVirtualItems().map(item => {
+                    const event = events[item.index];
+                    return (
+                        <div
+                            key={item.key}
+                            className={cl("timeline-item")}
+                            data-index={item.index}
+                            ref={virtualizer.measureElement}
+                            style={{ transform: `translateY(${item.start}px)` }}
+                            onFocus={() => setFocusedId(event.id)}
+                        >
+                            <EventRow event={event} />
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 function SurveillanceTab() {
     const [events, setEvents] = useState<SurveillanceEvent[]>(getEvents());
     const [page, setPage] = useState<SurveillancePage>("user");
@@ -805,11 +879,12 @@ function SurveillanceTab() {
                             </button>
                         ))}
                     </div>
-                    <div className={cl("timeline")}>
-                        {visibleEvents.length ? visibleEvents.map(event => (
-                            <EventRow key={event.id} event={event} />
-                        )) : <div className={cl("empty")}>{pageEmpty}</div>}
-                    </div>
+                    <EventTimeline
+                        key={JSON.stringify([page, filter, query])}
+                        events={visibleEvents}
+                        label={`${pageHeading} Timeline`}
+                        emptyText={pageEmpty}
+                    />
                     {filteredEvents.length > visibleEvents.length ? (
                         <div className={cl("timeline-footer")}>
                             <span>Showing {visibleEvents.length} of {filteredEvents.length}</span>

@@ -185,6 +185,9 @@ catalogs:
     '@stylistic/eslint-plugin':
       specifier: ^5.10.0
       version: 5.10.0
+    '@tanstack/virtual-core':
+      specifier: 3.19.11
+      version: 3.19.11
     '@types/chrome':
       specifier: ^0.3.6
       version: 0.3.7
@@ -331,6 +334,9 @@ importers:
       '@streamparser/json':
         specifier: 'catalog:'
         version: 0.0.22
+      '@tanstack/virtual-core':
+        specifier: 'catalog:'
+        version: 3.19.11
       '@vap/core':
         specifier: 'catalog:'
         version: 0.0.12
@@ -1075,6 +1081,9 @@ packages:
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       eslint: ^9.0.0 || ^10.0.0
+
+  '@tanstack/virtual-core@3.19.11':
+    resolution: {integrity: sha512-/5iHb0RHBvj8Di59FDs4ESNm45jls33aZAi4zccVXZjc/6ZvwQP6nzEYeT6weXjTf9E6/vrp2JhYWRyO+ZP13A==}
 
   '@types/chrome@0.3.7':
     resolution: {integrity: sha512-jWZgbHqWbTL1a5+PoyN0OJutNyejWgyZ5MdcvKo6iJE1TNRtXR3FxsC4WzNl52yZWPidfWC8NV/VUNZf+OFKcA==}
@@ -2259,6 +2268,8 @@ snapshots:
       espree: 10.4.0
       estraverse: 5.3.0
       picomatch: 4.0.4
+
+  '@tanstack/virtual-core@3.19.11': {}
 
   '@types/chrome@0.3.7':
     dependencies:
