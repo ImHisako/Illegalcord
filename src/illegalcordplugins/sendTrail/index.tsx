@@ -14,8 +14,8 @@ import { removeFromArray, sleep } from "@utils/misc";
 import definePlugin from "@utils/types";
 import { ChannelStore, GuildStore, MessageStore, UserStore } from "@webpack/common";
 
-import RuntimeActivityButton from "../_kamidereCompat/RuntimeActivityButton";
 import { removeKamidereRuntimeTask, SEND_TRAIL_PURGE_TASK_ID } from "../_kamidereCompat/runtimeActivity";
+import RuntimeActivityButton from "../_kamidereCompat/RuntimeActivityButton";
 import { settings } from "./settings";
 import { appendSentTrailRecord, clearSentTrailRecordsWhere, hasSentTrailRecord, mergeSentTrailRecordMedia, removeSentTrailRecord } from "./store";
 import type { MessageCreatePayload, MessageDeletePayload, MessageUpdatePayload, PendingSendDraft, SendTrailMessage, SentTrailRecord } from "./types";
