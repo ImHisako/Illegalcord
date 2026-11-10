@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import type { CloudUpload, Embed, Message, MessageAttachment } from "@vencord/discord-types";
+import type { CloudUpload, EmbedMedia, Message, MessageAttachment } from "@vencord/discord-types";
 
 export type SentTrailMediaKind = "image" | "video";
 export type SentTrailMediaSource = "attachment" | "embed";
@@ -39,6 +39,7 @@ export interface SentTrailRecord {
 
 export interface PendingSendDraft {
     localId: string;
+    ownerId: string;
     channelId: string;
     createdAt: number;
     content: string;
@@ -54,13 +55,13 @@ export interface MessageCreatePayload {
     optimistic: boolean;
     channelId: string;
     guildId?: string;
-    message: Message;
+    message: SendTrailMessage;
 }
 
 export interface MessageUpdatePayload {
     type: "MESSAGE_UPDATE";
     guildId?: string;
-    message: Partial<Message> & Pick<Message, "id" | "channel_id">;
+    message: SendTrailMessage;
 }
 
 export interface MessageDeletePayload {
@@ -69,10 +70,30 @@ export interface MessageDeletePayload {
     id: string;
 }
 
+export type SendTrailEmbedMedia = Pick<EmbedMedia, "url"> & Partial<Pick<EmbedMedia, "width" | "height" | "contentType">>;
+
 export interface MediaExtractionInput {
     content?: string;
     attachments?: MessageAttachment[];
-    embeds?: Embed[];
+    embeds?: {
+        image?: SendTrailEmbedMedia;
+        images?: SendTrailEmbedMedia[];
+        thumbnail?: SendTrailEmbedMedia;
+        video?: SendTrailEmbedMedia;
+    }[];
+}
+
+export interface SendTrailMessage extends MediaExtractionInput, Pick<Message, "id" | "channel_id"> {
+    author?: Pick<Message["author"], "id">;
+    timestamp?: Message["timestamp"] | string;
+    state?: Message["state"];
+    flags?: Message["flags"];
+    hasFlag?: Message["hasFlag"];
+    messageReference?: Message["messageReference"];
+    message_reference?: Message["messageReference"];
+    messageSnapshots?: { message: MediaExtractionInput; }[];
+    message_snapshots?: { message: MediaExtractionInput; }[];
+    guild_id?: string;
 }
 
 export interface UploadSignatureInput {

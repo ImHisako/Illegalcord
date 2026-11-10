@@ -29,7 +29,7 @@ const security = await load("nativeSecurity.ts");
 const { createAdvancedRequestLog } = await load("nativeAdvancedLog.ts", { "@utils/misc": misc, "./requestLog": requestLog, "./nativeSecurity": security });
 
 async function fixture(options = {}) {
-    const settings = { recordWebSocketMessages: true, recordLocalResources: true, ...options };
+    const settings = { recordNetworkRequests: true, recordWebSocketMessages: true, recordLocalResources: true, ...options };
     const log = requestLog.createRequestLog(() => settings);
     const calls = [];
     let attached = false;
@@ -191,7 +191,7 @@ test("Voice diagnostics keep only supported numeric counters and release engine 
         "@utils/misc": misc,
         "@webpack/common": { MediaEngineStore: { getMediaEngine: () => ({ emitter, connections: new Set([{ emitter: connection }]) }) } },
     });
-    const log = requestLog.createRequestLog(() => ({ recordVoiceDiagnostics: true }));
+    const log = requestLog.createRequestLog(() => ({ recordNetworkRequests: true, recordVoiceDiagnostics: true }));
     const stop = voice.installVoiceRequestLog(log);
     const stats = { token: "SECRET", transport: { ping: 42, bytesSent: 1024, localAddress: "SECRET" }, rtp: { outbound: [{ bytesSent: 512, packetsSent: 10, audioLevel: 0.5, userId: "SECRET" }] } };
     emitter.emit("connection-stats", "SECRET", stats);

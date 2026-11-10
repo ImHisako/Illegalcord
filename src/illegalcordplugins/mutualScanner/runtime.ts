@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import { Logger } from "@utils/Logger";
 import type { ToastVariant } from "@vencord/discord-types";
 import { GuildMemberCountStore, GuildStore, React, showToast as showDiscordToast } from "@webpack/common";
 
@@ -34,6 +35,7 @@ import {
 
 const SCAN_TASK_ID = "kamidere-mutual-scanner:scan";
 const WARMUP_TASK_ID = "kamidere-mutual-scanner:warmup";
+const logger = new Logger("MutualScanner");
 
 function showToast(message: string, variant: ToastVariant) {
     showDiscordToast({ text: message, variant, position: "bottom" });
@@ -230,7 +232,7 @@ function syncWarmupTask() {
     });
 }
 
-function finishScan(result: MutualScannerExecutionResult) {
+function finishScan(result: MutualScannerExecutionResult | null) {
     updateState(current => ({
         ...current,
         scan: {
@@ -264,11 +266,7 @@ export function subscribeMutualScannerRuntime(listener: () => void) {
 }
 
 export function useMutualScannerRuntimeState() {
-    const [signal, forceUpdate] = React.useReducer(value => value + 1, 0);
-
-    React.useEffect(() => subscribeMutualScannerRuntime(forceUpdate), []);
-
-    return React.useMemo(() => getSnapshot(), [signal]);
+    return React.useSyncExternalStore(subscribeMutualScannerRuntime, getSnapshot);
 }
 
 export function cancelMutualScannerRuntime() {
@@ -344,17 +342,18 @@ export function startMutualScannerRun(ownerId: string | null, config: MutualScan
             ownerId,
             controller,
             onProgress: progress => {
+                if (scanController !== controller) return;
                 updateState(current => ({
                     ...current,
                     scan: {
-                ...current.scan,
-                requestDelayMs: normalizedConfig.requestDelayMs,
-                progress: { ...progress },
-            },
+                        ...current.scan,
+                        progress: { ...progress },
+                    },
                 }));
                 syncScanTask();
             },
             onMatch: match => {
+                if (scanController !== controller) return;
                 updateState(current => ({
                     ...current,
                     scan: {
@@ -367,6 +366,7 @@ export function startMutualScannerRun(ownerId: string | null, config: MutualScan
                 syncScanTask();
             },
         });
+        if (scanController !== controller) return;
 
         const run: MutualScannerRun = {
             id: makeLocalId("mutual-run"),
@@ -381,6 +381,7 @@ export function startMutualScannerRun(ownerId: string | null, config: MutualScan
         };
 
         await addMutualScannerRun(ownerId, run);
+        if (scanController !== controller) return;
 
         updateState(current => ({
             ...current,
@@ -400,14 +401,20 @@ export function startMutualScannerRun(ownerId: string | null, config: MutualScan
         } else {
             showToast(result.error ?? "Mutual scan failed.", "critical");
         }
-    })();
+    })().catch(error => {
+        if (scanController !== controller) return;
+        scanController = null;
+        finishScan(null);
+        logger.error("Could not complete the mutual scan.", error);
+        showToast("Could not complete the mutual scan.", "critical");
+    });
 
     return true;
 }
 
 export function startMutualScannerWarmup(
     ownerId: string | null,
-    config: Pick<MutualScannerConfig, "selectedGuildIds" | "warmupMemberBudget" | "warmupTimeoutMs">,
+    config: Pick<MutualScannerConfig, "selectedGuildIds" | "warmupMemberBudget" | "warmupTimeoutMs" | "warmupCountMode">,
 ) {
     if (!ownerId || state.warmup.active) return false;
     if (config.selectedGuildIds.length === 0) return false;
@@ -443,10 +450,12 @@ export function startMutualScannerWarmup(
                     forceRefresh: true,
                     maxWaitMs: targetCount != null ? 0 : clampNumber(Number(config.warmupTimeoutMs) || 4000, 500, 20000),
                     memberBudget,
+                    countMode: config.warmupCountMode,
                     targetCount,
                     continueUntilTarget: targetCount != null,
                     controller,
                     onProgress: progress => {
+                        if (warmupController !== controller) return;
                         const guildLabel = GuildStore.getGuild(progress.guildId)?.name ?? progress.guildId;
                         const remainingCount = targetCount != null ? Math.max(targetCount - progress.finalCount, 0) : null;
                         const nextProgress: MutualScannerWarmupProgressState = {
@@ -476,6 +485,7 @@ export function startMutualScannerWarmup(
                     },
                 });
 
+                if (warmupController !== controller) return;
                 results.push(result);
                 if (controller.cancelled) {
                     break;
@@ -497,7 +507,7 @@ export function startMutualScannerWarmup(
 
             const completedGuilds = results.filter(result => !result.cancelled).length;
             const hydratedMembers = results.reduce((total, result) => total + Math.max(0, result.delta), 0);
-            const meaningfulHydration = results.some(result => result.delta > 0 || result.chunksSeen > 0);
+            const meaningfulHydration = hydratedMembers > 0;
             const lastResult = results.at(-1);
 
             if (lastResult) {
@@ -520,14 +530,14 @@ export function startMutualScannerWarmup(
                         },
                         status: meaningfulHydration
                             ? `Hydrated ${hydratedMembers} additional member${hydratedMembers === 1 ? "" : "s"} across ${completedGuilds} server${completedGuilds === 1 ? "" : "s"}.`
-                            : "Discord did not return any additional member chunks for the selected servers.",
+                            : "Discord did not add any members to the local cache for the selected servers.",
                     },
                 }));
             }
 
             if (!meaningfulHydration) {
                 showToast(
-                    "Manual cache warmup finished without receiving any additional member chunks from Discord.",
+                    "Manual cache warmup finished without adding any members to the local cache.",
                     "critical",
                 );
             } else {
@@ -537,6 +547,7 @@ export function startMutualScannerWarmup(
                 );
             }
         } catch (error) {
+            if (warmupController !== controller) return;
             const message = error instanceof Error ? error.message : "Manual cache warmup failed.";
             updateState(current => ({
                 ...current,
@@ -548,8 +559,10 @@ export function startMutualScannerWarmup(
             }));
             showToast(message, "critical");
         } finally {
-            finishWarmup();
-            warmupController = null;
+            if (warmupController === controller) {
+                warmupController = null;
+                finishWarmup();
+            }
         }
     })();
 

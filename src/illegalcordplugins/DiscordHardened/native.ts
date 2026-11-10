@@ -42,10 +42,11 @@ export async function configureRequestCapture(event: IpcMainInvokeEvent, webSock
     return true;
 }
 
-export function getRequestLog(event: IpcMainInvokeEvent) {
+export function getRequestLog(event: IpcMainInvokeEvent, knownRevision?: unknown) {
     if (!isTrustedSender(event)) return null;
+    if (knownRevision !== undefined && (typeof knownRevision !== "number" || !Number.isSafeInteger(knownRevision) || knownRevision < 0)) return null;
     const log = getSessionRequestLog(event.sender.session);
-    return log ? { ...log.snapshot(), advanced: advancedCaptures.get(event.sender)?.capture.status() } : null;
+    return log ? { ...log.snapshot(knownRevision), advanced: advancedCaptures.get(event.sender)?.capture.status() } : null;
 }
 
 export function clearRequestLog(event: IpcMainInvokeEvent): boolean {

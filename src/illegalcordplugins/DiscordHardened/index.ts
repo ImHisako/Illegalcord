@@ -441,8 +441,9 @@ export const settings = definePluginSettings({
     },
     recordNetworkRequests: {
         type: OptionType.BOOLEAN,
+        displayName: "Record network requests",
         description: "Record network request metadata in memory. Request bodies, headers, URL queries and credentials are excluded. May increase CPU and memory usage and cause lag.",
-        default: true,
+        default: false,
         onChange: refreshRequestLogging,
     },
     recordWebSocketMessages: {
@@ -474,6 +475,7 @@ export const settings = definePluginSettings({
     },
     requestLogRetention: {
         type: OptionType.SELECT,
+        displayName: "Request log retention",
         description: "Automatically remove requests older than this duration. The entry limit always applies.",
         options: [
             { label: "5 minutes", value: 5 },

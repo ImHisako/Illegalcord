@@ -27,7 +27,7 @@ interface SettingsGroup {
 }
 
 const PLUGIN_SETTINGS_PATHS: Array<"plugins.DiscordHardened.*"> = ["plugins.DiscordHardened.*"];
-const REQUEST_SETTINGS = ["recordNetworkRequests", "recordWebSocketMessages", "recordLocalResources", "recordVoiceDiagnostics", "requestLogLimit", "requestLogRetention", "blockedRequestUrls", "allowedRequestUrls"] as const;
+const REQUEST_SETTINGS = ["recordWebSocketMessages", "recordLocalResources", "recordVoiceDiagnostics", "requestLogLimit", "requestLogRetention", "blockedRequestUrls", "allowedRequestUrls"] as const;
 const SETTINGS_GROUPS = [
     {
         title: "Embeds and autoplay",
@@ -54,6 +54,11 @@ const SETTINGS_GROUPS = [
             "logBlockedRequests",
             "recordBlockedEvents",
         ],
+    },
+    {
+        title: "Request logging",
+        description: "Choose whether to record new requests and how long to keep existing entries.",
+        keys: ["recordNetworkRequests", "requestLogRetention"],
     },
     {
         title: "Browser identity",

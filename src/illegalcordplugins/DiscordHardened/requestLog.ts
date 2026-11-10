@@ -34,8 +34,10 @@ export type RequestInput = Omit<RequestEntry, "id" | "time"> & { time?: number; 
 export type RequestResult = Pick<RequestEntry, "state" | "status" | "detail" | "fromCache">;
 export interface RequestSnapshot {
     revision: number;
-    entries: RequestEntry[];
+    entries?: RequestEntry[];
 }
+
+let lastRevision = 0;
 
 export function sanitizeRequestUrl(raw: string, allowLocal = false): string | null {
     if (allowLocal && raw.startsWith("data:")) {
@@ -61,7 +63,7 @@ export function createRequestLog(readSettings: () => RequestLogSettings | undefi
     const entries = new Map<number, RequestEntry>();
     const pending = new Map<number | string, number>();
     let nextId = 0;
-    let revision = 0;
+    let revision = ++lastRevision;
 
     function prune(): void {
         const settings = readSettings();
@@ -73,7 +75,7 @@ export function createRequestLog(readSettings: () => RequestLogSettings | undefi
         for (const [id, entry] of entries) {
             if (entries.size <= limit && entry.time > cutoff && settings?.enabled !== false) continue;
             entries.delete(id);
-            revision++;
+            revision = ++lastRevision;
         }
         for (const [key, id] of pending) if (!entries.has(id)) pending.delete(key);
     }
@@ -82,18 +84,18 @@ export function createRequestLog(readSettings: () => RequestLogSettings | undefi
         prune,
         record(input: RequestInput, key?: number | string): void {
             const settings = readSettings();
-            if (settings?.enabled === false || settings?.recordNetworkRequests === false) return;
-            if (input.source === "WebSocket" && !settings?.recordWebSocketMessages
-                || input.source === "Local" && !settings?.recordLocalResources
-                || input.source === "Voice" && !settings?.recordVoiceDiagnostics) return;
+            if (settings?.recordNetworkRequests !== true || settings.enabled === false) return;
+            if (input.source === "WebSocket" && !settings.recordWebSocketMessages
+                || input.source === "Local" && !settings.recordLocalResources
+                || input.source === "Voice" && !settings.recordVoiceDiagnostics) return;
             const url = input.source === "Voice" ? "Voice engine"
                 : input.source === "WebSocket" && !input.url ? "Existing WebSocket connection"
-                    : sanitizeRequestUrl(input.url, settings?.recordLocalResources === true);
+                    : sanitizeRequestUrl(input.url, settings.recordLocalResources === true);
             if (!url) return;
             const id = ++nextId;
             entries.set(id, { ...input, id, time: input.time ?? Date.now(), url, method: input.method.toUpperCase() });
             if (key !== undefined) pending.set(key, id);
-            revision++;
+            revision = ++lastRevision;
             prune();
         },
         finish(key: number | string, result: RequestResult): void {
@@ -102,17 +104,18 @@ export function createRequestLog(readSettings: () => RequestLogSettings | undefi
             pending.delete(key);
             if (!entry) return;
             Object.assign(entry, result, { duration: Math.max(0, Date.now() - entry.time) });
-            revision++;
+            revision = ++lastRevision;
             prune();
         },
-        snapshot(): RequestSnapshot {
+        snapshot(knownRevision?: number): RequestSnapshot {
             prune();
+            if (knownRevision === revision) return { revision };
             return { revision, entries: Array.from(entries.values(), entry => ({ ...entry })) };
         },
         clear(): void {
             entries.clear();
             pending.clear();
-            revision++;
+            revision = ++lastRevision;
         },
     };
 }

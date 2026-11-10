@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+export type WarmupCountMode = "deduplicated" | "cache";
+export type ScanRefreshMode = "full" | "isolated";
+
 export interface MutualScannerConfig {
     selectedGuildIds: string[];
     requestDelayMs: number;
@@ -13,6 +16,8 @@ export interface MutualScannerConfig {
     warmMemberCacheBeforeScan: boolean;
     warmupTimeoutMs: number;
     warmupMemberBudget: number;
+    warmupCountMode: WarmupCountMode;
+    scanRefreshMode: ScanRefreshMode;
 }
 
 export interface MutualScannerMatch {

@@ -274,8 +274,8 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
             it: "Strumenti Kamidere"
         },
         route: {
-            en: "Settings > Kamidere",
-            it: "Settings > Kamidere"
+            en: "Settings > Illegalcord Settings",
+            it: "Impostazioni > Illegalcord Settings"
         },
         body: {
             en: "Kamidere tools are local advanced workflows such as Presence Lab, Mutual Scanner, and Send Trail.",

@@ -1,0 +1,30 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+.vc-kamidere-runtime-panel {
+    display: grid;
+    width: min(320px, 90vw);
+    max-height: 70vh;
+    overflow: auto;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--background-floating);
+    box-shadow: var(--shadow-high);
+}
+
+.vc-kamidere-runtime-task {
+    display: grid;
+    gap: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.vc-kamidere-runtime-progress {
+    width: 100%;
+    accent-color: var(--brand-500);
+}

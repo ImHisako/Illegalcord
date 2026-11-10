@@ -8,21 +8,27 @@ import type { MessageObject, SendMessageOptions } from "@api/MessageEvents";
 import { ClockIcon } from "@components/Icons";
 import SettingsPlugin from "@plugins/_core/settings";
 import { Devs } from "@utils/constants";
+import { LazyComponent } from "@utils/lazyReact";
+import { Logger } from "@utils/Logger";
 import { removeFromArray, sleep } from "@utils/misc";
 import definePlugin from "@utils/types";
 import { ChannelStore, GuildStore, MessageStore, UserStore } from "@webpack/common";
 
-import SendTrailTab from "./SendTrailTab";
+import RuntimeActivityButton from "../_kamidereCompat/RuntimeActivityButton";
+import { removeKamidereRuntimeTask, SEND_TRAIL_PURGE_TASK_ID } from "../_kamidereCompat/runtimeActivity";
 import { settings } from "./settings";
-import { appendSentTrailRecord, hasSentTrailRecord, mergeSentTrailRecordMedia, removeSentTrailRecord } from "./store";
-import type { MessageCreatePayload, MessageDeletePayload, MessageUpdatePayload, PendingSendDraft, SentTrailRecord } from "./types";
+import { appendSentTrailRecord, clearSentTrailRecordsWhere, hasSentTrailRecord, mergeSentTrailRecordMedia, removeSentTrailRecord } from "./store";
+import type { MessageCreatePayload, MessageDeletePayload, MessageUpdatePayload, PendingSendDraft, SendTrailMessage, SentTrailRecord } from "./types";
 import { buildJumpLink, collectMessageMediaItems, getChannelRecipientIds, getMessageDisplayContent, getMessageTimestamp, getRecordPreview, hasMediaLinks, isForwardedMessage, makeAttachmentSignature, makeUploadSignature, normalizeContent } from "./utils";
 
 const DRAFT_TTL_MS = 20_000;
 const MIN_MATCH_SCORE = 4;
 const SEND_TRAIL_SETTINGS_KEY = "kamidere_send_trail";
+const SendTrailTab = LazyComponent(() => require("./SendTrailTab").default);
+const logger = new Logger("SendTrail");
 
 let draftCounter = 0;
+let generation = 0;
 const pendingDrafts = new Map<string, PendingSendDraft>();
 
 function cleanupExpiredDrafts(now = Date.now()) {
@@ -34,6 +40,8 @@ function cleanupExpiredDrafts(now = Date.now()) {
 }
 
 function createPendingDraft(channelId: string, messageObj: MessageObject, options: SendMessageOptions) {
+    const ownerId = UserStore.getCurrentUser()?.id;
+    if (!ownerId) return;
     cleanupExpiredDrafts();
 
     const content = options.content ?? messageObj.content ?? "";
@@ -42,6 +50,7 @@ function createPendingDraft(channelId: string, messageObj: MessageObject, option
 
     pendingDrafts.set(localId, {
         localId,
+        ownerId,
         channelId,
         createdAt: Date.now(),
         content,
@@ -55,7 +64,7 @@ function createPendingDraft(channelId: string, messageObj: MessageObject, option
 
 function getDraftScore(draft: PendingSendDraft, payload: MessageCreatePayload) {
     const { message } = payload;
-    if (draft.channelId !== message.channel_id) return Number.NEGATIVE_INFINITY;
+    if (draft.channelId !== message.channel_id || draft.ownerId !== message.author?.id) return Number.NEGATIVE_INFINITY;
 
     const now = Date.now();
     if (now - draft.createdAt > DRAFT_TTL_MS) return Number.NEGATIVE_INFINITY;
@@ -72,7 +81,7 @@ function getDraftScore(draft: PendingSendDraft, payload: MessageCreatePayload) {
         score += 3;
     }
 
-    if (draft.replyMessageId && draft.replyMessageId === message.messageReference?.message_id) {
+    if (draft.replyMessageId && draft.replyMessageId === (message.messageReference ?? message.message_reference)?.message_id) {
         score += 2;
     }
 
@@ -116,10 +125,9 @@ function resolveBestDraft(payload: MessageCreatePayload) {
     return bestDraft;
 }
 
-function buildRecord(payload: MessageCreatePayload, draft?: PendingSendDraft | null): SentTrailRecord {
-    const { message } = payload;
+function buildRecord(message: SendTrailMessage, eventGuildId?: string, draft?: PendingSendDraft | null): SentTrailRecord {
     const channel = ChannelStore.getChannel(message.channel_id);
-    const guildId = payload.guildId ?? channel?.guild_id ?? "@me";
+    const guildId = eventGuildId ?? message.guild_id ?? channel?.guild_id ?? "@me";
     const guild = guildId !== "@me" ? GuildStore.getGuild(guildId) : null;
     const timestamp = getMessageTimestamp(message);
     const content = getMessageDisplayContent(message, draft?.content ?? "");
@@ -141,7 +149,7 @@ function buildRecord(payload: MessageCreatePayload, draft?: PendingSendDraft | n
         channelNameSnapshot: channel?.name ?? undefined,
         guildNameSnapshot: guild?.name ?? undefined,
         recipientUserIds: getChannelRecipientIds(channel),
-        replyMessageId: message.messageReference?.message_id ?? draft?.replyMessageId,
+        replyMessageId: (message.messageReference ?? message.message_reference)?.message_id ?? draft?.replyMessageId,
     };
 }
 
@@ -151,13 +159,14 @@ async function maybeEnrichRecord(payload: MessageUpdatePayload) {
 
     const cachedMessage = MessageStore.getMessage(payload.message.channel_id, payload.message.id);
     const message = cachedMessage ?? payload.message;
-    if (!message?.author || message.author.id !== currentUserId) return;
+    if ((message.author?.id ?? payload.message.author?.id) !== currentUserId) return;
 
-    const media = collectMessageMediaItems(message);
+    const media = collectMessageMediaItems(payload.message);
+    if (cachedMessage) media.push(...collectMessageMediaItems(cachedMessage));
     if (!media.length) return;
 
     const channel = ChannelStore.getChannel(message.channel_id);
-    const guildId = payload.guildId ?? channel?.guild_id ?? "@me";
+    const guildId = payload.guildId ?? payload.message.guild_id ?? channel?.guild_id ?? "@me";
     const guild = guildId !== "@me" ? GuildStore.getGuild(guildId) : null;
 
     await mergeSentTrailRecordMedia(
@@ -179,19 +188,13 @@ async function maybeCreateRecordFromUpdate(payload: MessageUpdatePayload) {
     if (!currentUserId) return;
 
     const cachedMessage = MessageStore.getMessage(payload.message.channel_id, payload.message.id);
-    const message = cachedMessage ?? payload.message;
+    const message = cachedMessage && isForwardedMessage(cachedMessage) ? cachedMessage : payload.message;
 
-    if (!message?.author || message.author.id !== currentUserId) return;
+    if ((message.author?.id ?? cachedMessage?.author.id) !== currentUserId) return;
     if (!isForwardedMessage(message)) return;
     if (hasSentTrailRecord(currentUserId, message.channel_id, message.id)) return;
 
-    const record = buildRecord({
-        type: "MESSAGE_CREATE",
-        optimistic: false,
-        channelId: message.channel_id,
-        guildId: payload.guildId,
-        message: message as MessageCreatePayload["message"],
-    }, null);
+    const record = buildRecord(message, payload.guildId ?? payload.message.guild_id);
 
     await appendSentTrailRecord(record);
 }
@@ -223,13 +226,15 @@ async function enrichFromStore(channelId: string, messageId: string, guildId?: s
     return true;
 }
 
-function scheduleEnrichment(channelId: string, messageId: string, guildId?: string) {
+function scheduleEnrichment(ownerId: string, channelId: string, messageId: string, guildId: string) {
+    const scheduledGeneration = generation;
     void (async () => {
         for (let attempt = 0; attempt < 3; attempt++) {
             await sleep(900 + attempt * 1200);
+            if (scheduledGeneration !== generation || UserStore.getCurrentUser()?.id !== ownerId) return;
             if (await enrichFromStore(channelId, messageId, guildId)) break;
         }
-    })();
+    })().catch(error => logger.error("Could not update media in Send Trail.", error));
 }
 
 function unregisterSendTrailSettingsTab() {
@@ -253,18 +258,24 @@ export default definePlugin({
     name: "SendTrail",
     description: "Tracks your newly sent messages, lets you select them, and purges them in a dedicated Illegalcord settings page.",
     authors: [Devs.clrxxo],
-    dependencies: ["Settings", "MessageEventsAPI"],
+    dependencies: ["Settings", "MessageEventsAPI", "HeaderBarAPI"],
     enabledByDefault: true,
     tags: ["Chat", "Utility"],
     requiresRestart: false,
     settings,
+    headerBarButton: {
+        icon: ClockIcon,
+        render: () => <RuntimeActivityButton />
+    },
 
     start() {
         registerSendTrailSettingsTab();
     },
 
     stop() {
+        generation++;
         pendingDrafts.clear();
+        removeKamidereRuntimeTask(SEND_TRAIL_PURGE_TASK_ID);
         unregisterSendTrailSettingsTab();
     },
 
@@ -285,9 +296,10 @@ export default definePlugin({
             const draft = resolveBestDraft(payload);
             if (!draft && !isForwardedMessage(payload.message)) return;
 
-            const record = buildRecord(payload, draft);
+            const currentGeneration = generation;
+            const record = buildRecord(payload.message, payload.guildId, draft);
             await appendSentTrailRecord(record);
-            scheduleEnrichment(record.channelId, record.messageId, record.guildId);
+            if (generation === currentGeneration) scheduleEnrichment(currentUserId, record.channelId, record.messageId, record.guildId);
         },
 
         async MESSAGE_UPDATE(payload: MessageUpdatePayload) {
@@ -298,6 +310,10 @@ export default definePlugin({
 
         async MESSAGE_DELETE(payload: MessageDeletePayload) {
             await removeSentTrailRecord(UserStore.getCurrentUser()?.id ?? null, payload.channelId, payload.id);
+        },
+        async MESSAGE_DELETE_BULK({ ids, channelId }: { ids: string[]; channelId: string; }) {
+            const deletedIds = new Set(ids);
+            await clearSentTrailRecordsWhere(UserStore.getCurrentUser()?.id ?? null, record => record.channelId === channelId && deletedIds.has(record.messageId));
         },
     },
 });

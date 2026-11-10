@@ -366,6 +366,7 @@ export async function executeMutualScan(
                 controller,
                 maxWaitMs: config.warmupTimeoutMs,
                 memberBudget: config.warmupMemberBudget,
+                countMode: config.warmupCountMode,
                 onProgress: progress => {
                     const suffix = progress.state === "cache"
                         ? "cached index"
@@ -422,13 +423,20 @@ export async function executeMutualScan(
                 };
             }
 
+            const cachedUser = UserStore.getUser(candidateId);
             if (config.skipExistingFriends && RelationshipStore.isFriend(candidateId)) {
                 stats.skippedExistingFriends++;
-                emitProgress(stats, candidates.length, "scanning", candidateId, buildIdentityFromUser(candidateId, UserStore.getUser(candidateId) as RawIdentity | undefined).label, options?.onProgress);
+                emitProgress(stats, candidates.length, "scanning", candidateId, buildIdentityFromUser(candidateId, cachedUser).label, options?.onProgress);
                 continue;
             }
 
-            const previewIdentity = buildIdentityFromUser(candidateId, UserStore.getUser(candidateId) as RawIdentity | undefined);
+            const previewIdentity = buildIdentityFromUser(candidateId, cachedUser);
+            if (!config.includeBots && cachedUser?.bot) {
+                stats.skippedBots++;
+                stats.scannedCount++;
+                emitProgress(stats, candidates.length, "scanning", candidateId, previewIdentity.label, options?.onProgress);
+                continue;
+            }
             emitProgress(stats, candidates.length, "scanning", candidateId, previewIdentity.label, options?.onProgress);
 
             try {
@@ -463,12 +471,8 @@ export async function executeMutualScan(
             const mutualFriends = UserProfileStore.getMutualFriends(candidateId);
             const mutualFriendCount = UserProfileStore.getMutualFriendsCount(candidateId);
 
-            const hasAnyMutual = Array.isArray(mutualFriends)
-                ? mutualFriends.length > 0
-                : (mutualFriendCount ?? 0) > 0;
-
-            if (hasAnyMutual) {
-                const matchSource = Array.isArray(mutualFriends) ? "list" : "count";
+            if (mutualFriends?.length || (mutualFriendCount ?? 0) > 0) {
+                const matchSource = mutualFriends?.length ? "list" : "count";
                 if (matchSource === "count") {
                     stats.countOnlyMatches++;
                 }

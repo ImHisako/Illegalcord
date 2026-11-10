@@ -7,12 +7,12 @@
 import { ComponentsIcon } from "@components/Icons";
 import SettingsPlugin from "@plugins/_core/settings";
 import { Devs } from "@utils/constants";
+import { LazyComponent } from "@utils/lazyReact";
 import { removeFromArray } from "@utils/misc";
 import definePlugin from "@utils/types";
 
-import PresenceLabTab from "./PresenceLabTab";
-
 const PRESENCE_LAB_SETTINGS_KEY = "kamidere_presence_lab";
+const PresenceLabTab = LazyComponent(() => require("./PresenceLabTab").default);
 
 function unregisterPresenceLabSettingsTab() {
     while (SettingsPlugin.customEntries.some(entry => entry.key === PRESENCE_LAB_SETTINGS_KEY)) {
@@ -35,6 +35,7 @@ export default definePlugin({
     name: "PresenceLab",
     description: "Local-only dashboard for operators, targets, and manually logged experimental presence sessions.",
     authors: [Devs.clrxxo],
+    dependencies: ["Settings"],
     enabledByDefault: true,
     tags: ["Developers", "Utility"],
     requiresRestart: false,

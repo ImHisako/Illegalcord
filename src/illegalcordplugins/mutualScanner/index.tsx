@@ -4,20 +4,27 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { MagnifyingGlassIcon } from "@components/Icons";
+import { ClockIcon, MagnifyingGlassIcon } from "@components/Icons";
 import SettingsPlugin from "@plugins/_core/settings";
 import { Devs } from "@utils/constants";
+import { LazyComponent } from "@utils/lazyReact";
 import { removeFromArray } from "@utils/misc";
 import definePlugin from "@utils/types";
+import { UserStore } from "@webpack/common";
 
-import {
-    mountKamidereRuntimeActivity,
-    unmountKamidereRuntimeActivity,
-} from "../_kamidereCompat/runtimeActivity";
-import MutualScannerTab from "./MutualScannerTab";
+import RuntimeActivityButton from "../_kamidereCompat/RuntimeActivityButton";
 import { resetMutualScannerRuntime } from "./runtime";
 
 const MUTUAL_SCANNER_SETTINGS_KEY = "kamidere_mutual_scanner";
+const MutualScannerTab = LazyComponent(() => require("./MutualScannerTab").default);
+let activeUserId: string | undefined;
+
+function onAccountChange() {
+    const userId = UserStore.getCurrentUser()?.id;
+    if (userId === activeUserId) return;
+    activeUserId = userId;
+    resetMutualScannerRuntime();
+}
 
 function unregisterMutualScannerSettingsTab() {
     while (SettingsPlugin.customEntries.some(entry => entry.key === MUTUAL_SCANNER_SETTINGS_KEY)) {
@@ -40,19 +47,24 @@ export default definePlugin({
     name: "MutualScanner",
     description: "Scans selected servers for members that share at least one mutual friend with your account and saves the results locally.",
     authors: [Devs.clrxxo],
-    dependencies: ["Settings"],
+    dependencies: ["Settings", "HeaderBarAPI"],
     enabledByDefault: true,
     tags: ["Friends", "Utility"],
     requiresRestart: false,
+    headerBarButton: {
+        icon: ClockIcon,
+        render: () => <RuntimeActivityButton />
+    },
 
     start() {
-        mountKamidereRuntimeActivity();
+        activeUserId = UserStore.getCurrentUser()?.id;
+        UserStore.addChangeListener(onAccountChange);
         registerMutualScannerSettingsTab();
     },
 
     stop() {
+        UserStore.removeChangeListener(onAccountChange);
         resetMutualScannerRuntime();
-        unmountKamidereRuntimeActivity();
         unregisterMutualScannerSettingsTab();
     },
 });

@@ -5,13 +5,14 @@
  */
 
 import * as DataStore from "@api/DataStore";
-import { React, UserStore } from "@webpack/common";
-import type { DispatchWithoutAction } from "react";
+import { Logger } from "@utils/Logger";
+import { React } from "@webpack/common";
 
 import type { PresenceLabConfig, PresenceLabData, PresenceLabOperator, PresenceLabSession, PresenceLabTarget } from "./types";
 
 const STORAGE_PREFIX = "kamidere-presence-lab:";
-const signals = new Set<DispatchWithoutAction>();
+const logger = new Logger("PresenceLab");
+const listeners = new Set<() => void>();
 const cache = new Map<string, PresenceLabData>();
 
 const DEFAULT_CONFIG: PresenceLabConfig = {
@@ -22,8 +23,9 @@ const DEFAULT_CONFIG: PresenceLabConfig = {
     neutralProfile: false,
 };
 
-function emit() {
-    signals.forEach(signal => signal());
+function subscribe(listener: () => void) {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
 }
 
 function getStorageKey(userId: string) {
@@ -57,21 +59,22 @@ function normalizeData(data?: Partial<PresenceLabData> | null): PresenceLabData 
     };
 }
 
-function getCachedData(userId: string | null) {
-    if (!userId) return normalizeData();
-    return cache.get(userId) ?? normalizeData();
-}
+const EMPTY_DATA = normalizeData();
 
-function setCachedData(userId: string | null, data: PresenceLabData) {
-    if (!userId) return;
-    cache.set(userId, normalizeData(data));
+function publishData(userId: string, data: PresenceLabData) {
+    cache.set(userId, data);
+    listeners.forEach(listener => listener());
 }
 
 export async function getPresenceLabData(userId: string | null) {
     if (!userId) return normalizeData();
-    const data = await DataStore.get(getStorageKey(userId)) as PresenceLabData | undefined;
+    const previous = cache.get(userId);
+    const data = await DataStore.get<PresenceLabData>(getStorageKey(userId));
+    const current = cache.get(userId);
+    if (current && current !== previous) return current;
+
     const normalized = normalizeData(data);
-    setCachedData(userId, normalized);
+    publishData(userId, normalized);
     return normalized;
 }
 
@@ -80,15 +83,14 @@ export async function updatePresenceLabData(
     updater: (current: PresenceLabData) => PresenceLabData,
 ) {
     if (!userId) return normalizeData();
-    let nextData = getCachedData(userId);
+    let nextData = EMPTY_DATA;
 
     await DataStore.update(getStorageKey(userId), (existing: PresenceLabData | undefined) => {
         nextData = normalizeData(updater(normalizeData(existing)));
         return nextData;
     });
 
-    setCachedData(userId, nextData);
-    emit();
+    publishData(userId, nextData);
     return nextData;
 }
 
@@ -97,8 +99,7 @@ export async function clearPresenceLabData(userId: string | null) {
     if (!userId) return next;
 
     await DataStore.set(getStorageKey(userId), next);
-    setCachedData(userId, next);
-    emit();
+    publishData(userId, next);
     return next;
 }
 
@@ -151,8 +152,6 @@ export async function updatePresenceLabTargetState(
 
 export async function addPresenceLabSession(userId: string | null, session: PresenceLabSession) {
     return updatePresenceLabData(userId, current => {
-        const sessions = [session, ...current.sessions].sort((left, right) => right.startedAt - left.startedAt);
-
         return {
             ...current,
             operators: current.operators.map(operator =>
@@ -165,7 +164,7 @@ export async function addPresenceLabSession(userId: string | null, session: Pres
                     ? { ...target, lastSeenAt: session.startedAt }
                     : target,
             ),
-            sessions,
+            sessions: [session, ...current.sessions],
         };
     });
 }
@@ -185,40 +184,11 @@ export async function updatePresenceLabConfig(userId: string | null, patch: Part
 }
 
 export function usePresenceLabData(userId: string | null) {
-    const [signal, setSignal] = React.useReducer(value => value + 1, 0);
-    const [data, setData] = React.useState<PresenceLabData>(() => getCachedData(userId));
-    const [pending, setPending] = React.useState(() => !!userId && !cache.has(userId));
-    const previousUserIdRef = React.useRef<string | null | undefined>(void 0);
+    const data = React.useSyncExternalStore(subscribe, () => userId ? cache.get(userId) : undefined);
 
     React.useEffect(() => {
-        signals.add(setSignal);
-        return () => void signals.delete(setSignal);
-    }, []);
+        if (userId) void getPresenceLabData(userId).catch(error => logger.error("Could not load Presence Lab data.", error));
+    }, [userId]);
 
-    React.useEffect(() => {
-        let isAlive = true;
-        const userChanged = previousUserIdRef.current !== userId;
-        previousUserIdRef.current = userId;
-
-        if (userChanged) {
-            setData(getCachedData(userId));
-            setPending(!!userId && !cache.has(userId));
-        }
-
-        void getPresenceLabData(userId).then(nextData => {
-            if (!isAlive) return;
-            setData(nextData);
-            setPending(false);
-        });
-
-        return () => {
-            isAlive = false;
-        };
-    }, [signal, userId]);
-
-    return [data, pending] as const;
-}
-
-export function getPresenceLabCurrentUserId() {
-    return UserStore.getCurrentUser()?.id ?? null;
+    return [data ?? EMPTY_DATA, !!userId && data === undefined] as const;
 }

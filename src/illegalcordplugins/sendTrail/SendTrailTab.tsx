@@ -23,8 +23,8 @@ import type { RenderModalProps, ToastVariant, User } from "@vencord/discord-type
 import { Alerts, ChannelStore, IconUtils, MessageActions, Modal, NavigationRouter, openModal, React, Select, showToast as showDiscordToast, TextInput, UserStore, UserUtils, useStateFromStores } from "@webpack/common";
 
 import { BRAND_ICON_DATA_URL, BRAND_NAME } from "../_kamidereCompat/branding";
-import { removeKamidereRuntimeTask, upsertKamidereRuntimeTask } from "../_kamidereCompat/runtimeActivity";
-import { parseProtectedDmChannels, parseProtectedDmUserIds, SendTrailPurgeTarget,settings } from "./settings";
+import { getKamidereRuntimeTask, removeKamidereRuntimeTask, SEND_TRAIL_PURGE_TASK_ID, subscribeKamidereRuntimeActivity, upsertKamidereRuntimeTask } from "../_kamidereCompat/runtimeActivity";
+import { parseProtectedDmChannels, parseProtectedDmUserIds, SendTrailPurgeTarget, settings } from "./settings";
 import { clearSentTrailRecords, removeSentTrailRecord, useSentTrailRecords } from "./store";
 import type { SentTrailMediaItem, SentTrailRecord } from "./types";
 import { buildSearchIndex, formatDayLabel, formatTime, getRecordRecipientIds, recordMatchesScope, resolveRecordContext } from "./utils";
@@ -34,7 +34,7 @@ const LIVE_DELETE_DELAY_MS = 850;
 const PURGE_STATUS_HIDE_DELAY_MS = 2400;
 const PURGE_STATUS_TRANSITION_MS = 280;
 const DEFAULT_PAGE_SIZE: PageSizeValue = "5";
-const PURGE_RUNTIME_TASK_ID = "kamidere-send-trail:purge";
+const PURGE_SETTINGS: Array<keyof typeof settings.def> = ["purgeTarget", "protectAllDms", "protectedDmChannels", "protectedDmUserIds"];
 
 const HERO_BACKGROUND = `data:image/svg+xml;utf8,${encodeURIComponent(
     [
@@ -114,7 +114,7 @@ function makeEmptyPurgeStatus(): PurgeStatusState {
 
 function syncPurgeRuntimeTask(status: PurgeStatusState, startedAt: number) {
     if (status.phase === "idle") {
-        removeKamidereRuntimeTask(PURGE_RUNTIME_TASK_ID);
+        removeKamidereRuntimeTask(SEND_TRAIL_PURGE_TASK_ID, startedAt);
         return;
     }
 
@@ -140,7 +140,7 @@ function syncPurgeRuntimeTask(status: PurgeStatusState, startedAt: number) {
                 : "idle";
 
     upsertKamidereRuntimeTask({
-        id: PURGE_RUNTIME_TASK_ID,
+        id: SEND_TRAIL_PURGE_TASK_ID,
         toolId: "send-trail-purge",
         name: "Send Trail Purge",
         status: isRunning
@@ -407,7 +407,7 @@ function SendTrailConfigModal({
     close(): void;
     records: SentTrailRecord[];
 }) {
-    const config = settings.use();
+    const config = settings.use(PURGE_SETTINGS);
     const protectedDmChannels = React.useMemo(() => parseProtectedDmChannels(config.protectedDmChannels), [config.protectedDmChannels]);
     const protectedDmUserIds = React.useMemo(() => parseProtectedDmUserIds(config.protectedDmUserIds), [config.protectedDmUserIds]);
     const dmUserIds = React.useMemo(() =>
@@ -822,8 +822,12 @@ function getScrollContainer(node: HTMLElement | null): HTMLElement | Window {
 
 function SendTrailTab() {
     const currentUserId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id ?? null);
+    return <SendTrailAccount key={currentUserId} currentUserId={currentUserId} />;
+}
+
+function SendTrailAccount({ currentUserId }: { currentUserId: string | null; }) {
     const [records, pending] = useSentTrailRecords(currentUserId);
-    const purgeConfig = settings.use();
+    const purgeConfig = settings.use(PURGE_SETTINGS);
     const protectedDmChannels = React.useMemo(
         () => parseProtectedDmChannels(purgeConfig.protectedDmChannels),
         [purgeConfig.protectedDmChannels],
@@ -855,6 +859,7 @@ function SendTrailTab() {
     const keepFooterVisibleRef = React.useRef(false);
 
     React.useEffect(() => {
+        isMountedRef.current = true;
         return () => {
             isMountedRef.current = false;
             if (purgeStatusTimerRef.current) {
@@ -875,17 +880,14 @@ function SendTrailTab() {
             purgeRuntimeTimerRef.current = null;
         }
 
-        if (delayMs <= 0) {
-            return;
-        }
+        if (delayMs <= 0) return;
 
-        if (delayMs > 0) {
-            purgeRuntimeTimerRef.current = window.setTimeout(() => {
-                removeKamidereRuntimeTask(PURGE_RUNTIME_TASK_ID);
-                purgeRuntimeStartedAtRef.current = null;
-                purgeRuntimeTimerRef.current = null;
-            }, delayMs);
-        }
+        const startedAt = purgeRuntimeStartedAtRef.current;
+        purgeRuntimeTimerRef.current = window.setTimeout(() => {
+            if (startedAt != null) removeKamidereRuntimeTask(SEND_TRAIL_PURGE_TASK_ID, startedAt);
+            purgeRuntimeStartedAtRef.current = null;
+            purgeRuntimeTimerRef.current = null;
+        }, delayMs);
     }, []);
 
     React.useEffect(() => {
@@ -1125,7 +1127,9 @@ function SendTrailTab() {
     );
 
     const dmConversationCount = React.useMemo(() => buildDmConversations(records).length, [records]);
-    const isBusy = purgeStatus.phase === "running";
+    const isBusy = React.useSyncExternalStore(subscribeKamidereRuntimeActivity, () =>
+        getKamidereRuntimeTask(SEND_TRAIL_PURGE_TASK_ID)?.status === "running",
+    );
     const shouldHideLoadingState = isBusy || deletingIds.size > 0 || renderedPurgeStatus.phase !== "idle";
     const scopeLabel = scopeOptions.find(option => option.value === scope)?.label ?? "All destinations";
     const kindLabel = kindOptions.find(option => option.value === kind)?.label ?? "Everything";
@@ -1164,7 +1168,8 @@ function SendTrailTab() {
     }, [records]);
 
     const runPurge = React.useCallback(async (targetRecords: SentTrailRecord[]) => {
-        if (!currentUserId || targetRecords.length === 0) return;
+        if (!currentUserId || UserStore.getCurrentUser()?.id !== currentUserId || targetRecords.length === 0
+            || getKamidereRuntimeTask(SEND_TRAIL_PURGE_TASK_ID)?.status === "running") return;
 
         if (purgeStatusTimerRef.current) {
             window.clearTimeout(purgeStatusTimerRef.current);
@@ -1211,7 +1216,10 @@ function SendTrailTab() {
         } satisfies PurgeStatusState;
         applyPurgeStatus(runningStatus, startedAt);
 
+        const isCurrentPurge = () => getKamidereRuntimeTask(SEND_TRAIL_PURGE_TASK_ID)?.startedAt === startedAt
+            && UserStore.getCurrentUser()?.id === currentUserId;
         for (const [index, record] of eligibleRecords.entries()) {
+            if (!isCurrentPurge()) break;
             const context = resolveRecordContext(record);
             const currentLabel = context.isDirectMessage ? context.channelName : `#${context.channelName}`;
 
@@ -1251,12 +1259,18 @@ function SendTrailTab() {
                     skipped,
                     currentLabel,
                 } satisfies PurgeStatusState;
-                applyPurgeStatus(progressStatus, startedAt);
+                if (isCurrentPurge()) applyPurgeStatus(progressStatus, startedAt);
             }
 
             if (index < eligibleRecords.length - 1) {
                 await sleep(LIVE_DELETE_DELAY_MS);
             }
+        }
+
+        if (!isCurrentPurge()) {
+            removeKamidereRuntimeTask(SEND_TRAIL_PURGE_TASK_ID, startedAt);
+            if (isMountedRef.current) setPurgeStatus(makeEmptyPurgeStatus());
+            return;
         }
 
         const phase: PurgeStatusPhase = failed === 0

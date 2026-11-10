@@ -7,13 +7,14 @@
 import "./style.css";
 
 import { Button } from "@components/Button";
+import { FormSwitch } from "@components/FormSwitch";
 import { Heading } from "@components/Heading";
 import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
 import { classNameFactory } from "@utils/css";
 import type { PluginNative } from "@utils/types";
 import { saveFile } from "@utils/web";
-import { moment, React, ScrollerThin, Select, TextInput, useEffect, useState } from "@webpack/common";
+import { moment, React, ScrollerThin, Select, TextInput, useEffect, useRef, useState } from "@webpack/common";
 import type { ReactNode } from "react";
 
 import { settings } from "./index";
@@ -44,7 +45,7 @@ export function RequestPanel({ controls }: RequestPanelProps) {
     const [source, setSource] = useState("All");
     const [coverage, setCoverage] = useState({ webSockets: "Disabled", localResources: "Disabled", voice: "Disabled", error: "" });
     const [pageIndex, setPageIndex] = useState(0);
-    const [revision, setRevision] = useState(0);
+    const clearVersion = useRef(0);
     const [error, setError] = useState("");
     const [clearing, setClearing] = useState(false);
     const [ruleError, setRuleError] = useState("");
@@ -52,28 +53,38 @@ export function RequestPanel({ controls }: RequestPanelProps) {
     useEffect(() => {
         let active = true;
         let timer: ReturnType<typeof setTimeout>;
-        let previousVersion = "";
+        let desktopRevision: number | undefined;
+        let browserRevision: number | undefined;
+        let desktopEntries: RequestEntry[] = [];
+        let browserEntries: RequestEntry[] = [];
         async function refresh(): Promise<void> {
+            const version = clearVersion.current;
             try {
-                const desktop = Native ? await Native.getRequestLog() : null;
-                if (!active) return;
-                const browser = browserRequestLog.snapshot();
-                setCoverage({ webSockets: "Disabled", localResources: "Disabled", error: "", ...desktop?.advanced, voice: getVoiceLoggingStatus() });
-                const version = `${desktop?.revision}:${browser.revision}`;
-                if (version !== previousVersion) {
-                    previousVersion = version;
-                    setEntries([...(desktop?.entries ?? []), ...browser.entries].sort((a, b) => b.time - a.time || b.id - a.id));
+                const desktop = Native ? await Native.getRequestLog(desktopRevision) : null;
+                if (!active || version !== clearVersion.current) return;
+                const browser = browserRequestLog.snapshot(browserRevision);
+                const nextCoverage = { webSockets: "Disabled", localResources: "Disabled", error: "", ...desktop?.advanced, voice: getVoiceLoggingStatus() };
+                setCoverage(current => current.webSockets === nextCoverage.webSockets
+                    && current.localResources === nextCoverage.localResources
+                    && current.error === nextCoverage.error
+                    && current.voice === nextCoverage.voice ? current : nextCoverage);
+                if (desktop?.revision !== desktopRevision || browser.revision !== browserRevision) {
+                    desktopEntries = desktop ? desktop.entries ?? desktopEntries : [];
+                    browserEntries = browser.entries ?? browserEntries;
+                    desktopRevision = desktop?.revision;
+                    browserRevision = browser.revision;
+                    setEntries([...desktopEntries, ...browserEntries].sort((a, b) => b.time - a.time || b.id - a.id));
                 }
                 setError(Native && !desktop ? "Desktop request capture is unavailable. Enable DiscordHardened and restart Discord." : "");
             } catch {
-                if (active) setError("Could not read the request log. Retrying automatically.");
+                if (active && version === clearVersion.current) setError("Could not read the request log. Retrying automatically.");
             } finally {
                 if (active) timer = setTimeout(refresh, 1000);
             }
         }
         void refresh();
         return () => { active = false; clearTimeout(timer); };
-    }, [revision]);
+    }, []);
 
     const query = search.trim().toLowerCase();
     const filtered = entries.filter(entry => (state === "All" || entry.state === state)
@@ -112,9 +123,9 @@ export function RequestPanel({ controls }: RequestPanelProps) {
                 return;
             }
             browserRequestLog.clear();
+            clearVersion.current++;
             setEntries([]);
             setPageIndex(0);
-            setRevision(value => value + 1);
             setError("");
         } catch {
             setError("Could not clear the request log.");
@@ -131,6 +142,13 @@ export function RequestPanel({ controls }: RequestPanelProps) {
         </div>
         <section className={cl("card")}>
             <Heading tag="h3">Request logging</Heading>
+            <FormSwitch
+                title={settings.def.recordNetworkRequests.displayName}
+                description="Keep request metadata in memory for troubleshooting."
+                value={options.recordNetworkRequests}
+                onChange={value => settings.store.recordNetworkRequests = value}
+                hideBorder
+            />
             <Notice.Warning>Logging may increase CPU and memory usage and cause Discord to lag, especially with additional capture sources enabled or the log panel open. Enable advanced logging only while troubleshooting. Lower the entry limit or pause capture if Discord slows down.</Notice.Warning>
             <Paragraph>{Native
                 ? "Records API calls, resource loads, redirects and WebSocket handshakes in this Electron session, including requests from frames and workers. Enable the additional sources below to observe individual WebSocket messages, local resources and available voice diagnostics."
@@ -163,9 +181,6 @@ export function RequestPanel({ controls }: RequestPanelProps) {
             <div className={cl("toolbar")}>
                 <Heading tag="h3" id="vc-discord-hardened-requests">Request logs</Heading>
                 <div className={cl("toolbar")}>
-                    <Button size="small" variant="secondary" onClick={() => settings.store.recordNetworkRequests = !options.recordNetworkRequests}>
-                        {options.recordNetworkRequests ? "Pause capture" : "Resume capture"}
-                    </Button>
                     <Button size="small" variant="secondary" disabled={!filtered.length} onClick={() => saveFile(new File([
                         JSON.stringify({ exportedAt: new Date().toISOString(), filters: { search, state, method, resource, source }, requests: filtered }, null, 2)
                     ], `discord-requests-${Date.now()}.json`, { type: "application/json" }))}>Export filtered logs</Button>

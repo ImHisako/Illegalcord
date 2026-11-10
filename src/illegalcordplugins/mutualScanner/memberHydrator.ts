@@ -8,7 +8,9 @@ import * as DataStore from "@api/DataStore";
 import { Logger } from "@utils/Logger";
 import { sleep } from "@utils/misc";
 import { findByPropsLazy } from "@webpack";
-import { FluxDispatcher, GuildMemberStore, SnowflakeUtils } from "@webpack/common";
+import { FluxDispatcher, GuildMemberStore, SnowflakeUtils, UserStore } from "@webpack/common";
+
+import type { WarmupCountMode } from "./types";
 
 const logger = new Logger("KamidereMemberHydrator");
 const GuildActions = findByPropsLazy("requestMembers", "requestMembersById") as {
@@ -35,6 +37,7 @@ export interface GuildHydrationBudget {
     ttlMs?: number;
     targetCount?: number | null;
     continueUntilTarget?: boolean;
+    countMode?: WarmupCountMode;
 }
 
 export interface GuildHydrationSnapshot {
@@ -132,6 +135,14 @@ function getMemberIdsFromStore(guildId: string) {
 
 function getMemberCount(guildId: string) {
     return getMemberIdsFromStore(guildId).length;
+}
+
+function getCachedMemberCount(guildId: string) {
+    const ids = GuildMemberStore.getMemberIds(guildId);
+    if (Array.isArray(ids) && ids.length > 0) return ids.length;
+
+    const members = GuildMemberStore.getMembers(guildId);
+    return Array.isArray(members) ? members.length : 0;
 }
 
 function getChunkGuildId(chunk: GuildMembersChunkEvent): string | null {
@@ -263,6 +274,7 @@ async function loadSnapshot(ownerId: string | null, guildId: string) {
 }
 
 async function persistSnapshot(snapshot: GuildHydrationSnapshot) {
+    if (snapshot.ownerId != null && UserStore.getCurrentUser()?.id !== snapshot.ownerId) return;
     if (!snapshot.ownerId) return;
 
     const normalized = normalizeSnapshotRetention(snapshot);
@@ -403,14 +415,16 @@ export async function clearHydratedGuildSnapshots(ownerId: string | null, guildI
 
 export async function hydrateGuildMemberCache(guildId: string, options: GuildHydrationOptions = {}) {
     const ownerId = options.ownerId ?? null;
-    const cacheKey = getJobKey(ownerId, guildId);
+    const countMode = options.countMode ?? "deduplicated";
+    const cacheKey = `${getJobKey(ownerId, guildId)}:${countMode}`;
     const existing = inFlightHydrations.get(cacheKey);
     if (existing) return existing;
 
     const promise = enqueueHydration(async () => {
         const { controller } = options;
         const startedAt = Date.now();
-        const initialCount = getMemberCount(guildId);
+        const countMembers = countMode === "cache" ? getCachedMemberCount : getMemberCount;
+        const initialCount = countMembers(guildId);
         const maxWaitMs = options.maxWaitMs ?? 4000;
         const idleWindowMs = options.idleWindowMs ?? 1200;
         const pollIntervalMs = options.pollIntervalMs ?? 200;
@@ -429,7 +443,6 @@ export async function hydrateGuildMemberCache(guildId: string, options: GuildHyd
         const queuedQueries = new Set(queryQueue);
         let stalledPasses = 0;
         let passBaselineCount = initialCount;
-        let passBaselineChunks = 0;
         const activeProbes = new Map<string, {
             query: string;
             hits: number;
@@ -439,12 +452,13 @@ export async function hydrateGuildMemberCache(guildId: string, options: GuildHyd
         }>();
 
         const buildSnapshot = (finishedAt = Date.now(), expiresAt = finishedAt + ttlMs) => {
-            const finalCount = getMemberCount(guildId);
+            const memberIds = getMemberIdsFromStore(guildId);
+            const finalCount = memberIds.length;
 
             return {
                 guildId,
                 ownerId,
-                memberIds: getMemberIdsFromStore(guildId),
+                memberIds,
                 initialCount,
                 finalCount,
                 delta: finalCount - initialCount,
@@ -480,7 +494,7 @@ export async function hydrateGuildMemberCache(guildId: string, options: GuildHyd
         }
 
         if (controller?.cancelled) {
-            const snapshot = buildSnapshot();
+            const snapshot = { ...buildSnapshot(), cancelled: true };
             await persistSnapshot(snapshot);
             activeControllers.delete(controller);
             options.onProgress?.(createProgress(
@@ -620,11 +634,10 @@ export async function hydrateGuildMemberCache(guildId: string, options: GuildHyd
             }
 
             passBaselineCount = lastCount;
-            passBaselineChunks = chunksSeen;
         };
 
         const updateCount = () => {
-            const nextCount = getMemberCount(guildId);
+            const nextCount = countMembers(guildId);
             if (nextCount > lastCount) {
                 lastCount = nextCount;
             }
@@ -717,7 +730,7 @@ export async function hydrateGuildMemberCache(guildId: string, options: GuildHyd
                 }
 
                 if (continueUntilTarget && targetCount != null && lastCount < targetCount && queryQueue.length === 0 && activeProbes.size === 0) {
-                    const madeProgressThisPass = lastCount > passBaselineCount || chunksSeen > passBaselineChunks;
+                    const madeProgressThisPass = lastCount > passBaselineCount;
                     if (!madeProgressThisPass) {
                         stalledPasses += 1;
                         if (stalledPasses >= WARMUP_MAX_STALLED_PASSES) {

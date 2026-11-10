@@ -127,9 +127,11 @@ test("Advanced capture IPC validates toggles and releases the debugger when disa
     assert.equal(attached, false);
     assert.equal(await f.native.configureRequestCapture(f.event, true, false), true);
     assert.equal(attached, true);
-    assert.equal(f.native.getRequestLog(f.event).advanced.webSockets, "Active");
+    const { revision, advanced } = f.native.getRequestLog(f.event);
+    assert.equal(advanced.webSockets, "Active");
     assert.equal(await f.native.configureRequestCapture(f.event, false, false), true);
     assert.equal(attached, false);
+    assert.deepEqual(f.native.getRequestLog(f.event, revision), { revision, advanced: undefined });
     assert.equal(f.contents.debugger.listenerCount("message"), 0);
     assert.equal(f.contents.listenerCount("destroyed"), 0);
     await f.nativeSession.releaseSession(f.ses);
@@ -303,10 +305,10 @@ test("Session filtering covers worker requests and resources and respects its sw
     assert.deepEqual(await f.request("https://discord.com/api/v9/science"), { cancel: false });
 });
 
-test("Saved request rules block resources and new WebSocket connections with logging and the session firewall disabled", async () => {
+test("Saved request rules block resources and new WebSocket connections with logging off by default and the session firewall disabled", async () => {
     const target = "https://media.discordapp.net/assets/video.mp4";
     const socket = "wss://gateway.discord.gg/";
-    const f = await fixture({ sessionFirewall: false, recordNetworkRequests: false, blockedRequestUrls: `${target}\n${socket}` });
+    const f = await fixture({ sessionFirewall: false, blockedRequestUrls: `${target}\n${socket}` });
     f.nativeSession.prepareSession(f.ses);
     for (const resource of ["image", "media", "script", "subFrame", "xhr", "other"])
         assert.deepEqual(await f.request(`${target}?signature=secret`, resource), { cancel: true });
@@ -352,7 +354,7 @@ test("Rule targets normalize URLs and reject local events, hidden URLs and inval
 
 test("Request logs redact credentials and URL secrets before storing or exporting", async () => {
     const { createRequestLog, sanitizeRequestUrl } = await load("requestLog.ts");
-    const log = createRequestLog(() => ({}));
+    const log = createRequestLog(() => ({ recordNetworkRequests: true }));
     for (const [url, expected] of [
         ["https://user:password@discord.com/api/v9/webhooks/123/secret/messages/@original?token=secret#private", "https://discord.com/api/v9/webhooks/123/[redacted]/messages/@original"],
         ["https://discord.com/api/v9/interactions/123/secret/callback", "https://discord.com/api/v9/interactions/123/[redacted]/callback"],
@@ -375,7 +377,7 @@ test("Request logs redact credentials and URL secrets before storing or exportin
 test("Request logs enforce live retention limits, pause capture and ignore cleared completions", async () => {
     let now = 1000;
     const { createRequestLog } = await load("requestLog.ts", {}, { Date: { now: () => now } });
-    const settings = { requestLogLimit: 100, requestLogRetention: 5 };
+    const settings = { recordNetworkRequests: true, requestLogLimit: 100, requestLogRetention: 5 };
     const log = createRequestLog(() => settings);
     const request = { url: "https://discord.com/api/v9/users/@me", method: "GET", resourceType: "xhr", source: "Desktop", state: "Pending" };
     for (let id = 0; id < 150; id++) log.record(request, id);
@@ -391,9 +393,12 @@ test("Request logs enforce live retention limits, pause capture and ignore clear
     assert.deepEqual(log.snapshot().entries, []);
     settings.recordNetworkRequests = true;
     log.record(request);
+    const { revision } = log.snapshot();
+    assert.deepEqual(log.snapshot(revision), { revision });
     now += 300_001;
-    log.prune();
-    assert.deepEqual(log.snapshot().entries, []);
+    const expired = log.snapshot(revision);
+    assert.ok(expired.revision > revision);
+    assert.deepEqual(expired.entries, []);
     settings.requestLogRetention = 0;
     log.record(request);
     now += 100_000_000;
@@ -403,7 +408,7 @@ test("Request logs enforce live retention limits, pause capture and ignore clear
 });
 
 test("Desktop capture records all resource types, redirects, failures and firewall denials", async () => {
-    const f = await fixture({ blockTelemetry: true });
+    const f = await fixture({ blockTelemetry: true, recordNetworkRequests: true });
     f.nativeSession.prepareSession(f.ses);
     for (const type of ["mainFrame", "subFrame", "stylesheet", "script", "image", "font", "xhr", "media", "webSocket", "other"])
         await f.request("https://discord.com/resource?private=value", type);
@@ -423,15 +428,23 @@ test("Desktop capture records all resource types, redirects, failures and firewa
     assert.equal(log.entries.at(-1).state, "Blocked");
     assert.ok(log.entries.every(entry => !entry.url.includes("?")));
     assert.equal(f.native.getRequestLog({ ...f.event, senderFrame: null }), null);
+    assert.equal(f.native.getRequestLog(f.event, "invalid revision"), null);
     assert.equal(f.native.clearRequestLog({ ...f.event, senderFrame: null }), false);
     assert.equal(f.native.getRequestLog({ ...f.event, sender: { ...f.contents, session: {} } }), null);
     assert.equal(f.native.clearRequestLog(f.event), true);
     f.handlers.completed({ id: 10, statusCode: 200 });
-    assert.deepEqual(f.native.getRequestLog(f.event).entries, []);
+    const cleared = f.native.getRequestLog(f.event, log.revision);
+    assert.ok(cleared.revision > log.revision);
+    assert.deepEqual(cleared.entries, []);
     await f.nativeSession.releaseSession(f.ses);
     assert.equal(f.handlers.completed, null);
     assert.equal(f.handlers.redirect, null);
     assert.equal(f.handlers.error, null);
+    f.nativeSession.prepareSession(f.ses);
+    const reopened = f.native.getRequestLog(f.event, cleared.revision);
+    assert.ok(reopened.revision > cleared.revision);
+    assert.deepEqual(reopened.entries, []);
+    await f.nativeSession.releaseSession(f.ses);
 });
 
 test("Request cleanup runs while idle and releases its timer and listeners", async () => {
@@ -449,7 +462,7 @@ test("Request cleanup runs while idle and releases its timer and listeners", asy
         onBeforeRedirect: callback => { handlers.redirect = callback; },
         onErrorOccurred: callback => { handlers.error = callback; },
     } };
-    const capture = nativeRequestLog.installRequestLog(ses, () => ({ requestLogRetention: 5 }));
+    const capture = nativeRequestLog.installRequestLog(ses, () => ({ recordNetworkRequests: true, requestLogRetention: 5 }));
     capture.begin({ id: 1, url: "https://discord.com/", method: "GET", resourceType: "mainFrame" });
     const { revision } = capture.log.snapshot();
     now += 300_001;
@@ -485,8 +498,11 @@ test("Browser capture observes new resource loads, honors pause and disconnects 
         setInterval: () => 1,
         clearInterval: () => { cleared = true; },
     });
-    const settings = { recordNetworkRequests: true };
+    const settings = {};
     capture.startRequestLogging(settings, false);
+    assert.equal(observation, undefined);
+    settings.recordNetworkRequests = true;
+    capture.refreshRequestLogging();
     assert.deepEqual(observation, { type: "resource", buffered: true });
     const entry = { name: "https://discord.com/resource?secret=value", startTime: 120, initiatorType: "fetch", duration: 12, responseStatus: 200 };
     receive({ getEntries: () => [new Timing({ ...entry, startTime: 80 }), new Timing(entry)] });

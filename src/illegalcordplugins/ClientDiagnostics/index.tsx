@@ -13,6 +13,8 @@ import { BaseText } from "@components/BaseText";
 import { Button } from "@components/Button";
 import { CodeBlock } from "@components/CodeBlock";
 import ErrorBoundary from "@components/ErrorBoundary";
+import { Flex } from "@components/Flex";
+import { FormSwitch } from "@components/FormSwitch";
 import { ClockIcon, CopyIcon, MagnifyingGlassIcon, ResetIcon } from "@components/Icons";
 import { isGhostClientActive } from "@illegalcordplugins/ghostClient/settings";
 import SettingsPlugin from "@plugins/_core/settings";
@@ -30,7 +32,7 @@ import { ClientHealthPage, resetHealth, startHealth, stopHealth } from "./health
 import { startResourceMonitor, stopResourceMonitor } from "./resourceMonitor";
 
 type SortBy = "impact" | "cpu" | "memory" | "calls" | "resources";
-type ClientDiagnosticsTab = "diagnostics" | "analysis" | "monitor" | "health" | "guide";
+type ClientDiagnosticsTab = "diagnostics" | "analysis" | "monitor" | "health" | "guide" | "settings";
 type SettingKey = "sortBy" | "showDisabled" | "showApiPlugins" | "refreshMs";
 type ResourceKey = "intervals" | "pendingTimeouts" | "animationFrames" | "listeners";
 type AnyCallback = (this: unknown, ...args: never[]) => unknown;
@@ -48,6 +50,7 @@ interface PerformanceWithMemory extends Performance {
 interface ActiveContext {
     pluginName: string;
     surface: string;
+    session: object;
 }
 
 interface SurfaceStats {
@@ -182,6 +185,18 @@ const MONITOR_GUIDE_ITEMS = [
 ] satisfies Array<{ label: string; description: string; }>;
 
 const settings = definePluginSettings({
+    profilingEnabled: {
+        type: OptionType.BOOLEAN,
+        displayName: "Collect diagnostics",
+        description: "Collect plugin timings, heap usage, and client health. Turning collection off also pauses lag notifications and automatic resource restarts.",
+        default: true,
+        onChange: syncProfiling
+    },
+    profilingPause: {
+        type: OptionType.COMPONENT,
+        component: ProfilingPauseControls,
+        default: null
+    },
     sortBy: {
         type: OptionType.SELECT,
         description: "Controls the default sorting in the diagnostics table.",
@@ -283,7 +298,9 @@ const settings = definePluginSettings({
         disabled: () => !settings.store.autoRestart,
         onChange: syncResourceMonitor
     }
-}).withPrivateSettings<{ lastResourceRestartAt?: number; }>();
+}).withPrivateSettings<{ lastResourceRestartAt?: number; pausedUntil?: number; }>();
+
+const PROFILING_KEYS: ("profilingEnabled" | "pausedUntil")[] = ["profilingEnabled", "pausedUntil"];
 
 const activeStack: ActiveContext[] = [];
 const stats = new Map<string, PluginStats>();
@@ -291,19 +308,14 @@ const measuredFunctions = new WeakSet<object>();
 const intervalOwners = new Map<number, string>();
 const timeoutOwners = new Map<number, string>();
 const frameOwners = new Map<number, string>();
-const listenerOwners = new WeakMap<EventTarget, Map<string, Map<EventListenerOrEventListenerObject, string>>>();
+let listenerOwners = new WeakMap<EventTarget, Map<string, Map<EventListenerOrEventListenerObject, string>>>();
 const listenerCountByPlugin = new Map<string, number>();
 const sourceSnippets = new Map<string, SourceSnippet[]>();
 
 let startedAt = Date.now();
-let originalSetTimeout: typeof window.setTimeout | undefined;
-let originalClearTimeout: typeof window.clearTimeout | undefined;
-let originalSetInterval: typeof window.setInterval | undefined;
-let originalClearInterval: typeof window.clearInterval | undefined;
-let originalRequestAnimationFrame: typeof window.requestAnimationFrame | undefined;
-let originalCancelAnimationFrame: typeof window.cancelAnimationFrame | undefined;
-let originalAddEventListener: typeof EventTarget.prototype.addEventListener | undefined;
-let originalRemoveEventListener: typeof EventTarget.prototype.removeEventListener | undefined;
+let restoreGlobalProbes: (() => void) | undefined;
+let profilingSession: object | undefined;
+let resumeTimer: number | undefined;
 let lagNotificationInterval: number | undefined;
 let pluginStarted = false;
 const lagNotificationTimes = new Map<string, number>();
@@ -393,7 +405,9 @@ function recordCall(pluginName: string, surface: string, duration: number, faile
     }
 }
 
-function recordAsync(pluginName: string, surface: string, duration: number, failed: boolean) {
+function recordAsync(session: object, pluginName: string, surface: string, duration: number, failed: boolean) {
+    if (session !== profilingSession) return;
+
     const stat = getPluginStats(pluginName);
     const surfaceStat = getSurfaceStats(stat, surface);
 
@@ -438,35 +452,41 @@ function rememberSourceSnippet(pluginName: string, surface: string, label: strin
 }
 
 function runMeasured<T>(pluginName: string, surface: string, callback: () => T): T {
+    const session = profilingSession;
+    if (!session) return callback();
+
     const beforeHeap = getHeapUsed();
     const start = performance.now();
     let failed = true;
 
-    activeStack.push({ pluginName, surface });
+    activeStack.push({ pluginName, surface, session });
 
     try {
         const result = callback();
 
-        if (isPromiseLike(result)) {
+        if (session === profilingSession && isPromiseLike(result)) {
             const asyncStart = performance.now();
             void Promise.resolve(result).then(
-                () => recordAsync(pluginName, surface, performance.now() - asyncStart, false),
-                () => recordAsync(pluginName, surface, performance.now() - asyncStart, true)
+                () => recordAsync(session, pluginName, surface, performance.now() - asyncStart, false),
+                () => recordAsync(session, pluginName, surface, performance.now() - asyncStart, true)
             );
         }
 
         failed = false;
         return result;
     } finally {
-        const end = performance.now();
         activeStack.pop();
-        if (activeStack.length === 0) recordHealthCallback(pluginName, surface, start, end);
-        recordCall(pluginName, surface, end - start, failed, beforeHeap, getHeapUsed());
+        if (session === profilingSession) {
+            const end = performance.now();
+            if (activeStack.length === 0) recordHealthCallback(pluginName, surface, start, end);
+            recordCall(pluginName, surface, end - start, failed, beforeHeap, getHeapUsed());
+        }
     }
 }
 
 function wrapMeasured<T extends AnyCallback>(pluginName: string, surface: string, original: T): T {
     const wrapped = function (this: ThisParameterType<T>, ...args: Parameters<T>): ReturnType<T> {
+        if (!profilingSession) return original.apply(this, args) as ReturnType<T>;
         return runMeasured(pluginName, surface, () => original.apply(this, args)) as ReturnType<T>;
     } as T;
 
@@ -573,7 +593,7 @@ function instrumentPlugin(plugin: Plugin) {
 
 function currentContext() {
     const context = activeStack[activeStack.length - 1];
-    return context?.pluginName === PLUGIN_NAME ? undefined : context;
+    if (context && context.session === profilingSession && context.pluginName !== PLUGIN_NAME) return context;
 }
 
 function changeResource(pluginName: string, key: ResourceKey, delta: 1 | -1) {
@@ -654,22 +674,21 @@ function forgetListener(target: EventTarget, type: string, listener: EventListen
 }
 
 function installGlobalProbes() {
-    if (originalSetTimeout) return;
-
-    originalSetTimeout = window.setTimeout;
-    originalClearTimeout = window.clearTimeout;
-    originalSetInterval = window.setInterval;
-    originalClearInterval = window.clearInterval;
-    originalRequestAnimationFrame = window.requestAnimationFrame;
-    originalCancelAnimationFrame = window.cancelAnimationFrame;
-    originalAddEventListener = EventTarget.prototype.addEventListener;
-    originalRemoveEventListener = EventTarget.prototype.removeEventListener;
+    const originalSetTimeout = window.setTimeout;
+    const originalClearTimeout = window.clearTimeout;
+    const originalSetInterval = window.setInterval;
+    const originalClearInterval = window.clearInterval;
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalCancelAnimationFrame = window.cancelAnimationFrame;
+    const originalAddEventListener = EventTarget.prototype.addEventListener;
+    const originalRemoveEventListener = EventTarget.prototype.removeEventListener;
+    const probeListeners = new AbortController();
 
     window.setTimeout = ((handler: string | ((...args: unknown[]) => void), timeout?: number, ...args: unknown[]) => {
         const context = currentContext();
 
         if (!context || typeof handler !== "function") {
-            return originalSetTimeout!(handler, timeout, ...args);
+            return originalSetTimeout(handler, timeout, ...args);
         }
 
         let id = 0;
@@ -679,7 +698,7 @@ function installGlobalProbes() {
         };
 
         rememberSourceSnippet(context.pluginName, "timeout", "setTimeout callback", handler);
-        id = originalSetTimeout!(wrapped, timeout, ...args);
+        id = originalSetTimeout(wrapped, timeout, ...args);
         rememberResource(timeoutOwners, id, context.pluginName, "pendingTimeouts");
         return id;
     }) as typeof window.setTimeout;
@@ -689,19 +708,19 @@ function installGlobalProbes() {
             forgetResource(timeoutOwners, id, "pendingTimeouts");
             forgetResource(intervalOwners, id, "intervals");
         }
-        return originalClearTimeout!(id);
+        return originalClearTimeout(id);
     }) as typeof window.clearTimeout;
 
     window.setInterval = ((handler: string | ((...args: unknown[]) => void), timeout?: number, ...args: unknown[]) => {
         const context = currentContext();
 
         if (!context || typeof handler !== "function") {
-            return originalSetInterval!(handler, timeout, ...args);
+            return originalSetInterval(handler, timeout, ...args);
         }
 
         const wrapped = (...callbackArgs: unknown[]) =>
             runMeasured(context.pluginName, "interval", () => handler(...callbackArgs));
-        const id = originalSetInterval!(wrapped, timeout, ...args);
+        const id = originalSetInterval(wrapped, timeout, ...args);
 
         rememberSourceSnippet(context.pluginName, "interval", "setInterval callback", handler);
         rememberResource(intervalOwners, id, context.pluginName, "intervals");
@@ -713,13 +732,13 @@ function installGlobalProbes() {
             forgetResource(intervalOwners, id, "intervals");
             forgetResource(timeoutOwners, id, "pendingTimeouts");
         }
-        return originalClearInterval!(id);
+        return originalClearInterval(id);
     }) as typeof window.clearInterval;
 
     window.requestAnimationFrame = callback => {
         const context = currentContext();
 
-        if (!context) return originalRequestAnimationFrame!(callback);
+        if (!context) return originalRequestAnimationFrame(callback);
 
         let id = 0;
         const wrapped = (timestamp: DOMHighResTimeStamp) => {
@@ -728,60 +747,52 @@ function installGlobalProbes() {
         };
 
         rememberSourceSnippet(context.pluginName, "animation frame", "requestAnimationFrame callback", callback);
-        id = originalRequestAnimationFrame!(wrapped);
+        id = originalRequestAnimationFrame(wrapped);
         rememberResource(frameOwners, id, context.pluginName, "animationFrames");
         return id;
     };
 
     window.cancelAnimationFrame = id => {
         forgetResource(frameOwners, id, "animationFrames");
-        return originalCancelAnimationFrame!(id);
+        return originalCancelAnimationFrame(id);
     };
 
     EventTarget.prototype.addEventListener = function (type, listener, options) {
         const context = currentContext();
         const optionObject = typeof options === "object" ? options : undefined;
 
-        if (context && listener && !optionObject?.signal?.aborted) {
+        if (context && listener && !probeListeners.signal.aborted && !optionObject?.signal?.aborted) {
             if (optionObject?.once) {
                 rememberSourceSnippet(context.pluginName, `event listener ${type}`, `event listener ${type}`, getListenerSource(listener));
             } else {
                 rememberListener(this, type, listener, context.pluginName, options);
                 if (optionObject?.signal) {
                     const target = this;
-                    originalAddEventListener!.call(optionObject.signal, "abort", () => forgetListener(target, type, listener, options), { once: true });
+                    originalAddEventListener.call(optionObject.signal, "abort", () => {
+                        if (context.session === profilingSession) forgetListener(target, type, listener, options);
+                    }, { once: true, signal: probeListeners.signal });
                 }
             }
         }
-        return originalAddEventListener!.call(this, type, listener, options);
+        return originalAddEventListener.call(this, type, listener, options);
     };
 
     EventTarget.prototype.removeEventListener = function (type, listener, options) {
         if (listener) forgetListener(this, type, listener, options);
-        return originalRemoveEventListener!.call(this, type, listener, options);
+        return originalRemoveEventListener.call(this, type, listener, options);
     };
-}
 
-function restoreGlobalProbes() {
-    if (!originalSetTimeout) return;
-
-    window.setTimeout = originalSetTimeout;
-    window.clearTimeout = originalClearTimeout!;
-    window.setInterval = originalSetInterval!;
-    window.clearInterval = originalClearInterval!;
-    window.requestAnimationFrame = originalRequestAnimationFrame!;
-    window.cancelAnimationFrame = originalCancelAnimationFrame!;
-    EventTarget.prototype.addEventListener = originalAddEventListener!;
-    EventTarget.prototype.removeEventListener = originalRemoveEventListener!;
-
-    originalSetTimeout = undefined;
-    originalClearTimeout = undefined;
-    originalSetInterval = undefined;
-    originalClearInterval = undefined;
-    originalRequestAnimationFrame = undefined;
-    originalCancelAnimationFrame = undefined;
-    originalAddEventListener = undefined;
-    originalRemoveEventListener = undefined;
+    restoreGlobalProbes = () => {
+        window.setTimeout = originalSetTimeout;
+        window.clearTimeout = originalClearTimeout;
+        window.setInterval = originalSetInterval;
+        window.clearInterval = originalClearInterval;
+        window.requestAnimationFrame = originalRequestAnimationFrame;
+        window.cancelAnimationFrame = originalCancelAnimationFrame;
+        EventTarget.prototype.addEventListener = originalAddEventListener;
+        EventTarget.prototype.removeEventListener = originalRemoveEventListener;
+        probeListeners.abort();
+    };
 }
 
 function rebuildResourceCounters() {
@@ -907,7 +918,7 @@ function buildRows(showDisabled: boolean, showApiPlugins: boolean, sortBy: SortB
 }
 
 export function getMemoryRecommendations(limit: number) {
-    if (!pluginStarted) return [];
+    if (!profilingSession) return [];
 
     return buildRows(false, false, "memory")
         .filter(row => row.name !== PLUGIN_NAME && getHeapGrowth(row) > 0)
@@ -1231,17 +1242,63 @@ function stopLagNotifications() {
 }
 
 function syncLagNotifications() {
-    if (pluginStarted && settings.store.lagNotifications) startLagNotifications();
+    if (profilingSession && settings.store.lagNotifications) startLagNotifications();
     else stopLagNotifications();
 }
 
 function syncResourceMonitor() {
     stopResourceMonitor();
-    if (IS_WEB || !pluginStarted || !settings.store.autoRestart) return;
+    if (IS_WEB || !profilingSession || !settings.store.autoRestart) return;
 
     startResourceMonitor(() => settings.store, (timestamp: number) => {
         settings.store.lastResourceRestartAt = timestamp;
     });
+}
+
+function stopProfiling() {
+    if (!profilingSession) return;
+
+    profilingSession = undefined;
+    stopLagNotifications();
+    stopResourceMonitor();
+    stopHealth();
+    restoreGlobalProbes?.();
+    restoreGlobalProbes = undefined;
+    stats.clear();
+    intervalOwners.clear();
+    timeoutOwners.clear();
+    frameOwners.clear();
+    listenerOwners = new WeakMap();
+    listenerCountByPlugin.clear();
+}
+
+function syncProfiling() {
+    window.clearTimeout(resumeTimer);
+    resumeTimer = undefined;
+    if (!pluginStarted) {
+        stopProfiling();
+        return;
+    }
+
+    const { profilingEnabled, pausedUntil = 0 } = settings.store;
+    const remaining = pausedUntil - Date.now();
+    if (profilingEnabled && remaining > 0) {
+        stopProfiling();
+        resumeTimer = window.setTimeout(syncProfiling, remaining);
+        return;
+    }
+
+    if (pausedUntil) settings.store.pausedUntil = 0;
+    if (!profilingEnabled) {
+        stopProfiling();
+    } else if (!profilingSession) {
+        startedAt = Date.now();
+        profilingSession = {};
+        installGlobalProbes();
+        startHealth();
+        syncLagNotifications();
+        syncResourceMonitor();
+    }
 }
 
 function getReportRows() {
@@ -1873,8 +1930,40 @@ function GuidePage() {
     );
 }
 
+function setProfilingPause(minutes: number) {
+    settings.store.pausedUntil = minutes > 0 ? Date.now() + minutes * 60_000 : 0;
+    syncProfiling();
+}
+
+function ProfilingPauseControls() {
+    const { profilingEnabled, pausedUntil } = settings.use(PROFILING_KEYS);
+    if (!profilingEnabled) return null;
+
+    return (
+        <Flex gap="8px" flexWrap="wrap" alignItems="center">
+            {pausedUntil ? (
+                <>
+                    <BaseText size="sm" color="text-muted">Paused until {new Date(pausedUntil).toLocaleString()}.</BaseText>
+                    <Button variant="secondary" onClick={() => setProfilingPause(0)}>Resume now</Button>
+                </>
+            ) : (
+                <>
+                    <BaseText size="sm" color="text-muted">Pausing ends the current profiling session.</BaseText>
+                    {[15, 30, 60].map(minutes => (
+                        <Button key={minutes} variant="secondary" onClick={() => setProfilingPause(minutes)}>
+                            Pause for {minutes} min
+                        </Button>
+                    ))}
+                </>
+            )}
+        </Flex>
+    );
+}
+
 function ClientDiagnosticsPage() {
     const [tab, setTab] = useState<ClientDiagnosticsTab>("diagnostics");
+    const { profilingEnabled, pausedUntil } = settings.use(PROFILING_KEYS);
+    const collecting = profilingEnabled && !pausedUntil;
 
     return (
         <div className={cl("root")}>
@@ -1890,13 +1979,31 @@ function ClientDiagnosticsPage() {
                 <TabBar.Item id="monitor">Plugin monitor</TabBar.Item>
                 <TabBar.Item id="health">Client health</TabBar.Item>
                 <TabBar.Item id="guide">Guide</TabBar.Item>
+                <TabBar.Item id="settings">Settings</TabBar.Item>
             </TabBar>
 
-            {tab === "diagnostics" && <DiagnosticsPage />}
-            {tab === "analysis" && <ImpactAnalysisPage />}
-            {tab === "monitor" && <PluginMonitorPage />}
-            {tab === "health" && <ClientHealthPage />}
+            {collecting && tab === "diagnostics" && <DiagnosticsPage />}
+            {collecting && tab === "analysis" && <ImpactAnalysisPage />}
+            {collecting && tab === "monitor" && <PluginMonitorPage />}
+            {collecting && tab === "health" && <ClientHealthPage />}
             {tab === "guide" && <GuidePage />}
+            {tab === "settings" && (
+                <div className={cl("page")}>
+                    <FormSwitch
+                        title={settings.def.profilingEnabled.displayName}
+                        description={settings.def.profilingEnabled.description}
+                        value={profilingEnabled}
+                        onChange={value => settings.store.profilingEnabled = value}
+                    />
+                    <ProfilingPauseControls />
+                </div>
+            )}
+            {!collecting && tab !== "guide" && tab !== "settings" && (
+                <div className={cl("empty")}>
+                    <BaseText size="md" weight="semibold">{pausedUntil ? "Diagnostic collection is paused." : "Diagnostic collection is off."}</BaseText>
+                    <Button variant="secondary" onClick={() => setTab("settings")}>Collection settings</Button>
+                </div>
+            )}
         </div>
     );
 }
@@ -1916,13 +2023,9 @@ export default definePlugin({
 
     start() {
         try {
-            startedAt = Date.now();
-            startHealth();
-            installGlobalProbes();
-            for (const plugin of Object.values(plugins)) instrumentPlugin(plugin);
             pluginStarted = true;
-            syncLagNotifications();
-            syncResourceMonitor();
+            syncProfiling();
+            for (const plugin of Object.values(plugins)) instrumentPlugin(plugin);
             if (!SettingsPlugin.customEntries.some(entry => entry.key === ENTRY_KEY)) {
                 SettingsPlugin.customEntries.push({
                     key: ENTRY_KEY,
@@ -1937,12 +2040,9 @@ export default definePlugin({
     },
 
     stop() {
-        stopResourceMonitor();
-        stopHealth();
         try {
             pluginStarted = false;
-            syncLagNotifications();
-            restoreGlobalProbes();
+            syncProfiling();
             removeFromArray(SettingsPlugin.customEntries, entry => entry.key === ENTRY_KEY);
         } catch (error) {
             logger.error("Failed to stop client diagnostics.", error);

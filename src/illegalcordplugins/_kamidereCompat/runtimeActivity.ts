@@ -5,10 +5,11 @@
  */
 
 export type KamidereRuntimeTaskStatus = "running" | "completed" | "cancelled" | "failed";
+export const SEND_TRAIL_PURGE_TASK_ID = "kamidere-send-trail:purge";
 
 export interface KamidereRuntimeTask {
     id: string;
-    toolId: string;
+    toolId: "send-trail-purge" | "mutual-scanner" | "manual-cache-warmup";
     name: string;
     status: KamidereRuntimeTaskStatus;
     subtitle?: string;
@@ -20,13 +21,25 @@ export interface KamidereRuntimeTask {
 }
 
 const taskMap = new Map<string, KamidereRuntimeTask>();
+const listeners = new Set<() => void>();
+let tasks: KamidereRuntimeTask[] = [];
 
-export function mountKamidereRuntimeActivity() {
-    return taskMap.size;
+function publishTasks() {
+    tasks = Array.from(taskMap.values()).sort((left, right) => left.startedAt - right.startedAt);
+    listeners.forEach(listener => listener());
 }
 
-export function unmountKamidereRuntimeActivity() {
-    return taskMap.size;
+export function subscribeKamidereRuntimeActivity(listener: () => void) {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+}
+
+export function getKamidereRuntimeTasks() {
+    return tasks;
+}
+
+export function getKamidereRuntimeTask(id: string) {
+    return taskMap.get(id);
 }
 
 export function upsertKamidereRuntimeTask(task: Omit<KamidereRuntimeTask, "updatedAt"> & { updatedAt?: number; }) {
@@ -34,8 +47,10 @@ export function upsertKamidereRuntimeTask(task: Omit<KamidereRuntimeTask, "updat
         ...task,
         updatedAt: task.updatedAt ?? Date.now(),
     });
+    publishTasks();
 }
 
-export function removeKamidereRuntimeTask(taskId: string) {
-    taskMap.delete(taskId);
+export function removeKamidereRuntimeTask(taskId: string, startedAt?: number) {
+    if (startedAt !== undefined && taskMap.get(taskId)?.startedAt !== startedAt) return;
+    if (taskMap.delete(taskId)) publishTasks();
 }

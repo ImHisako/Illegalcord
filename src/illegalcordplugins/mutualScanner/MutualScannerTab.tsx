@@ -19,8 +19,9 @@ import { Switch } from "@components/Switch";
 import { classNameFactory } from "@utils/css";
 import { openUserProfile } from "@utils/discord";
 import { Margins } from "@utils/margins";
+import { useFixedTimer } from "@utils/react";
 import type { ToastVariant } from "@vencord/discord-types";
-import { Alerts, GuildMemberCountStore, GuildMemberStore, GuildStore, React, showToast as showDiscordToast, useStateFromStores } from "@webpack/common";
+import { Alerts, GuildMemberCountStore, GuildMemberStore, GuildStore, React, Select, showToast as showDiscordToast, UserStore, useStateFromStores } from "@webpack/common";
 
 import { BRAND_ICON_DATA_URL, BRAND_NAME } from "../_kamidereCompat/branding";
 import {
@@ -39,7 +40,6 @@ import {
 } from "./runtime";
 import {
     clearMutualScannerRuns,
-    getMutualScannerCurrentUserId,
     removeMutualScannerRun,
     updateMutualScannerConfig,
     useMutualScannerData,
@@ -50,6 +50,8 @@ import type {
     MutualScannerMatch,
     MutualScannerProgress,
     MutualScannerRun,
+    ScanRefreshMode,
+    WarmupCountMode,
 } from "./types";
 import {
     buildGuildOptions,
@@ -86,6 +88,7 @@ const HERO_BACKGROUND = `data:image/svg+xml;utf8,${encodeURIComponent(
 const SCAN_STATUS_HIDE_DELAY_MS = 2400;
 const SCAN_STATUS_TRANSITION_MS = 280;
 const MANUAL_WARMUP_HIDE_DELAY_MS = 2200;
+const SCAN_REFRESH_MS = 250;
 const LIVE_MATCH_VISIBLE_MS = 30000;
 const LIVE_MATCH_EXIT_MS = 420;
 
@@ -182,6 +185,11 @@ function MetricTag({ icon, label, value }: { icon: React.ReactNode; label: strin
             <span className={cl("hero-tag-label")}>{label}</span>
         </span>
     );
+}
+
+function ScanRuntimeTimer({ startedAt }: { startedAt: number; }) {
+    const elapsed = useFixedTimer({ initialTime: startedAt, interval: SCAN_REFRESH_MS });
+    return <Paragraph className={cl("muted-copy")}>Runtime {formatDurationMs(elapsed)}</Paragraph>;
 }
 
 function ScanStatusBanner({
@@ -557,7 +565,11 @@ function HydrationCacheRow({
 }
 
 function MutualScannerTab() {
-    const currentUserId = getMutualScannerCurrentUserId();
+    const currentUserId = useStateFromStores([UserStore], () => UserStore.getCurrentUser()?.id ?? null);
+    return <MutualScannerAccount key={currentUserId} currentUserId={currentUserId} />;
+}
+
+function MutualScannerAccount({ currentUserId }: { currentUserId: string | null; }) {
     const [data, pending] = useMutualScannerData(currentUserId);
     const runtime = useMutualScannerRuntimeState();
     const [guildSearch, setGuildSearch] = React.useState("");
@@ -582,6 +594,7 @@ function MutualScannerTab() {
     const runtimeProgress = runtime.scan.progress;
     const runtimeResult = runtime.scan.result;
     const runStartedAt = runtime.scan.startedAt;
+    const isolatedRefresh = data.config.scanRefreshMode === "isolated";
     const isManualWarmupRunning = runtime.warmup.active;
     const manualWarmupStatus = runtime.warmup.status;
     const manualWarmupProgress = runtime.warmup.progress;
@@ -633,11 +646,12 @@ function MutualScannerTab() {
 
         return comparisons;
     }, [data.runs]);
+    const historyRefresh = isolatedRefresh ? liveRuntimeMatches : tick;
     const runtimeHistoryMatches = React.useMemo(() => {
         if (!isRunning) return [] as MutualScannerMatch[];
         const now = Date.now();
         return runtimeMatches.filter(match => now - (match.matchedAt ?? now) >= LIVE_MATCH_VISIBLE_MS);
-    }, [isRunning, runtimeMatches, tick]);
+    }, [isRunning, runtimeMatches, historyRefresh]);
     const filteredRuntimeHistoryMatches = React.useMemo(() => {
         const query = historySearch.trim().toLowerCase();
         if (!query) return runtimeHistoryMatches;
@@ -711,10 +725,18 @@ function MutualScannerTab() {
 
     React.useEffect(() => () => clearManualWarmupTimers(), [clearManualWarmupTimers]);
 
+    const nextMatchTransition = React.useMemo(() => {
+        if (!isolatedRefresh || liveRuntimeMatches.length === 0) return undefined;
+
+        return liveRuntimeMatches.reduce((earliest, entry) =>
+            Math.min(earliest, entry.addedAt + LIVE_MATCH_VISIBLE_MS + (entry.exiting ? LIVE_MATCH_EXIT_MS : 0)),
+        Infinity);
+    }, [isolatedRefresh, liveRuntimeMatches]);
+
     React.useEffect(() => {
         if (liveRuntimeMatches.length === 0) return;
 
-        const interval = window.setInterval(() => {
+        const expireMatches = () => {
             const now = Date.now();
             setLiveRuntimeMatches(current => {
                 let changed = false;
@@ -738,17 +760,29 @@ function MutualScannerTab() {
 
                 return changed ? next : current;
             });
-        }, 250);
+        };
 
-        return () => window.clearInterval(interval);
-    }, [liveRuntimeMatches.length]);
+        if (nextMatchTransition === undefined) {
+            const interval = window.setInterval(expireMatches, SCAN_REFRESH_MS);
+            return () => window.clearInterval(interval);
+        }
+
+        let timeout: number | undefined;
+        const expireAtDeadline = () => {
+            const remaining = nextMatchTransition - Date.now();
+            if (remaining > 0) timeout = window.setTimeout(expireAtDeadline, remaining);
+            else expireMatches();
+        };
+        expireAtDeadline();
+        return () => window.clearTimeout(timeout);
+    }, [liveRuntimeMatches.length, nextMatchTransition]);
 
     React.useEffect(() => {
-        if (!isRunning) return;
+        if (!isRunning || isolatedRefresh) return;
 
-        const interval = window.setInterval(() => setTick(value => value + 1), 250);
+        const interval = window.setInterval(() => setTick(value => value + 1), SCAN_REFRESH_MS);
         return () => window.clearInterval(interval);
-    }, [isRunning]);
+    }, [isRunning, isolatedRefresh]);
 
     React.useEffect(() => {
         if (isRunning) {
@@ -936,9 +970,8 @@ function MutualScannerTab() {
         }
 
         const started = startMutualScannerWarmup(currentUserId, {
+            ...data.config,
             selectedGuildIds: guildIds,
-            warmupMemberBudget: data.config.warmupMemberBudget,
-            warmupTimeoutMs: data.config.warmupTimeoutMs,
         });
 
         if (!started) {
@@ -947,7 +980,7 @@ function MutualScannerTab() {
         }
 
         showToast(successLabel, "success");
-    }, [currentUserId, data.config.warmupMemberBudget, data.config.warmupTimeoutMs]);
+    }, [currentUserId, data.config]);
 
     const retryWeakGuilds = React.useCallback(() => {
         startWarmupForGuildIds(
@@ -978,16 +1011,12 @@ function MutualScannerTab() {
             return;
         }
 
-        const started = startMutualScannerWarmup(currentUserId, {
-            selectedGuildIds: data.config.selectedGuildIds,
-            warmupMemberBudget: data.config.warmupMemberBudget,
-            warmupTimeoutMs: data.config.warmupTimeoutMs,
-        });
+        const started = startMutualScannerWarmup(currentUserId, data.config);
 
         if (!started) {
             showToast("Manual cache warmup could not start.", "critical");
         }
-    }, [currentUserId, data.config.selectedGuildIds, data.config.warmupMemberBudget, data.config.warmupTimeoutMs, isManualWarmupRunning]);
+    }, [currentUserId, data.config, isManualWarmupRunning]);
 
     const startRun = React.useCallback(() => {
         if (!currentUserId) return;
@@ -1010,7 +1039,7 @@ function MutualScannerTab() {
     const runDuration = React.useMemo(() => {
         if (!runStartedAt) return 0;
         return (runtimeResult?.finishedAt ?? Date.now()) - runStartedAt;
-    }, [runStartedAt, runtimeResult?.finishedAt, tick]);
+    }, [isRunning, isolatedRefresh, runStartedAt, runtimeResult?.finishedAt, tick]);
     const shouldRenderScanStatus = isRunning || renderedRuntimeResult !== null;
     const activeScanStatusResult = isRunning ? null : renderedRuntimeResult;
     const warmupProgressPercent = renderedManualWarmupProgress?.targetCount
@@ -1252,6 +1281,34 @@ function MutualScannerTab() {
                                     disabled={isRunning || !data.config.warmMemberCacheBeforeScan}
                                 />
                             </label>
+                            <div className={cl("field")} role="group" aria-labelledby="vc-mutual-scanner-warmup-count">
+                                <span className={cl("field-label")} id="vc-mutual-scanner-warmup-count">Warmup count mode</span>
+                                <Select
+                                    options={[
+                                        { label: "Deduplicated count", value: "deduplicated" },
+                                        { label: "Cache count", value: "cache" },
+                                    ]}
+                                    select={(value: WarmupCountMode) => void updateConfig({ warmupCountMode: value })}
+                                    isSelected={(value: WarmupCountMode) => data.config.warmupCountMode === value}
+                                    serialize={(value: WarmupCountMode) => value}
+                                    isDisabled={isRunning || isManualWarmupRunning}
+                                />
+                                <Paragraph className={cl("muted-copy")}>Cache count reads the size of Discord's cached member list during warmup. Deduplicated count checks distinct member IDs each time.</Paragraph>
+                            </div>
+                            <div className={cl("field")} role="group" aria-labelledby="vc-mutual-scanner-refresh-mode">
+                                <span className={cl("field-label")} id="vc-mutual-scanner-refresh-mode">Live refresh mode</span>
+                                <Select
+                                    options={[
+                                        { label: "Full tab (250 ms)", value: "full" },
+                                        { label: "Isolated timer (250 ms)", value: "isolated" },
+                                    ]}
+                                    select={(value: ScanRefreshMode) => void updateConfig({ scanRefreshMode: value })}
+                                    isSelected={(value: ScanRefreshMode) => data.config.scanRefreshMode === value}
+                                    serialize={(value: ScanRefreshMode) => value}
+                                    isDisabled={!currentUserId}
+                                />
+                                <Paragraph className={cl("muted-copy")}>Isolated timer updates the clock every 250 ms. Results update as matches arrive or expire.</Paragraph>
+                            </div>
                             </div>
 
                             <div className={cl("toggle-grid")}>
@@ -1328,9 +1385,13 @@ function MutualScannerTab() {
                                         ? `Current profile: ${runtimeProgress.currentLabel}`
                                         : "No active profile."}
                                 </Paragraph>
-                                <Paragraph className={cl("muted-copy")}>
-                                    {runStartedAt ? `Runtime ${formatDurationMs(runDuration)}` : "Waiting for a new run."}
-                                </Paragraph>
+                                {isolatedRefresh && isRunning && runStartedAt !== null ? (
+                                    <ScanRuntimeTimer key={runStartedAt} startedAt={runStartedAt} />
+                                ) : (
+                                    <Paragraph className={cl("muted-copy")}>
+                                        {runStartedAt ? `Runtime ${formatDurationMs(runDuration)}` : "Waiting for a new run."}
+                                    </Paragraph>
+                                )}
                             </div>
                             <div className={cl("progress-track")}>
                                 <div className={cl("progress-fill")} style={{ width: `${progressPercent}%` }} />

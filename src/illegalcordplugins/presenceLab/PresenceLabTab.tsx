@@ -17,7 +17,8 @@ import { SpecialCard } from "@components/settings/SpecialCard";
 import { Switch } from "@components/Switch";
 import { classNameFactory } from "@utils/css";
 import { Margins } from "@utils/margins";
-import { Alerts, React, Select, showToast,UserStore, UserUtils } from "@webpack/common";
+import type { User } from "@vencord/discord-types";
+import { Alerts, React, Select, showToast, UserStore, UserUtils, useStateFromStores } from "@webpack/common";
 
 import { BRAND_ICON_DATA_URL, BRAND_NAME } from "../_kamidereCompat/branding";
 import {
@@ -25,7 +26,6 @@ import {
     addPresenceLabSession,
     addPresenceLabTarget,
     clearPresenceLabData,
-    getPresenceLabCurrentUserId,
     removePresenceLabOperator,
     removePresenceLabSession,
     removePresenceLabTarget,
@@ -287,8 +287,12 @@ async function resolveRemoteIdentity(discordUserId: string, fallbackLabel?: stri
 }
 
 function PresenceLabTab() {
-    const currentUser = UserStore.getCurrentUser();
-    const currentUserId = getPresenceLabCurrentUserId();
+    const currentUser = useStateFromStores([UserStore], () => UserStore.getCurrentUser());
+    return <PresenceLabAccount key={currentUser?.id} currentUser={currentUser} />;
+}
+
+function PresenceLabAccount({ currentUser }: { currentUser?: User; }) {
+    const currentUserId = currentUser?.id ?? null;
     const [data, pending] = usePresenceLabData(currentUserId);
     const overview = React.useMemo(() => buildPresenceLabOverview(data), [data]);
     const groupedSessions = React.useMemo(() => groupSessionsByDay(data.sessions), [data.sessions]);
@@ -310,11 +314,11 @@ function PresenceLabTab() {
     const [historyQuery, setHistoryQuery] = React.useState("");
 
     React.useEffect(() => {
-        if (!sessionOperatorId && data.operators[0]) setSessionOperatorId(data.operators[0].id);
+        if (!data.operators.some(operator => operator.id === sessionOperatorId)) setSessionOperatorId(data.operators[0]?.id ?? "");
     }, [data.operators, sessionOperatorId]);
 
     React.useEffect(() => {
-        if (!sessionTargetId && data.targets[0]) setSessionTargetId(data.targets[0].id);
+        if (!data.targets.some(target => target.id === sessionTargetId)) setSessionTargetId(data.targets[0]?.id ?? "");
     }, [data.targets, sessionTargetId]);
 
     const operatorOptions = React.useMemo<Option<string>[]>(() =>

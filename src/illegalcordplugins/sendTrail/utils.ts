@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import type { Channel, EmbedMedia, Message, MessageAttachment } from "@vencord/discord-types";
+import type { Channel, MessageAttachment } from "@vencord/discord-types";
 import { MessageFlags, MessageReferenceType } from "@vencord/discord-types/enums";
-import { ChannelStore, GuildStore } from "@webpack/common";
+import { ChannelStore, GuildStore, SnowflakeUtils } from "@webpack/common";
 
-import type { MediaExtractionInput, SentTrailMediaItem, SentTrailMediaKind, SentTrailRecord, UploadSignatureInput } from "./types";
+import type { MediaExtractionInput, SendTrailEmbedMedia, SendTrailMessage, SentTrailMediaItem, SentTrailMediaKind, SentTrailRecord, UploadSignatureInput } from "./types";
 
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".avif", ".svg"];
 const VIDEO_EXTENSIONS = [".mp4", ".webm", ".mov", ".m4v", ".mkv", ".gifv"];
@@ -45,7 +45,7 @@ function dedupeMedia(items: SentTrailMediaItem[]) {
     });
 }
 
-function makeEmbedMediaItem(media: EmbedMedia | undefined, kind: SentTrailMediaKind): SentTrailMediaItem | null {
+function makeEmbedMediaItem(media: SendTrailEmbedMedia | undefined, kind: SentTrailMediaKind): SentTrailMediaItem | null {
     if (!media?.url) return null;
 
     return {
@@ -159,14 +159,14 @@ export function collectMediaItems({ content, attachments = [], embeds = [] }: Me
     return dedupeMedia(items);
 }
 
-export function collectMessageMediaItems(message: Partial<Message>) {
+export function collectMessageMediaItems(message: SendTrailMessage) {
     const items = collectMediaItems({
         content: message.content,
         attachments: message.attachments ?? [],
         embeds: message.embeds ?? [],
     });
 
-    for (const snapshot of message.messageSnapshots ?? []) {
+    for (const snapshot of message.messageSnapshots ?? message.message_snapshots ?? []) {
         items.push(...collectMediaItems({
             content: snapshot.message?.content,
             attachments: snapshot.message?.attachments ?? [],
@@ -177,11 +177,11 @@ export function collectMessageMediaItems(message: Partial<Message>) {
     return dedupeMedia(items);
 }
 
-export function getMessageDisplayContent(message: Partial<Message>, fallbackContent = "") {
+export function getMessageDisplayContent(message: SendTrailMessage, fallbackContent = "") {
     const directContent = normalizeContent(message.content);
     if (directContent) return message.content ?? "";
 
-    for (const snapshot of message.messageSnapshots ?? []) {
+    for (const snapshot of message.messageSnapshots ?? message.message_snapshots ?? []) {
         const snapshotContent = normalizeContent(snapshot.message?.content);
         if (snapshotContent) return snapshot.message?.content ?? "";
     }
@@ -189,9 +189,9 @@ export function getMessageDisplayContent(message: Partial<Message>, fallbackCont
     return fallbackContent;
 }
 
-export function isForwardedMessage(message: Partial<Message>) {
-    if ((message.messageSnapshots?.length ?? 0) > 0) return true;
-    if (message.messageReference?.type === MessageReferenceType.FORWARD) return true;
+export function isForwardedMessage(message: SendTrailMessage) {
+    if ((message.messageSnapshots?.length ?? message.message_snapshots?.length ?? 0) > 0) return true;
+    if ((message.messageReference ?? message.message_reference)?.type === MessageReferenceType.FORWARD) return true;
 
     if (typeof message.hasFlag === "function") {
         try {
@@ -205,9 +205,9 @@ export function isForwardedMessage(message: Partial<Message>) {
     return (rawFlags & MessageFlags.HAS_SNAPSHOT) !== 0;
 }
 
-export function getMessageTimestamp(message: Pick<Message, "timestamp">) {
-    const value = new Date(message.timestamp as unknown as string | number | Date).getTime();
-    return Number.isFinite(value) ? value : Date.now();
+export function getMessageTimestamp(message: SendTrailMessage) {
+    const value = typeof message.timestamp === "string" ? Date.parse(message.timestamp) : message.timestamp?.valueOf();
+    return value !== undefined && Number.isFinite(value) ? value : SnowflakeUtils.extractTimestamp(message.id);
 }
 
 export function buildJumpLink(guildId: string | undefined, channelId: string, messageId: string) {

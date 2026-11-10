@@ -5,7 +5,7 @@
  */
 
 import * as DataStore from "@api/DataStore";
-import { React, UserStore } from "@webpack/common";
+import { React } from "@webpack/common";
 import type { DispatchWithoutAction } from "react";
 
 import type { MutualScannerConfig, MutualScannerData, MutualScannerMatch, MutualScannerRun, MutualScannerRunStats } from "./types";
@@ -24,6 +24,8 @@ const DEFAULT_CONFIG: MutualScannerConfig = {
     warmMemberCacheBeforeScan: true,
     warmupTimeoutMs: 4000,
     warmupMemberBudget: 0,
+    warmupCountMode: "deduplicated",
+    scanRefreshMode: "full",
 };
 
 const EMPTY_STATS: MutualScannerRunStats = {
@@ -55,6 +57,8 @@ function cloneConfig(config?: Partial<MutualScannerConfig>): MutualScannerConfig
         warmMemberCacheBeforeScan: config?.warmMemberCacheBeforeScan ?? DEFAULT_CONFIG.warmMemberCacheBeforeScan,
         warmupTimeoutMs: config?.warmupTimeoutMs ?? DEFAULT_CONFIG.warmupTimeoutMs,
         warmupMemberBudget: config?.warmupMemberBudget ?? DEFAULT_CONFIG.warmupMemberBudget,
+        warmupCountMode: config?.warmupCountMode === "cache" ? "cache" : DEFAULT_CONFIG.warmupCountMode,
+        scanRefreshMode: config?.scanRefreshMode === "isolated" ? "isolated" : DEFAULT_CONFIG.scanRefreshMode,
     };
 }
 
@@ -199,8 +203,4 @@ export function useMutualScannerData(userId: string | null) {
     }, [signal, userId]);
 
     return [data, pending] as const;
-}
-
-export function getMutualScannerCurrentUserId() {
-    return UserStore.getCurrentUser()?.id ?? null;
 }
