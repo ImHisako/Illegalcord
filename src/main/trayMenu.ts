@@ -6,6 +6,7 @@
 
 import { gitHash } from "@shared/vencordUserAgent";
 import { app, BaseWindow, BrowserWindow, dialog, Menu, MenuItemConstructorOptions, shell } from "electron";
+import illegalcordIcon from "file://../../browser/Illegalcord.png?base64";
 import aboutHtml from "file://about.html?minify";
 
 import updater from "./updater";
@@ -40,6 +41,7 @@ function openAboutWindow() {
     });
 
     const aboutParams = aboutHtml
+        .replace("{{LOGO}}", illegalcordIcon)
         .replaceAll("{{VERSION}}", VERSION)
         .replaceAll("{{GIT_HASH}}", gitHash); // change to gitHashShort if/when its added
     const base64Html = Buffer.from(aboutParams).toString("base64");
@@ -56,19 +58,19 @@ const notify = (window: BaseWindow | undefined, title: string, message: string) 
 
 let isUpdating = false;
 
-function createVencordMenuItems(): MenuItemConstructorOptions[] {
+function createIllegalcordMenuItems(): MenuItemConstructorOptions[] {
     return [
         { type: "separator" },
         {
-            id: "equicord",
-            label: "Equicord",
+            id: "illegalcord",
+            label: "Illegalcord",
             submenu: [
                 {
-                    label: "About Equicord",
+                    label: "About Illegalcord",
                     click: () => openAboutWindow()
                 },
                 {
-                    label: "Update Equicord",
+                    label: "Update Illegalcord",
                     visible: !IS_UPDATER_DISABLED,
                     async click(_item, window) {
                         if (isUpdating) return;
@@ -77,19 +79,19 @@ function createVencordMenuItems(): MenuItemConstructorOptions[] {
                         try {
                             const updateAvailable = await updater.fetchUpdate();
                             if (!updateAvailable) {
-                                return notify(window, "No Update Available", "You are already using the latest version of Equicord.");
+                                return notify(window, "No Update Available", "You are already using the latest version of Illegalcord.");
                             }
 
                             const result = await updater.applyUpdate();
                             if (!result) {
-                                return notify(window, "Update Failed", "Failed to apply the update for Equicord.");
+                                return notify(window, "Update Failed", "Failed to apply the update for Illegalcord.");
                             }
 
-                            await notify(window, "Update Successful", "Now relaunching Equicord to apply the update.");
+                            await notify(window, "Update Successful", "Now relaunching Illegalcord to apply the update.");
                             app.relaunch();
                             app.exit();
                         } catch (e) {
-                            notify(window, "Update Error", `An error occurred while updating Equicord.\n\n${String(e)}`);
+                            notify(window, "Update Error", `An error occurred while updating Illegalcord.\n\n${String(e)}`);
                         }
                     }
                 },
@@ -111,10 +113,10 @@ export function patchTrayMenu(): void {
     const originalBuildFromTemplate = Menu.buildFromTemplate;
 
     Menu.buildFromTemplate = function (template: MenuItemConstructorOptions[]) {
-        if (isTrayMenu(template) && !template.some(item => item.id === "equicord")) {
+        if (isTrayMenu(template) && !template.some(item => item.id === "illegalcord")) {
             const separatorIndex = template.findIndex(item => item.type === "separator");
             const insertIndex = separatorIndex !== -1 ? separatorIndex : template.length - 1;
-            template.splice(insertIndex, 0, ...createVencordMenuItems());
+            template.splice(insertIndex, 0, ...createIllegalcordMenuItems());
         }
 
         return originalBuildFromTemplate.call(this, template);
