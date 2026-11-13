@@ -65,6 +65,7 @@ const NO_PLUGIN_DISABLE_REASON = "No plugin was disabled.";
 const CRASH_HISTORY_LIMIT = 10;
 const DIAGNOSTIC_EVENT_LIMIT = 20;
 const CRASH_LOOP_WINDOW = 5 * 60_000;
+const ALLOW_GLOBAL_ERROR_CAPTURE = false;
 const MESSAGE_SEND_FORBIDDEN_RE = /^POST \/channels\/(?:\d+|xxx)\/messages \[403\]$/;
 const GUILD_VANITY_FORBIDDEN_RE = /^GET \/guilds\/(?:\d+|xxx)\/vanity-url \[403\]$/;
 const USER_PROFILE_UNAVAILABLE_RE = /^GET \/users\/(?:\d+|xxx)\/profile \[(?:404|409)\]$/;
@@ -278,7 +279,8 @@ const settings = definePluginSettings({
     captureGlobalErrors: {
         type: OptionType.BOOLEAN,
         description: "Capture window errors and unhandled promise rejections, and show the crash popup.",
-        default: true
+        default: false,
+        disabled: !ALLOW_GLOBAL_ERROR_CAPTURE
     },
     showRecoveryToast: {
         type: OptionType.BOOLEAN,
@@ -665,7 +667,7 @@ function wrapPluginCallback<T extends PluginCallback>(pluginName: string, surfac
 }
 
 function rememberPluginError(pluginName: string, surface: string, error: unknown) {
-    if (!globalListenersInstalled) return;
+    if (!instrumentedMethods.length) return;
     addPluginBreadcrumb(pluginName, `${surface} failed`);
     const record = asRecord(error);
     if (!record || pluginErrorOrigins.has(record)) return;
@@ -1342,6 +1344,19 @@ function openCrashLogsFolder() {
         .catch(error => logger.error("Failed to open crash logs folder.", error));
 }
 
+async function openLatestCrashLog() {
+    if (!Native?.openLatestCrashLog) return;
+
+    try {
+        await crashLogWriteQueue;
+        const error = await Native.openLatestCrashLog();
+        if (error) showSupportAlert({ title: "Could not open the latest crash log.", body: error });
+    } catch (error) {
+        logger.error("Failed to open the latest crash log.", error);
+        showSupportAlert({ title: "Could not open the latest crash log.", body: "Try opening the crash logs folder." });
+    }
+}
+
 function openProcessCrashFolder() {
     if (!Native?.openProcessCrashDir) return;
     void Native.openProcessCrashDir()
@@ -1498,7 +1513,7 @@ function handleUnhandledRejection(event: PromiseRejectionEvent) {
 }
 
 function installGlobalListeners() {
-    if (globalListenersInstalled) return;
+    if (!ALLOW_GLOBAL_ERROR_CAPTURE || globalListenersInstalled) return;
 
     window.addEventListener("error", handleGlobalError);
     window.addEventListener("unhandledrejection", handleUnhandledRejection);
@@ -1597,6 +1612,18 @@ function CrashSupportModal({ modalProps, report }: CrashSupportModalProps) {
                             Open Telegram
                             <OpenExternalIcon height={16} width={16} />
                         </Button>
+                    </section>
+
+                    <section className={cl("action")}>
+                        <BaseText size="md" weight="semibold">Crash logs</BaseText>
+                        <Flex flexDirection="column" gap="8px">
+                            <Button variant="secondary" disabled={!Native?.openCrashLogDir} onClick={openCrashLogsFolder} className={cl("action-button")}>
+                                Open crash logs folder
+                            </Button>
+                            <Button variant="secondary" disabled={!Native?.openLatestCrashLog} onClick={() => void openLatestCrashLog()} className={cl("action-button")}>
+                                Open latest crash log
+                            </Button>
+                        </Flex>
                     </section>
 
                     <section className={cl("action")}>
@@ -1910,6 +1937,7 @@ export default definePlugin({
     },
 
     start() {
+        if (!ALLOW_GLOBAL_ERROR_CAPTURE && settings.store.captureGlobalErrors) settings.store.captureGlobalErrors = false;
         recordDiagnosticEvent("start", undefined, "Client session started.");
         const test = readDiagnosticTest();
         const enabledPlugins = new Set(getEnabledPluginSnapshot());

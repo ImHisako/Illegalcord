@@ -8,6 +8,7 @@ import {
     clearClientCache,
     getCrashLogDir,
     openCrashLogDir,
+    openLatestCrashLog,
     openProcessCrashDir,
     writeCrashLog,
 } from "./native";
@@ -16,6 +17,7 @@ export default {
     clearClientCache,
     getCrashLogDir,
     openCrashLogDir,
+    openLatestCrashLog,
     openProcessCrashDir,
     writeCrashLog,
 };

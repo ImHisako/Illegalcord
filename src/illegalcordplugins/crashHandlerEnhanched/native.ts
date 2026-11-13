@@ -6,7 +6,7 @@
 
 import { DATA_DIR } from "@main/utils/constants";
 import { app, session, shell } from "electron";
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir, readdir, writeFile } from "fs/promises";
 import path from "path";
 
 const CRASH_LOG_DIR = path.join(DATA_DIR, "CrashLogs");
@@ -53,6 +53,22 @@ export async function getCrashLogDir(_event: Electron.IpcMainInvokeEvent): Promi
 export async function openCrashLogDir(_event: Electron.IpcMainInvokeEvent): Promise<string> {
     await mkdir(CRASH_LOG_DIR, { recursive: true });
     return shell.openPath(CRASH_LOG_DIR);
+}
+
+export async function openLatestCrashLog(event: Electron.IpcMainInvokeEvent): Promise<string> {
+    try {
+        const folder = await getCrashLogDir(event);
+        const entries = await readdir(folder, { withFileTypes: true });
+        const file = entries
+            .filter(entry => entry.isFile() && entry.name.startsWith("crash-") && entry.name.endsWith(".json") && CRASH_ID_RE.test(entry.name.slice(6, -5)))
+            .map(entry => entry.name)
+            .sort((a, b) => b.localeCompare(a, "en", { numeric: true }))[0];
+        if (!file) return "No crash logs have been saved yet.";
+
+        return await shell.openPath(path.join(folder, file)) ? "Could not open the crash log file." : "";
+    } catch {
+        return "Could not open the crash log file.";
+    }
 }
 
 export async function openProcessCrashDir(_event: Electron.IpcMainInvokeEvent): Promise<string> {

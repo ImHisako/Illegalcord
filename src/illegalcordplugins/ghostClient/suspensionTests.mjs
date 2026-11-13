@@ -183,14 +183,17 @@ test("Keeps Client Diagnostics running across repeated hide cycles and when star
     }
 });
 
-test("Retains layout styles for loaded patches while suspending their plugins", async () => {
+test("Retains layout styles and hides Spectrum while suspending plugins", async () => {
     const f = fixture({ mode: "hide" });
     const plugin = f.plugins.FakeNitro;
     plugin.patches = [{ find: "native renderer" }];
     plugin.managedStyle = "patched-layout";
     f.plugins.StatusCycler.managedStyle = "style-only";
+    f.plugins.IllegalcordEasterEgg = { name: "IllegalcordEasterEgg", started: true, patches: [{ find: "voice name" }], managedStyle: "spectrum" };
+    f.state.plugins.IllegalcordEasterEgg = { enabled: true };
     f.styles.add("patched-layout");
     f.styles.add("style-only");
+    f.styles.add("spectrum");
     const handle = f.install();
     handle.onReady();
     f.store.active = true;
@@ -198,11 +201,13 @@ test("Retains layout styles for loaded patches while suspending their plugins", 
     assert.equal(plugin.started, false);
     assert.equal(f.styles.has("patched-layout"), true);
     assert.equal(f.styles.has("style-only"), false);
+    assert.equal(f.styles.has("spectrum"), false);
     f.store.active = false;
     await settle();
     assert.equal(plugin.started, true);
     assert.equal(f.styles.has("patched-layout"), true);
     assert.equal(f.styles.has("style-only"), true);
+    assert.equal(f.styles.has("spectrum"), true);
     f.store.active = true;
     await settle();
     f.state.plugins.FakeNitro.enabled = false;

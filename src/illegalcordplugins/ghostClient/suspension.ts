@@ -62,7 +62,7 @@ export function installPluginSuspension() {
         for (const plugin of candidates) {
             if (!plugin.started || starting.has(plugin)) continue;
             const style = plugin.patches?.length ? plugin.managedStyle : undefined;
-            const retainStyle = style && isStyleEnabled(style);
+            const retainStyle = style && plugin.name !== "IllegalcordEasterEgg" && isStyleEnabled(style);
             if (stopPlugin(plugin)) {
                 paused.add(plugin);
                 if (retainStyle) {
