@@ -22,6 +22,8 @@ import { BrowserSettings } from "./BrowserSettings";
 import { refreshCameraPrivacy, refreshMicrophonePrivacy, scheduleMicrophonePrivacyRefresh, startMicrophonePrivacy, stopMicrophonePrivacy } from "./microphonePrivacy";
 import { DEFAULT_ALLOWED_PATTERNS, DEFAULT_BLOCKED_PATTERNS, DEFAULT_FIREWALL_URLS, validateRequestRuleList } from "./network";
 import { DEFAULT_EMBED_DOMAINS, isAllowedEmbed, parseDomainList, validateDomainList } from "./policy";
+import { isValidProxyValue } from "./proxy";
+import { ProxySettings } from "./ProxySettings";
 import { browserRequestLog, refreshRequestLogging, startRequestLogging, stopRequestLogging } from "./requestCapture";
 import { startHardening, stopHardening } from "./runtime";
 import { getTemporaryPermissions, setBlockRecording, startPermissionSession, stopPermissionSession } from "./session";
@@ -38,11 +40,6 @@ function validateRegexList(value: string): true | string {
     } catch {
         return "Every firewall pattern must be a valid regular expression.";
     }
-}
-
-function validateProxyRules(value: string): true | string {
-    if (!value.trim() || value.length > 4096 || /[\r\n\0@]/.test(value)) return "Enter credential-free Electron proxy rules.";
-    return true;
 }
 
 migratePluginSettings("DiscordHardened", "WebCordHardened");
@@ -495,11 +492,21 @@ export const settings = definePluginSettings({
     },
     proxyRules: {
         type: OptionType.STRING,
-        description: "Electron proxy rules. Credentials are rejected and this value is excluded from shared configurations.",
+        displayName: "Proxy address or rules",
+        description: "Enter a hostname and port, an HTTP, HTTPS or SOCKS address, or advanced Electron proxy rules. Use the separate fields for HTTP or HTTPS credentials.",
+        placeholder: "https://proxy.example.com:8443",
         default: "127.0.0.1:8080",
         restartNeeded: true,
         target: "DESKTOP",
-        isValid: validateProxyRules,
+        isValid: (value: string) => isValidProxyValue(value, false) || "Enter a proxy address or Electron proxy rules. Put credentials in the login fields.",
+        hidden() { return !this.store.proxy; },
+    },
+    proxyLogin: {
+        type: OptionType.COMPONENT,
+        component: ProxySettings,
+        default: null,
+        target: "DESKTOP",
+        restartNeeded: true,
         hidden() { return !this.store.proxy; },
     },
     proxyBypassRules: {
@@ -508,7 +515,7 @@ export const settings = definePluginSettings({
         default: "<local>",
         restartNeeded: true,
         target: "DESKTOP",
-        isValid: (value: string) => value.length <= 4096 && !/[\r\n\0@]/.test(value) || "Enter valid proxy bypass rules.",
+        isValid: (value: string) => isValidProxyValue(value, true) || "Enter valid proxy bypass rules.",
         hidden() { return !this.store.proxy; },
     },
 });

@@ -94,7 +94,7 @@ function IconSettings() {
             setPreview(result.preview);
             setClient(result.client);
             setMessage(result.failed
-                ? "The window icon was updated, but some shortcuts could not be updated or restored. You can retry with the same button."
+                ? "The window icon was updated. Some shortcuts could not be updated or restored. You can retry with the same button."
                 : `${nextMode === "original" ? "Original icon restored" : "Icon applied"}. Shortcuts updated: ${result.changed}.`);
         } catch {
             setMessage("The image could not be read. Try another PNG file.");
@@ -119,13 +119,13 @@ function IconSettings() {
         {message ? <Paragraph role="status">{message}</Paragraph> : null}
         <Paragraph>{IS_LINUX
             ? "Application menu changes use local launcher overrides. On Wayland, the dock may use the launcher icon and require a client restart. Sandboxed installations may restrict access to launchers. The tray icon is unchanged."
-            : "The running client's taskbar icon is updated too. Enable shortcut updates to keep the icon when the client is closed. If a pinned icon stays unchanged, unpin the client and pin it again. The tray icon next to the clock is unchanged."}</Paragraph>
+            : "The icon is applied to the running client and its pinned taskbar shortcut. If Windows still shows the cached icon, unpin the client and pin it again."}</Paragraph>
     </>;
 }
 
 export default definePlugin({
     name: "ClientIcon",
-    description: "Changes the current client's window and shortcut icons on Windows and Linux.",
+    description: "Changes the client icon, including its Windows taskbar icon and Linux launcher icon.",
     authors: [EquicordDevs.irritably],
     settings,
     settingsAboutComponent: ErrorBoundary.wrap(IconSettings, { noop: true }),

@@ -117,8 +117,8 @@ const SETTINGS_GROUPS = [
     },
     {
         title: "Desktop proxy",
-        description: "Optionally routes Chromium session traffic through a credential-free Electron proxy. Native Discord modules use their own networking. A proxy configuration failure blocks requests until recovery or restart.",
-        keys: ["proxy", "proxyBeforeLoad", "proxyRules", "proxyBypassRules"],
+        description: "Route Chromium session traffic through an Electron proxy. Native Discord modules use their own networking. A proxy configuration failure blocks requests until recovery or restart.",
+        keys: ["proxy", "proxyBeforeLoad", "proxyRules", "proxyLogin", "proxyBypassRules"],
     },
 ] satisfies readonly SettingsGroup[];
 

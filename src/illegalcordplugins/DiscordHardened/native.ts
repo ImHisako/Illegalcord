@@ -9,8 +9,10 @@ import type { Event, IpcMainInvokeEvent, Session, WebContents, WebPreferences } 
 import { launchBrowser, listInstalledBrowsers } from "./browsers";
 import { createAdvancedRequestLog } from "./nativeAdvancedLog";
 import { clearTemporaryPermissions } from "./nativePermissions";
+import { getSavedProxyCredentials, removeProxyCredentials, saveProxyCredentials } from "./nativeProxyAuth";
 import { isDiscordAppUrl, isTrustedSender, restrictWebPreferences } from "./nativeSecurity";
 import { configureSessionProxy, getSessionRequestLog, getSessionStatus, prepareSession, releaseSession } from "./nativeSession";
+import { getHttpProxyEndpoint, isValidProxyValue } from "./proxy";
 
 export { setTemporaryPermissions } from "./nativePermissions";
 
@@ -73,11 +75,21 @@ interface AppliedState {
 
 const appliedStates = new Map<number, AppliedState>();
 
-function isValidProxyValue(value: unknown, allowEmpty: boolean): value is string {
-    return typeof value === "string"
-        && value.length <= 4096
-        && (allowEmpty || Boolean(value.trim()))
-        && !/[\r\n\0@]/.test(value);
+export function getProxyLogin(event: IpcMainInvokeEvent): string | null {
+    return isTrustedSender(event) ? getSavedProxyCredentials()?.endpoint ?? null : null;
+}
+
+export function saveProxyLogin(event: IpcMainInvokeEvent, rules: unknown, username: unknown, password: unknown): true | string {
+    if (!isTrustedSender(event)) return "Could not save proxy credentials.";
+    const endpoint = getHttpProxyEndpoint(rules);
+    if (!endpoint) return "Enter one HTTP or HTTPS proxy address to save credentials.";
+    return saveProxyCredentials(endpoint.origin, username, password);
+}
+
+export function deleteProxyLogin(event: IpcMainInvokeEvent): boolean {
+    if (!isTrustedSender(event)) return false;
+    removeProxyCredentials();
+    return true;
 }
 
 function getChromeUserAgent(spoofWindows: boolean): string {

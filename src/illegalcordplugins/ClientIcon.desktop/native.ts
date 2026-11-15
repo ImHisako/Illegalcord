@@ -107,24 +107,25 @@ export function configure(event: IpcMainInvokeEvent, mode: unknown, shortcuts: u
                 writeFileSync(iconPath, linux ? png : toIco(png));
             }
             const backupDir = join(directory, "shortcuts");
-            const restore = mode === "original" || !shortcuts;
-            const result: { changed: number; failed: number; appId?: string; } = linux
-                ? updateLinuxShortcuts(iconPath, backupDir, restore)
-                : updateShortcuts(iconPath, backupDir, restore);
-            if (!linux) {
+            const original = mode === "original";
+            const windowsShortcuts = linux ? undefined : updateShortcuts(iconPath, backupDir, original, shortcuts);
+            const { changed, failed } = windowsShortcuts ?? updateLinuxShortcuts(iconPath, backupDir, original || !shortcuts);
+            window.setIcon(image);
+            if (windowsShortcuts && window.webContents.session === session.defaultSession) {
                 const client = basename(process.execPath, ".exe");
-                const appId = result.appId
-                    || (/^Discord(?:Canary|PTB|Development)?$/.test(client)
+                const appId = windowsShortcuts.appId
+                    || (/^Discord(?:Canary|PTB|Development)?$/i.test(client)
                         ? process.argv.includes("--localdev") ? process.execPath : `com.squirrel.${client}.${client}`
                         : undefined);
-                window.setAppDetails({
-                    ...(window.webContents.session === session.defaultSession && appId ? { appId } : {}),
-                    appIconPath: mode === "original" ? process.execPath : iconPath,
-                    appIconIndex: 0
-                });
+                if (appId) {
+                    window.setAppDetails({
+                        appIconPath: original ? process.execPath : iconPath,
+                        relaunchCommand: windowsShortcuts.relaunchCommand,
+                        relaunchDisplayName: app.getName(),
+                    });
+                    window.setAppDetails({ appId });
+                }
             }
-            window.setIcon(image);
-            const { changed, failed } = result;
             return { success: true, preview: image.toDataURL(), client: basename(process.execPath, ".exe"), changed, failed };
         } catch {
             return { success: false, error: "The icon could not be applied. Check that your client data folder is writable, then try again." };

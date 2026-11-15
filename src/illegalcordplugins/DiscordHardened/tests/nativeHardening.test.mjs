@@ -32,6 +32,13 @@ async function fixture(options = {}) {
         enabled: true, electronPermissionControls: true, sessionFirewall: true,
         goofCordFirewall: false, proxy: false, ...options,
     }, NoTrack: { enabled: false } } };
+    const nativeSettings = { plugins: {} };
+    const safeStorage = {
+        isEncryptionAvailable: () => true,
+        getSelectedStorageBackend: () => "gnome_libsecret",
+        encryptString: value => Buffer.from(value.split("").reverse().join("")),
+        decryptString: value => value.toString().split("").reverse().join(""),
+    };
     const logs = [];
     const logger = { Logger: class {
         info(value) { logs.push(value); }
@@ -52,6 +59,8 @@ async function fixture(options = {}) {
     const requestLog = await load("requestLog.ts");
     const nativeRequestLog = await load("nativeRequestLog.ts", { "./requestLog": requestLog });
     const nativeAdvancedLog = await load("nativeAdvancedLog.ts", { "@utils/misc": { isObject: value => typeof value === "object" && value !== null && !Array.isArray(value) }, "./requestLog": requestLog, "./nativeSecurity": security });
+    const proxy = await load("proxy.ts");
+    const nativeProxyAuth = await load("nativeProxyAuth.ts", { "@main/settings": { NativeSettings: { store: nativeSettings } }, electron: { safeStorage } });
     const ses = {
         setPermissionCheckHandler(handler) { handlers.check = handler; },
         setPermissionRequestHandler(handler) { handlers.request = handler; },
@@ -64,6 +73,7 @@ async function fixture(options = {}) {
             onErrorOccurred(handler) { handlers.error = handler; },
         },
         async setProxy(value) { calls.push(value); },
+        async clearAuthCache() { calls.push("auth cleared"); },
         async closeAllConnections() { calls.push("closed"); },
     };
     let ready;
@@ -73,11 +83,11 @@ async function fixture(options = {}) {
         "@utils/Logger": logger, "@utils/text": text,
         electron: { app, session: { defaultSession: ses } },
         "./nativePermissions": permissions, "./network": network,
-        "./nativeRequestLog": nativeRequestLog,
+        "./nativeProxyAuth": nativeProxyAuth, "./nativeRequestLog": nativeRequestLog, "./proxy": proxy,
     });
     const native = await load("native.ts", {
         "./browsers": { launchBrowser: async () => false, listInstalledBrowsers: async () => [] },
-        "./nativePermissions": permissions, "./nativeSecurity": security, "./nativeSession": nativeSession,
+        "./nativePermissions": permissions, "./nativeProxyAuth": nativeProxyAuth, "./nativeSecurity": security, "./nativeSession": nativeSession, "./proxy": proxy,
         "./nativeAdvancedLog": nativeAdvancedLog,
     });
     function sender(id = 1) {
@@ -97,7 +107,7 @@ async function fixture(options = {}) {
     const request = (url, resourceType = "xhr") => new Promise(resolve => handlers.before({ id: ++requestId, method: "GET", url, resourceType }, resolve));
     return {
         settings: settings.plugins.DiscordHardened, logs, calls, handlers, ses, app, ready, permissions, security, network,
-        nativeSession, native, session, sender, contents, event, details, request, requestLog, advance: ms => { now += ms; },
+        nativeSession, native, nativeSettings, safeStorage, session, sender, contents, event, details, request, requestLog, advance: ms => { now += ms; },
     };
 }
 
@@ -245,6 +255,59 @@ test("Proxy failure blocks requests while native navigation guards remain instal
     assert.equal(f.native.getSecurityStatus(f.event).webviewsBlocked, true);
     assert.deepEqual(await f.request("https://discord.com/api/v9/users/@me"), { cancel: true });
     assert.equal(f.logs.some(log => log.includes("Private native path")), false);
+});
+
+test("A saved proxy login authenticates only its configured endpoint and session", async () => {
+    const f = await fixture({ proxy: true, proxyRules: "https://PROXY.example.test:8443/" });
+    const { native, nativeSession, event, ses, contents } = f;
+    assert.equal(native.saveProxyLogin(event, f.settings.proxyRules, "example-user", "p@ss:/*?#"), true);
+    assert.equal(native.getProxyLogin(event), "https://proxy.example.test:8443");
+    assert.doesNotMatch(JSON.stringify(f.nativeSettings), /example-user|p@ss/);
+
+    const challenge = (auth = {}, details = {}, source = contents) => {
+        let credentials;
+        const loginEvent = { defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+        f.app.emit("login", loginEvent, source, { firstAuthAttempt: true, ...details }, {
+            isProxy: true, host: "proxy.example.test", port: 8443, ...auth,
+        }, (...args) => { credentials = args; });
+        assert.equal(loginEvent.defaultPrevented, Boolean(credentials));
+        return credentials;
+    };
+    const state = nativeSession.prepareSession(ses);
+    assert.equal(challenge(), undefined);
+    assert.equal(await state.ready, true);
+    assert.deepEqual(f.calls, [{ proxyRules: "https://proxy.example.test:8443", proxyBypassRules: "<local>" }, "auth cleared", "closed"]);
+    assert.deepEqual(challenge(), ["example-user", "p@ss:/*?#"]);
+    for (const auth of [{ isProxy: false }, { host: "other.example.test" }, { port: 443 }]) assert.equal(challenge(auth), undefined);
+    assert.equal(challenge({}, { firstAuthAttempt: false }), undefined);
+    assert.equal(challenge({}, {}, null), undefined);
+    assert.equal(challenge({}, {}, { session: {} }), undefined);
+
+    assert.equal(await nativeSession.configureSessionProxy(ses, "http://proxy.example.test:8443", ""), true);
+    assert.equal(challenge(), undefined);
+    assert.deepEqual(f.calls.slice(-2), ["auth cleared", "closed"]);
+    assert.equal(await nativeSession.configureSessionProxy(ses, f.settings.proxyRules, ""), true);
+    assert.equal(await nativeSession.releaseSession(ses), true);
+    assert.equal(challenge(), undefined);
+    assert.deepEqual(f.calls.slice(-3), [{ mode: "system" }, "auth cleared", "closed"]);
+});
+
+test("Proxy login rejects invalid input and can be removed without exposing credentials", async () => {
+    const { native, event, safeStorage } = await fixture();
+    const untrusted = { ...event, senderFrame: { ...event.senderFrame } };
+    for (const rules of ["socks5://proxy.example.test", "http://user:secret@proxy.example.test", "https://proxy.example.test:65536", "https://proxy.example.test;direct://"]) {
+        assert.notEqual(native.saveProxyLogin(event, rules, "user", "pass"), true, rules);
+    }
+    assert.notEqual(native.saveProxyLogin(untrusted, "proxy.example.test", "user", "pass"), true);
+    assert.notEqual(native.saveProxyLogin(event, "proxy.example.test", "user", "pass\n"), true);
+    safeStorage.isEncryptionAvailable = () => false;
+    assert.notEqual(native.saveProxyLogin(event, "proxy.example.test", "user", "pass"), true);
+    safeStorage.isEncryptionAvailable = () => true;
+    assert.equal(native.saveProxyLogin(event, "proxy.example.test", "user", "pass"), true);
+    assert.equal(native.getProxyLogin(untrusted), null);
+    assert.equal(native.deleteProxyLogin(untrusted), false);
+    assert.equal(native.deleteProxyLogin(event), true);
+    assert.equal(native.getProxyLogin(event), null);
 });
 
 test("Proxy restoration failure keeps session traffic blocked", async () => {

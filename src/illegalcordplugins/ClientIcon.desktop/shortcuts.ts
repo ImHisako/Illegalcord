@@ -13,35 +13,46 @@ function samePath(first: string, second: string) {
     return normalize(first).toLowerCase() === normalize(second).toLowerCase();
 }
 
-function isCurrentClient(shortcut: ShortcutDetails) {
+function isVersionDirectory(directory: string) {
+    return /^app-\d[\w.-]*$/i.test(basename(directory));
+}
+
+function isCurrentClient(shortcut: ShortcutDetails, root: string | undefined) {
     const executable = process.execPath;
     if (samePath(shortcut.target, executable)) return true;
+    if (!root) return false;
 
-    const versionDir = dirname(executable);
-    if (!/^app-\d[\w.-]*$/i.test(basename(versionDir))) return false;
-
-    const root = dirname(versionDir);
+    const client = basename(executable);
+    if (samePath(shortcut.target, join(root, client))) return true;
     const targetDir = dirname(shortcut.target);
-    if (samePath(dirname(targetDir), root) && /^app-\d[\w.-]*$/i.test(basename(targetDir)))
-        return basename(shortcut.target).toLowerCase() === basename(executable).toLowerCase();
+    if (samePath(dirname(targetDir), root) && isVersionDirectory(targetDir))
+        return basename(shortcut.target).toLowerCase() === client.toLowerCase();
 
     const launch = shortcut.args?.match(/(?:^|\s)--processStart(?:\s+|=)(?:"([^"\r\n]+)"|([^\s"]+))(?=\s|$)/i);
     if (!launch) return false;
     return samePath(shortcut.target, join(root, "Update.exe"))
-        && (launch[1] ?? launch[2]).toLowerCase() === basename(executable).toLowerCase();
+        && (launch[1] ?? launch[2]).toLowerCase() === client.toLowerCase();
 }
 
-export function updateShortcuts(iconPath: string, backupDir: string, restore: boolean) {
+export function updateShortcuts(iconPath: string, backupDir: string, restore: boolean, updateLaunchers: boolean) {
+    const versionDir = dirname(process.execPath);
+    const root = isVersionDirectory(versionDir) ? dirname(versionDir) : undefined;
+    const client = basename(process.execPath);
+    const launcher = root && join(root, client);
+    const updater = root && join(root, "Update.exe");
+    const localDev = process.argv.includes("--localdev");
+    const launchTarget = !localDev && (launcher && existsSync(launcher) ? launcher : updater && existsSync(updater) ? updater : undefined);
+    const relaunchCommand = launchTarget ? `"${launchTarget}" --processStart "${client}"` : `"${process.execPath}"${localDev ? " --localdev" : ""}`;
     const roots = [
-        app.getPath("desktop"),
-        join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs"),
-        join(app.getPath("appData"), "Microsoft", "Internet Explorer", "Quick Launch", "User Pinned", "TaskBar")
+        { directory: join(app.getPath("appData"), "Microsoft", "Internet Explorer", "Quick Launch", "User Pinned", "TaskBar"), restore },
+        { directory: join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs"), restore: restore || !updateLaunchers },
+        { directory: app.getPath("desktop"), restore: restore || !updateLaunchers }
     ];
     let changed = 0;
     let failed = 0;
     let appId: string | undefined;
 
-    function scan(directory: string, depth: number) {
+    function scan(directory: string, depth: number, restore: boolean) {
         if (!existsSync(directory)) return;
         let entries;
         try {
@@ -52,7 +63,7 @@ export function updateShortcuts(iconPath: string, backupDir: string, restore: bo
         }
         for (const entry of entries) {
             const path = join(directory, entry.name);
-            if (entry.isDirectory() && depth < 3) scan(path, depth + 1);
+            if (entry.isDirectory() && depth < 3) scan(path, depth + 1, restore);
             if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".lnk")) continue;
 
             let shortcut: ShortcutDetails;
@@ -62,7 +73,7 @@ export function updateShortcuts(iconPath: string, backupDir: string, restore: bo
                 failed++;
                 continue;
             }
-            if (!isCurrentClient(shortcut)) continue;
+            if (!isCurrentClient(shortcut, root)) continue;
             appId ||= shortcut.appUserModelId;
 
             try {
@@ -78,12 +89,13 @@ export function updateShortcuts(iconPath: string, backupDir: string, restore: bo
                         continue;
                     }
                     let { icon } = saved;
-                    if (icon && !existsSync(icon) && isCurrentClient({ target: icon })) icon = process.execPath;
+                    if (icon && !existsSync(icon) && isCurrentClient({ target: icon }, root)) icon = process.execPath;
                     if (shell.writeShortcutLink(path, "update", { target: shortcut.target, icon, iconIndex: saved.iconIndex })) {
                         unlinkSync(backupPath);
                         changed++;
                     } else failed++;
                 } else {
+                    if (samePath(icon, iconPath) && shortcut.iconIndex === 0) continue;
                     if (!ours) {
                         mkdirSync(backupDir, { recursive: true });
                         writeFileSync(backupPath, JSON.stringify({ icon: shortcut.icon ?? "", iconIndex: shortcut.iconIndex ?? 0 }));
@@ -97,6 +109,6 @@ export function updateShortcuts(iconPath: string, backupDir: string, restore: bo
         }
     }
 
-    for (const root of roots) scan(root, 0);
-    return { changed, failed, appId };
+    for (const location of roots) scan(location.directory, 0, location.restore);
+    return { changed, failed, appId, relaunchCommand };
 }
