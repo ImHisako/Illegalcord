@@ -84,17 +84,6 @@ export interface NativeCaptchaResponse {
     success: boolean;
     token?: string;
     error?: string;
-    task?: VoidSolverTaskResult;
-}
-
-export interface VoidSolverTaskResult {
-    taskId: string;
-    externalTaskId?: string;
-    status: string;
-    solveTime?: number;
-    site?: string;
-    createdAt?: string;
-    updatedAt?: string;
 }
 
 export interface GiftCodeResolution {

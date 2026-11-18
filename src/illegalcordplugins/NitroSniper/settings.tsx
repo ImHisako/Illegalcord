@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { definePluginSettings } from "@api/Settings";
+import { definePluginSettings, PlainSettings, SettingsStore } from "@api/Settings";
 import { Button } from "@components/Button";
 import { Notice } from "@components/Notice";
 import { OptionType } from "@utils/types";
@@ -46,67 +46,49 @@ export function CaptchaWarning() {
         <>
             <SniperLegalWarning />
             <Notice.Warning>
-                Automatic CAPTCHA solving sends the site key, request data, Discord page URL, and your user agent to the selected third-party service and may spend credits. If solving fails, NitroSniper opens Discord&apos;s CAPTCHA modal. NoCaptchaAI does not currently document hCaptcha token tasks, so its compatible task mode may stop working if the provider rejects it.
+                When enabled, NoneCap receives the site key, request data, Discord page URL, and your user agent, and may spend credits. NitroSniper opens Discord&apos;s CAPTCHA modal if NoneCap is disabled or fails.
             </Notice.Warning>
         </>
     );
 }
 
+const previousSettings: Record<string, unknown> | undefined = PlainSettings.plugins.NitroSniper;
+const removedSettings = ["captchaProvider", "noCaptchaAiApiKey", "voidSolverApiKey", "voidSolverProxy"];
+if (previousSettings && removedSettings.some(key => Object.hasOwn(previousSettings, key))) {
+    if (typeof previousSettings.captchaProvider === "string" && previousSettings.captchaProvider !== "nonecap") {
+        previousSettings.useNoneCap ??= false;
+    }
+    for (const key of removedSettings) delete previousSettings[key];
+    SettingsStore.markAsChanged();
+}
+
 export const settings = definePluginSettings({
+    preCheckGiftCodes: {
+        type: OptionType.BOOLEAN,
+        description: "Skip gifts Discord already knows are unavailable without waiting for a network check.",
+        default: true,
+        restartNeeded: false
+    },
     ignoreOwnGiftLinks: {
         type: OptionType.BOOLEAN,
         description: "Do not redeem Nitro gift links from messages sent by you.",
         default: false,
         restartNeeded: false
     },
-    captchaProvider: {
-        type: OptionType.SELECT,
-        description: "Service used to solve Nitro redemption hCaptchas.",
-        options: [
-            { label: "NoneCap", value: "nonecap", default: true },
-            { label: "NoCaptchaAI", value: "nocaptchaai" },
-            { label: "VoidSolver", value: "voidsolver" }
-        ]
+    useNoneCap: {
+        type: OptionType.BOOLEAN,
+        description: "Use NoneCap when an API key is configured.",
+        default: true
     },
     noneCapApiKey: {
         type: OptionType.STRING,
         description: "NoneCap API key for automatically solving Nitro redemption CAPTCHAs. Leave empty to use Discord's CAPTCHA modal.",
         default: "",
         placeholder: "nc_live_...",
-        hidden: () => settings.store.captchaProvider !== "nonecap",
         componentProps: {
             type: "password",
             autoComplete: "new-password"
         }
-    },
-    noCaptchaAiApiKey: {
-        type: OptionType.STRING,
-        description: "NoCaptchaAI API key for automatically solving Nitro redemption hCaptchas. Leave empty to use Discord's CAPTCHA modal.",
-        default: "",
-        placeholder: "nocap_...",
-        hidden: () => settings.store.captchaProvider !== "nocaptchaai",
-        componentProps: {
-            type: "password",
-            autoComplete: "new-password"
-        }
-    },
-    voidSolverApiKey: {
-        type: OptionType.STRING,
-        description: "VoidSolver API key for automatically solving Nitro redemption hCaptchas. Leave empty to use Discord's CAPTCHA modal.",
-        default: "",
-        placeholder: "VoidSolver API key",
-        hidden: () => settings.store.captchaProvider !== "voidsolver",
-        componentProps: {
-            type: "password",
-            autoComplete: "new-password"
-        }
-    },
-    voidSolverProxy: {
-        type: OptionType.STRING,
-        description: "Optional proxy sent to VoidSolver in http://user:pass@ip:port format.",
-        default: "",
-        placeholder: "http://user:pass@ip:port",
-        hidden: () => settings.store.captchaProvider !== "voidsolver"
     },
     webhookUrl: {
         type: OptionType.STRING,

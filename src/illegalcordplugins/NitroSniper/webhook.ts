@@ -8,7 +8,6 @@ import type { PluginNative } from "@utils/types";
 
 import type {
     ClaimRequest,
-    VoidSolverTaskResult,
     WebhookEmbed,
     WebhookField,
     WebhookPayload,
@@ -135,45 +134,7 @@ function buildClaimLinkField(request: ClaimRequest): WebhookField {
     };
 }
 
-function formatVoidSolverTimestamp(value: string | undefined) {
-    if (!value) return "Unknown";
-    const timestamp = Date.parse(value);
-    return Number.isFinite(timestamp) ? `<t:${Math.floor(timestamp / 1000)}:F>` : escapeMarkdown(value);
-}
-
-function buildVoidSolverFields(task: VoidSolverTaskResult | undefined): WebhookField[] {
-    if (!task) return [];
-
-    return [
-        {
-            name: "VoidSolver task:",
-            value: `${escapeMarkdown(task.taskId)}${task.externalTaskId ? `\nExternal: ${escapeMarkdown(task.externalTaskId)}` : ""}`,
-            inline: false
-        },
-        {
-            name: "Task status:",
-            value: `${escapeMarkdown(task.status)}\nToken received: ${task.status === "success" ? "Yes" : "No"}`,
-            inline: true
-        },
-        {
-            name: "Solve time:",
-            value: task.solveTime === undefined ? "Unknown" : `${task.solveTime.toFixed(2)} seconds`,
-            inline: true
-        },
-        {
-            name: "Solved site:",
-            value: escapeMarkdown(task.site ?? "Unknown"),
-            inline: true
-        },
-        {
-            name: "Task timeline:",
-            value: `Created: ${formatVoidSolverTimestamp(task.createdAt)}\nUpdated: ${formatVoidSolverTimestamp(task.updatedAt)}`,
-            inline: false
-        }
-    ];
-}
-
-function buildClaimFields(request: ClaimRequest, giftType: string | null, task?: VoidSolverTaskResult) {
+function buildClaimFields(request: ClaimRequest, giftType: string | null) {
     return [
         buildGiftTypeField(giftType),
         buildDetectionField(request),
@@ -181,8 +142,7 @@ function buildClaimFields(request: ClaimRequest, giftType: string | null, task?:
         buildChannelField(request),
         buildAuthorField(request),
         buildMessageField(request),
-        buildClaimLinkField(request),
-        ...buildVoidSolverFields(task)
+        buildClaimLinkField(request)
     ].filter((field): field is WebhookField => field != null);
 }
 
@@ -212,13 +172,13 @@ function buildEmbedAuthor(request: ClaimRequest) {
     };
 }
 
-function buildClaimEmbed(result: WebhookResult, request: ClaimRequest, giftType: string | null, task?: VoidSolverTaskResult): WebhookEmbed {
+function buildClaimEmbed(result: WebhookResult, request: ClaimRequest, giftType: string | null): WebhookEmbed {
     const presentation = getResultPresentation(result);
 
     return {
         title: presentation.title,
         color: presentation.color,
-        fields: buildClaimFields(request, giftType, task),
+        fields: buildClaimFields(request, giftType),
         timestamp: new Date().toISOString(),
         author: buildEmbedAuthor(request),
         footer: {
@@ -241,9 +201,9 @@ function buildTestWebhookPayload(): WebhookPayload {
     ]);
 }
 
-function buildClaimWebhookPayload(result: WebhookResult, request: ClaimRequest, giftType: string | null, task?: VoidSolverTaskResult): WebhookPayload {
+function buildClaimWebhookPayload(result: WebhookResult, request: ClaimRequest, giftType: string | null): WebhookPayload {
     return createPayload([
-        buildClaimEmbed(result, request, giftType, task)
+        buildClaimEmbed(result, request, giftType)
     ]);
 }
 
@@ -281,13 +241,12 @@ export async function sendClaimWebhook(
     webhookUrl: string,
     result: WebhookResult,
     request: ClaimRequest,
-    giftType: string | null,
-    task?: VoidSolverTaskResult
+    giftType: string | null
 ) {
     const url = parseWebhookUrl(webhookUrl);
     if (!url) return;
 
-    await postWebhook(url, buildClaimWebhookPayload(result, request, giftType, task));
+    await postWebhook(url, buildClaimWebhookPayload(result, request, giftType));
 }
 
 export async function sendTestWebhook(webhookUrl: string) {
