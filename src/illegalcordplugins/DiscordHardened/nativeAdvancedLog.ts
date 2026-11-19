@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { isObject } from "@utils/misc";
 import type { Event, WebContents } from "electron";
 
 import { isDiscordAppUrl } from "./nativeSecurity";
@@ -26,7 +25,7 @@ export function createAdvancedRequestLog(contents: WebContents, log: ReturnType<
     }
 
     function message(_event: Event, method: string, params: unknown, sessionId = ""): void {
-        if (!attached || !isObject(params)) return;
+        if (!attached || typeof params !== "object" || params === null || Array.isArray(params)) return;
         if (method === "Target.attachedToTarget" && "sessionId" in params && typeof params.sessionId === "string") {
             void enable(params.sessionId).catch(() => { error = "Some frames or workers could not be observed."; });
             return;
@@ -40,7 +39,7 @@ export function createAdvancedRequestLog(contents: WebContents, log: ReturnType<
         } else if (method === "Network.webSocketClosed") {
             sockets.delete(key);
         } else if (webSockets && (method === "Network.webSocketFrameSent" || method === "Network.webSocketFrameReceived")) {
-            if (!("response" in params) || !isObject(params.response)) return;
+            if (!("response" in params) || typeof params.response !== "object" || params.response === null || Array.isArray(params.response)) return;
             const frame = params.response;
             if (!("opcode" in frame) || typeof frame.opcode !== "number" || !("payloadData" in frame) || typeof frame.payloadData !== "string") return;
             log.record({
@@ -53,7 +52,7 @@ export function createAdvancedRequestLog(contents: WebContents, log: ReturnType<
                 opcode: frame.opcode,
             });
         } else if (localResources && method === "Network.requestWillBeSent") {
-            if (!("request" in params) || !isObject(params.request)) return;
+            if (!("request" in params) || typeof params.request !== "object" || params.request === null || Array.isArray(params.request)) return;
             const { request } = params;
             if (!("url" in request) || typeof request.url !== "string" || !/^(?:blob|data):/.test(request.url)) return;
             localRequests.set(key, {});
@@ -74,7 +73,7 @@ export function createAdvancedRequestLog(contents: WebContents, log: ReturnType<
         } else {
             const local = localRequests.get(key);
             if (!local) return;
-            if (method === "Network.responseReceived" && "response" in params && isObject(params.response)
+            if (method === "Network.responseReceived" && "response" in params && typeof params.response === "object" && params.response !== null && !Array.isArray(params.response)
                 && "status" in params.response && typeof params.response.status === "number") local.status = params.response.status;
             if (method === "Network.loadingFinished" || method === "Network.loadingFailed") {
                 log.finish(key, {

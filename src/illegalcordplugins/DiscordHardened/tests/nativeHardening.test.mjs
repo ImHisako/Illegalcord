@@ -58,7 +58,7 @@ async function fixture(options = {}) {
     const handlers = {};
     const requestLog = await load("requestLog.ts");
     const nativeRequestLog = await load("nativeRequestLog.ts", { "./requestLog": requestLog });
-    const nativeAdvancedLog = await load("nativeAdvancedLog.ts", { "@utils/misc": { isObject: value => typeof value === "object" && value !== null && !Array.isArray(value) }, "./requestLog": requestLog, "./nativeSecurity": security });
+    const nativeAdvancedLog = await load("nativeAdvancedLog.ts", { "./requestLog": requestLog, "./nativeSecurity": security });
     const proxy = await load("proxy.ts");
     const nativeProxyAuth = await load("nativeProxyAuth.ts", { "@main/settings": { NativeSettings: { store: nativeSettings } }, electron: { safeStorage } });
     const ses = {

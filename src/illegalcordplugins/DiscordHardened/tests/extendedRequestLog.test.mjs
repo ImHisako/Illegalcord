@@ -8,9 +8,10 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { compileFunction } from "node:vm";
 
-import { transform } from "esbuild";
+import { build, transform } from "esbuild";
 
 async function load(name, dependencies = {}, globals = {}) {
     const source = await readFile(new URL(`../${name}`, import.meta.url), "utf8");
@@ -26,7 +27,20 @@ async function load(name, dependencies = {}, globals = {}) {
 const misc = { isObject: value => typeof value === "object" && value !== null && !Array.isArray(value) };
 const requestLog = await load("requestLog.ts");
 const security = await load("nativeSecurity.ts");
-const { createAdvancedRequestLog } = await load("nativeAdvancedLog.ts", { "@utils/misc": misc, "./requestLog": requestLog, "./nativeSecurity": security });
+const { createAdvancedRequestLog } = await load("nativeAdvancedLog.ts", { "./requestLog": requestLog, "./nativeSecurity": security });
+
+test("Advanced capture bundles without renderer dependencies", async () => {
+    const result = await build({
+        entryPoints: [fileURLToPath(new URL("../nativeAdvancedLog.ts", import.meta.url))],
+        bundle: true,
+        platform: "node",
+        format: "cjs",
+        external: ["electron", "~plugins"],
+        write: false,
+        metafile: true,
+    });
+    assert.deepEqual(Object.values(result.metafile.outputs).flatMap(output => output.imports), []);
+});
 
 async function fixture(options = {}) {
     const settings = { recordNetworkRequests: true, recordWebSocketMessages: true, recordLocalResources: true, ...options };
