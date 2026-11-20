@@ -952,30 +952,53 @@
 
 .vc-send-trail-config-manual-row {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-end;
     gap: 10px;
 }
 
 .vc-send-trail-config-manual-field {
-    flex: 1 1 auto;
+    flex: 0 1 240px;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .vc-send-trail-config-id-input {
     width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
 }
 
-.vc-send-trail-config-id-input input,
-.vc-send-trail-config-id-input [class*="input"],
-.vc-send-trail-config-id-input [class*="inner"] {
-    color: var(--text-normal, var(--header-primary, #f2f3f5)) !important;
-    -webkit-text-fill-color: var(--text-normal, var(--header-primary, #f2f3f5)) !important;
-    caret-color: var(--text-normal, var(--header-primary, #f2f3f5)) !important;
-    opacity: 1 !important;
+.vc-send-trail-config-id-input:is(input),
+.vc-send-trail-config-id-input input {
+    width: 100%;
+    height: 40px;
+    box-sizing: border-box;
+    padding: 0 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--input-background, var(--background-tertiary));
+    color: var(--text-normal);
+    -webkit-text-fill-color: var(--text-normal);
+    caret-color: var(--text-normal);
+    font: inherit;
+    transition:
+        border-color 150ms ease,
+        box-shadow 150ms ease;
 }
 
-.vc-send-trail-config-id-input input::placeholder,
-.vc-send-trail-config-id-input [class*="input"]::placeholder {
-    color: var(--text-muted, #949ba4);
+.vc-send-trail-config-id-input:is(input)::placeholder,
+.vc-send-trail-config-id-input input::placeholder {
+    color: var(--text-muted);
+    -webkit-text-fill-color: var(--text-muted);
+}
+
+.vc-send-trail-config-id-input:is(input):focus,
+.vc-send-trail-config-id-input input:focus {
+    outline: none;
+    border-color: var(--brand-500);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-500) 20%, transparent);
 }
 
 .vc-send-trail-search-input:-webkit-autofill,
@@ -1081,11 +1104,6 @@
     .vc-send-trail-history-actions-buttons {
         width: 100%;
         justify-content: flex-start;
-    }
-
-    .vc-send-trail-config-manual-row {
-        flex-direction: column;
-        align-items: stretch;
     }
 
     .vc-send-trail-purge-status-title-row {
