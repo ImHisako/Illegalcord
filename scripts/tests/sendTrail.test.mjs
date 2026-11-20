@@ -32,15 +32,23 @@ class Request {
     result = undefined;
 }
 
-async function fixture(records = []) {
+async function fixture(records = [], options = {}) {
     const values = new Map([[key, structuredClone(records)], ["unrelated-plugin", { saved: true }], ["kamidere-send-trail:other", [record("other")]]]);
+    if (options.fresh) values.delete(key);
+    const legacyValues = new Map([[key, structuredClone(options.legacyRecords ?? [])], ["unrelated-plugin", { saved: true }]]);
     const readErrors = new Map();
+    const legacyReadErrors = new Map();
     const notifications = [];
     const writes = [];
-    const state = { writeError: null };
+    const legacyWrites = [];
+    const databaseNames = [];
+    const retries = [];
+    const state = { writeError: null, openFailures: 0, readFailures: 0, writeFailures: 0, onRetry: null };
     let tail = Promise.resolve();
 
-    function useStore(mode, callback) {
+    function useStore(mode, callback, legacy) {
+        const data = legacy ? legacyValues : values;
+        const errors = legacy ? legacyReadErrors : readErrors;
         const result = tail.then(() => {
             let resolveDone;
             let rejectDone;
@@ -54,8 +62,8 @@ async function fixture(records = []) {
                 if (pending || finished) return;
                 finished = true;
                 changes.forEach((value, key) => {
-                    values.set(key, value);
-                    readErrors.delete(key);
+                    data.set(key, value);
+                    errors.delete(key);
                 });
                 transaction.oncomplete?.({ target: transaction });
                 resolveDone();
@@ -95,13 +103,24 @@ async function fixture(records = []) {
 
             const output = callback({
                 transaction,
-                get: key => request(() => readErrors.has(key) ? { error: readErrors.get(key) } : { value: structuredClone(values.get(key)) }),
+                getAllKeys: () => request(() => ({ value: [...data.keys()] })),
+                get: key => request(() => {
+                    if (!legacy && state.readFailures > 0) {
+                        state.readFailures--;
+                        return { error: new DOMException("Temporary read failure.", "UnknownError") };
+                    }
+                    return errors.has(key) ? { error: errors.get(key) } : { value: structuredClone(data.get(key)) };
+                }),
                 put(value, key) {
                     assert.equal(mode, "readwrite");
-                    writes.push(key);
+                    (legacy ? legacyWrites : writes).push(key);
                     const copy = structuredClone(value);
                     return request(() => {
                         if (state.writeError) return { error: state.writeError };
+                        if (!legacy && state.writeFailures > 0) {
+                            state.writeFailures--;
+                            return { error: new DOMException("Temporary write failure.", "UnknownError") };
+                        }
                         changes.set(key, copy);
                         return { value: key };
                     });
@@ -114,12 +133,25 @@ async function fixture(records = []) {
     }
 
     const store = await load("illegalcordplugins/sendTrail/store.ts", {
-        "@api/DataStore": { ...DataStore, createStore: () => useStore },
+        "@api/DataStore": {
+            ...DataStore,
+            createStore(databaseName) {
+                databaseNames.push(databaseName);
+                const legacy = databaseName === "VencordData";
+                const failed = !legacy && state.openFailures > 0;
+                if (failed) state.openFailures--;
+                return (mode, callback) => failed
+                    ? Promise.reject(new DOMException("Could not open the database.", "UnknownError"))
+                    : useStore(mode, callback, legacy);
+            }
+        },
         "@api/Notifications": { showNotification: async notification => { notifications.push(notification); } },
         "@utils/lazy": { makeLazy: factory => { let value; return () => value ??= factory(); } },
+        "@utils/Logger": { Logger: class { warn() {} } },
+        "@utils/misc": { sleep: async duration => { retries.push(duration); state.onRetry?.(); } },
         "@webpack/common": { React: {}, UserStore: { getCurrentUser: () => ({ id: "owner" }) } }
     }, { IS_REPORTER: false, IDBRequest: Request });
-    return { store, values, readErrors, notifications, writes, state };
+    return { store, values, readErrors, notifications, writes, state, legacyValues, legacyReadErrors, legacyWrites, databaseNames, retries };
 }
 
 test("A new message repairs only the unreadable Send Trail history", async () => {
@@ -182,8 +214,8 @@ test("Other read failures never reset history", async () => {
     for (const error of [new DOMException("Temporary read failure.", "UnknownError"), new DOMException("Storage is unavailable.", "NotReadableError")]) {
         const f = await fixture([record("old")]);
         f.readErrors.set(key, error);
-        await assert.rejects(f.store.getSentTrailRecords("owner"), cause => cause === error);
-        await assert.rejects(f.store.appendSentTrailRecord(record("new", 2)), cause => cause === error);
+        await assert.rejects(f.store.getSentTrailRecords("owner"), cause => cause === error || cause.cause === error);
+        await assert.rejects(f.store.appendSentTrailRecord(record("new", 2)), cause => cause === error || cause.cause === error);
         assert.deepEqual(f.values.get(key), [record("old")]);
         assert.deepEqual(f.writes, []);
         assert.equal(f.notifications.length, 0);
@@ -204,4 +236,84 @@ test("Deleting an unknown message repairs the damaged value without adding histo
     await f.store.removeSentTrailRecord("owner", "channel", "untracked");
     assert.deepEqual(f.values.get(key), []);
     assert.equal(f.notifications.length, 1);
+});
+
+test("Readable legacy history is copied without modifying the original archive", async () => {
+    const f = await fixture([], { fresh: true, legacyRecords: [record("old")] });
+    await f.store.appendSentTrailRecord(record("new", 2));
+    assert.deepEqual(f.values.get(key), [record("new", 2), record("old")]);
+    assert.deepEqual(f.legacyValues.get(key), [record("old")]);
+    assert.deepEqual(f.legacyWrites, []);
+    assert.deepEqual(f.databaseNames, ["SendTrailData", "VencordData"]);
+    assert.equal(f.notifications.length, 0);
+});
+
+test("An unreadable original archive cannot block new sends or bulk deletions", async () => {
+    for (const error of [lostFile(), new DOMException("", "UnknownError")]) {
+        const f = await fixture([], { fresh: true, legacyRecords: [record("old")] });
+        f.legacyReadErrors.set(key, error);
+        await f.store.appendSentTrailRecord(record("new", 2));
+        assert.deepEqual(f.values.get(key), [record("new", 2)]);
+        await f.store.clearSentTrailRecordsWhere("owner", record => record.messageId === "new");
+        assert.deepEqual(f.values.get(key), []);
+        assert.deepEqual(f.legacyValues.get(key), [record("old")]);
+        assert.deepEqual(f.legacyValues.get("unrelated-plugin"), { saved: true });
+        assert.deepEqual(f.legacyWrites, []);
+        assert.equal(f.notifications.length, 1);
+    }
+});
+
+test("A failed migration can be attempted again without dropping legacy history", async () => {
+    const f = await fixture([], { fresh: true, legacyRecords: [record("old")] });
+    f.state.writeError = new DOMException("Storage is full.", "QuotaExceededError");
+    await assert.rejects(f.store.appendSentTrailRecord(record("new", 2)), error => error === f.state.writeError);
+    assert.equal(f.values.has(key), false);
+    f.state.writeError = null;
+    await f.store.appendSentTrailRecord(record("new", 2));
+    assert.deepEqual(f.values.get(key), [record("new", 2), record("old")]);
+    assert.deepEqual(f.legacyWrites, []);
+});
+
+test("A failed database open is retried with a fresh connection", async () => {
+    const f = await fixture([record("old")]);
+    f.state.openFailures = 1;
+    await f.store.appendSentTrailRecord(record("new", 2));
+    assert.deepEqual(f.values.get(key), [record("new", 2), record("old")]);
+    assert.deepEqual(f.databaseNames, ["SendTrailData", "SendTrailData"]);
+    assert.deepEqual(f.retries, [250]);
+});
+
+test("Temporary read and write failures are retried once without duplicate messages", async () => {
+    for (const failure of ["readFailures", "writeFailures"]) {
+        const f = await fixture([record("old")]);
+        f.state[failure] = 1;
+        await f.store.appendSentTrailRecord(record("new", 2));
+        assert.deepEqual(f.values.get(key), [record("new", 2), record("old")]);
+        assert.deepEqual(f.retries, [250]);
+        assert.equal(f.notifications.length, 0);
+    }
+});
+
+test("Persistent unknown errors stop after one retry and retain their original cause", async () => {
+    const f = await fixture([record("old")]);
+    const error = new DOMException("", "UnknownError");
+    f.state.writeError = error;
+    await assert.rejects(f.store.appendSentTrailRecord(record("new", 2)), cause => cause.cause === error && cause.message.includes("after retrying"));
+    assert.deepEqual(f.retries, [250]);
+    assert.deepEqual(f.values.get(key), [record("old")]);
+    assert.equal(f.notifications.length, 0);
+});
+
+test("A retry uses fresh saved data instead of a previous recovery snapshot", async () => {
+    const f = await fixture([record("old")]);
+    await f.store.getSentTrailRecords("owner");
+    f.readErrors.set(key, lostFile());
+    f.state.writeFailures = 1;
+    f.state.onRetry = () => {
+        f.readErrors.delete(key);
+        f.values.set(key, [record("external", 3)]);
+    };
+    await f.store.appendSentTrailRecord(record("new", 2));
+    assert.deepEqual(f.values.get(key), [record("external", 3), record("new", 2)]);
+    assert.equal(f.notifications.length, 0);
 });
