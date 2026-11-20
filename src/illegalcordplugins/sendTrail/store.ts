@@ -46,7 +46,11 @@ function updateRecords(userId: string, updater: (records: SentTrailRecord[] | un
     const key = getStorageKey(userId);
     return getStore()("readwrite", store => new Promise<void>((resolve, reject) => {
         const request = store.get(key);
-        void DataStore.promisifyRequest(store.transaction).then(resolve, reject);
+        void DataStore.promisifyRequest(store.transaction).then(resolve, (error: unknown) =>
+            reject(error ?? new Error("Could not update Send Trail history.")));
+        store.transaction.onerror = (event: Event) => {
+            if (event.target instanceof IDBRequest) reject(event.target.error);
+        };
         request.onsuccess = () => {
             try {
                 const records = updater(request.result);
@@ -71,7 +75,7 @@ export async function appendSentTrailRecord(record: SentTrailRecord) {
     if (!userId) return;
     let nextRecords = getCachedRecords(userId);
 
-    await DataStore.update(getStorageKey(userId), (existing: SentTrailRecord[] | undefined) => {
+    await updateRecords(userId, (existing: SentTrailRecord[] | undefined) => {
         const records = existing ?? [];
         const index = records.findIndex(existingRecord =>
             existingRecord.channelId === record.channelId &&
@@ -90,7 +94,7 @@ export async function appendSentTrailRecord(record: SentTrailRecord) {
         records.sort((left, right) => right.timestamp - left.timestamp);
         nextRecords = records;
         return records;
-    }, getStore());
+    });
 
     setCachedRecords(userId, nextRecords);
     emit();

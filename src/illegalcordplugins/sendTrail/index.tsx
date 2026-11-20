@@ -5,6 +5,7 @@
  */
 
 import type { MessageObject, SendMessageOptions } from "@api/MessageEvents";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { ClockIcon } from "@components/Icons";
 import SettingsPlugin from "@plugins/_core/settings";
 import { Devs } from "@utils/constants";
@@ -24,12 +25,18 @@ import { buildJumpLink, collectMessageMediaItems, getChannelRecipientIds, getMes
 const DRAFT_TTL_MS = 20_000;
 const MIN_MATCH_SCORE = 4;
 const SEND_TRAIL_SETTINGS_KEY = "kamidere_send_trail";
+const HEADER_BAR_SETTINGS: ["showActivityButton"] = ["showActivityButton"];
 const SendTrailTab = LazyComponent(() => require("./SendTrailTab").default);
 const logger = new Logger("SendTrail");
 
 let draftCounter = 0;
 let generation = 0;
 const pendingDrafts = new Map<string, PendingSendDraft>();
+
+const ActivityButton = ErrorBoundary.wrap(() => {
+    const { showActivityButton } = settings.use(HEADER_BAR_SETTINGS);
+    return showActivityButton ? <RuntimeActivityButton /> : null;
+}, { noop: true });
 
 function cleanupExpiredDrafts(now = Date.now()) {
     for (const [key, draft] of pendingDrafts.entries()) {
@@ -265,7 +272,7 @@ export default definePlugin({
     settings,
     headerBarButton: {
         icon: ClockIcon,
-        render: () => <RuntimeActivityButton />
+        render: () => <ActivityButton />
     },
 
     start() {
@@ -294,7 +301,6 @@ export default definePlugin({
             if (!currentUserId || payload.message.author?.id !== currentUserId) return;
 
             const draft = resolveBestDraft(payload);
-            if (!draft && !isForwardedMessage(payload.message)) return;
 
             const currentGeneration = generation;
             const record = buildRecord(payload.message, payload.guildId, draft);

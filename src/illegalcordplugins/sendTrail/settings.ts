@@ -37,6 +37,12 @@ export function parseProtectedDmUserIds(value: string) {
 }
 
 export const settings = definePluginSettings({
+    showActivityButton: {
+        type: OptionType.BOOLEAN,
+        displayName: "Kamidere Activity",
+        description: "Show the Kamidere Activity icon next to the Equicord toolbox.",
+        default: false,
+    },
     purgeTarget: {
         type: OptionType.SELECT,
         description: "Choose what Send Trail is allowed to purge.",
