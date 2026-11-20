@@ -86,6 +86,21 @@ export interface NativeCaptchaResponse {
     error?: string;
 }
 
+export interface CaptchaSolverOptions {
+    provider: "nonecap" | "bruxsolver";
+    proxy?: string;
+    powType?: "" | "hsw" | "hsl";
+}
+
+export interface NativeSolverAccountResponse {
+    success: boolean;
+    remainingSolves?: number;
+    threadLimit?: number;
+    threadsInUse?: number;
+    availableThreads?: number;
+    error?: string;
+}
+
 export interface GiftCodeResolution {
     store_listing?: {
         sku?: {

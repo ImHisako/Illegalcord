@@ -217,9 +217,9 @@ export default definePlugin({
     }],
 
     async solveCaptcha(props: CaptchaProps, showCaptcha: (props: CaptchaProps) => Promise<CaptchaResult>) {
-        const { noneCapApiKey, useNoneCap } = settings.store;
-        const apiKey = noneCapApiKey.trim();
-        if (!claiming || !useNoneCap || !apiKey || props.captchaService !== "hcaptcha" || !Native) {
+        const { captchaProvider, noneCapApiKey, bruxSolverApiKey, bruxSolverProxy, bruxSolverPowType } = settings.store;
+        const apiKey = (captchaProvider === "bruxsolver" ? bruxSolverApiKey : noneCapApiKey).trim();
+        if (!claiming || captchaProvider === "manual" || !apiKey || props.captchaService !== "hcaptcha" || !Native) {
             return showCaptcha(props);
         }
 
@@ -228,7 +228,8 @@ export default definePlugin({
             props.sitekey,
             props.options.rqdata,
             `${location.origin}/channels/@me`,
-            navigator.userAgent
+            navigator.userAgent,
+            { provider: captchaProvider, proxy: bruxSolverProxy.trim(), powType: bruxSolverPowType }
         );
         if (!result.success || !result.token) {
             logger.error(result.error ?? "CAPTCHA solve failed.");
