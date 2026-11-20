@@ -5,6 +5,7 @@
  */
 
 import * as DataStore from "@api/DataStore";
+import { showNotification } from "@api/Notifications";
 import { makeLazy } from "@utils/lazy";
 import { React, UserStore } from "@webpack/common";
 import type { DispatchWithoutAction } from "react";
@@ -42,29 +43,50 @@ function getStorageKey(userId: string) {
     return `${STORAGE_PREFIX}${userId}`;
 }
 
-function updateRecords(userId: string, updater: (records: SentTrailRecord[] | undefined) => SentTrailRecord[] | undefined) {
+async function updateRecords(userId: string, updater: (records: SentTrailRecord[] | undefined) => SentTrailRecord[] | undefined) {
     const key = getStorageKey(userId);
-    return getStore()("readwrite", store => new Promise<void>((resolve, reject) => {
+    let recovered = false;
+    await getStore()("readwrite", store => new Promise<void>((resolve, reject) => {
         const request = store.get(key);
         void DataStore.promisifyRequest(store.transaction).then(resolve, (error: unknown) =>
             reject(error ?? new Error("Could not update Send Trail history.")));
         store.transaction.onerror = (event: Event) => {
             if (event.target instanceof IDBRequest) reject(event.target.error);
         };
-        request.onsuccess = () => {
+        request.onsuccess = request.onerror = (event: Event) => {
+            const { error } = request;
+            if (error) {
+                if (error.name !== "NotReadableError" || !error.message.includes("irrecoverable")) return;
+                event.preventDefault();
+                event.stopPropagation();
+                recovered = true;
+            }
             try {
-                const records = updater(request.result);
-                if (records !== undefined) store.put(records, key);
+                const existing: SentTrailRecord[] | undefined = recovered ? [...getCachedRecords(userId)] : request.result;
+                const records = updater(existing);
+                if (records !== undefined || recovered) store.put(records ?? existing, key);
             } catch (error) {
                 reject(error);
             }
         };
     }));
+
+    if (recovered) {
+        void showNotification({
+            title: "Send Trail tracking restored",
+            body: "The saved history was damaged. Tracking has resumed using the entries still available in memory. Earlier entries may be missing.",
+        });
+    }
 }
 
 export async function getSentTrailRecords(userId: string | null) {
     if (!userId) return [];
-    const records = await DataStore.get<SentTrailRecord[]>(getStorageKey(userId), getStore());
+    const records = await DataStore.get<SentTrailRecord[]>(getStorageKey(userId), getStore()).catch(async (error: unknown) => {
+        if (!(error instanceof DOMException) || error.name !== "NotReadableError" || !error.message.includes("irrecoverable")) throw error;
+        let records: SentTrailRecord[] = [];
+        await updateRecords(userId, existing => { records = existing ?? []; });
+        return records;
+    });
     const nextRecords = records ?? [];
     setCachedRecords(userId, nextRecords);
     return nextRecords;
