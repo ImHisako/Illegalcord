@@ -596,7 +596,11 @@
     place-items: center;
     border: 2px dashed var(--vc-cs-next);
     border-radius: 14px;
-    background: color-mix(in srgb, var(--vc-cs-next) 14%, var(--background-base-low, var(--background-primary)) 86%);
+    background: color-mix(
+        in srgb,
+        var(--vc-cs-next) 14%,
+        var(--background-base-low, var(--background-primary)) 86%
+    );
     color: var(--text-strong, var(--header-primary));
     font-size: 16px;
     font-weight: 600;
