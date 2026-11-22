@@ -84,7 +84,7 @@ function scheduleAudioRestore() {
 
     let retries = 2;
     const restore = () => {
-        if (SelectedChannelStore.getVoiceChannelId() && !restoreFakeAudio(retries < 2) && retries-- > 0) {
+        if (SelectedChannelStore.getVoiceChannelId() && !restoreFakeAudio(true) && retries-- > 0) {
             restoreTimer = setTimeout(restore, 750);
         } else {
             restoreTimer = undefined;
@@ -181,6 +181,8 @@ export default definePlugin({
         }
     ],
     flux: {
+        AUDIO_SET_INPUT_DEVICE: rescheduleAudioRestore,
+        AUDIO_SET_OUTPUT_DEVICE: rescheduleAudioRestore,
         VOICE_CHANNEL_SELECT({ channelId }: { channelId?: string | null; }) {
             clearAudioRestore();
             if (channelId) scheduleAudioRestore();

@@ -30,12 +30,13 @@ export function restoreLocalAudio(fakeMute: boolean, fakeDeafen: boolean, debugL
     const channelId = SelectedChannelStore.getVoiceChannelId();
     const temporarilyMuted = MediaEngineStore.isSelfMutedTemporarily();
     const serverDeafened = MediaEngineStore.isServerDeaf();
-    const restoreMicrophone = !!channelId && (fakeMute || fakeDeafen) && !temporarilyMuted
-        && !MediaEngineStore.isServerMute() && !serverDeafened && MediaEngineStore.isEnabled()
+    const selfDeafened = MediaEngineStore.isSelfDeaf();
+    const restoreMicrophone = !!channelId && (fakeMute || fakeDeafen) && !MediaEngineStore.isSelfMute() && !temporarilyMuted
+        && !selfDeafened && !MediaEngineStore.isServerMute() && !serverDeafened && MediaEngineStore.isEnabled()
         && tryOrElse(() => AudioPermission.didHavePermission("audio"), false);
-    const restorePlayback = !!channelId && fakeDeafen && !serverDeafened;
+    const restorePlayback = !!channelId && fakeDeafen && !selfDeafened && !serverDeafened;
     const selfMute = !restoreMicrophone && (MediaEngineStore.isMute() || temporarilyMuted);
-    const selfDeaf = !restorePlayback && MediaEngineStore.isSelfDeaf();
+    const selfDeaf = !restorePlayback && selfDeafened;
     const connections = getVoiceConnections();
     let succeeded = connections.length > 0;
     let changed = false;
