@@ -1,0 +1,813 @@
+.vc-cs-root {
+    --vc-cs-radius: 10px;
+    --vc-cs-border: var(--border-subtle, rgb(255 255 255 / 8%));
+    --vc-cs-surface: var(--background-base-lower, var(--background-secondary));
+    --vc-cs-hover: var(--background-mod-subtle, rgb(255 255 255 / 4%));
+    --vc-cs-live: var(--status-danger, #f23f43);
+    --vc-cs-next: var(--brand-500, #5865f2);
+    --vc-cs-warning: var(--status-warning, #f0b232);
+    --vc-cs-chip: rgb(0 0 0 / 62%);
+
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-bottom: 8px;
+    color: var(--text-default);
+}
+
+.vc-cs-air {
+    display: grid;
+    grid-template-columns: minmax(200px, 260px) 1fr;
+    gap: 18px;
+    padding: 14px;
+    border: 1px solid var(--vc-cs-border);
+    border-radius: 14px;
+    background: var(--vc-cs-surface);
+}
+
+.vc-cs-air-preview {
+    position: relative;
+    margin: 0;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #000;
+}
+
+.vc-cs-air-preview .vc-cs-thumb {
+    width: 100%;
+    height: 100%;
+}
+
+.vc-cs-air-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 100%;
+    color: rgb(255 255 255 / 55%);
+    font-size: 12px;
+}
+
+.vc-cs-air-caption {
+    position: absolute;
+    inset: auto 0 0;
+    padding: 18px 10px 7px;
+    background: linear-gradient(transparent, rgb(0 0 0 / 70%));
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.vc-cs-live-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--vc-cs-live);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 16px;
+    text-transform: uppercase;
+}
+
+.vc-cs-air-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-width: 0;
+    gap: 16px;
+}
+
+.vc-cs-air-headline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-strong, var(--header-primary));
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.vc-cs-air-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.vc-cs-tone-live .vc-cs-air-dot {
+    background: var(--vc-cs-live);
+}
+
+.vc-cs-tone-warning .vc-cs-air-dot {
+    background: var(--vc-cs-warning);
+}
+
+.vc-cs-air-detail {
+    margin-top: 6px;
+    font-size: 14px;
+    line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+}
+
+.vc-cs-air-help {
+    margin: 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--vc-cs-border);
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.vc-cs-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.25fr;
+    border: 1px solid var(--vc-cs-border);
+    border-radius: var(--vc-cs-radius);
+    overflow: hidden;
+}
+
+.vc-cs-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    cursor: pointer;
+}
+
+.vc-cs-option + .vc-cs-option {
+    border-left: 1px solid var(--vc-cs-border);
+}
+
+.vc-cs-option:hover {
+    background: var(--vc-cs-hover);
+}
+
+.vc-cs-option-disabled {
+    cursor: default;
+    opacity: 0.45;
+}
+
+.vc-cs-option-disabled:hover {
+    background: none;
+}
+
+.vc-cs-option-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.vc-cs-option-title {
+    color: var(--text-strong, var(--header-primary));
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.vc-cs-option-note {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.vc-cs-segmented {
+    display: inline-flex;
+    flex: none;
+    padding: 2px;
+    border-radius: 8px;
+    background: var(--vc-cs-surface);
+    border: 1px solid var(--vc-cs-border);
+}
+
+.vc-cs-segment {
+    padding: 4px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.vc-cs-segment:hover:not(:disabled) {
+    color: var(--text-default);
+}
+
+.vc-cs-segment-active,
+.vc-cs-segment-active:hover:not(:disabled) {
+    background: var(--vc-cs-next);
+    color: #fff;
+}
+
+.vc-cs-segment:disabled {
+    cursor: default;
+}
+
+.vc-cs-profiles {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--vc-cs-border);
+}
+
+.vc-cs-profile-list {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 4px;
+    min-width: 0;
+}
+
+.vc-cs-profile,
+.vc-cs-profile-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: -1px;
+    padding: 8px 12px 10px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--text-muted);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.vc-cs-profile:hover,
+.vc-cs-profile-add:hover {
+    color: var(--text-default);
+}
+
+.vc-cs-profile-active,
+.vc-cs-profile-active:hover {
+    border-bottom-color: var(--vc-cs-next);
+    color: var(--text-strong, var(--header-primary));
+}
+
+.vc-cs-profile-drop {
+    box-shadow: inset 2px 0 0 var(--vc-cs-next);
+}
+
+.vc-cs-profile-name {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.vc-cs-profile-count {
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--vc-cs-hover);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 18px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.vc-cs-profile-add {
+    gap: 4px;
+    font-size: 13px;
+}
+
+.vc-cs-profile-input {
+    width: 150px;
+    margin-bottom: 6px;
+    padding: 5px 8px;
+    border: 1px solid var(--vc-cs-next);
+    border-radius: 6px;
+    background: var(--input-background-default, var(--vc-cs-surface));
+    color: var(--text-default);
+    font-size: 14px;
+    outline: none;
+}
+
+.vc-cs-profile-tools {
+    display: flex;
+    flex: none;
+    gap: 2px;
+    padding-bottom: 6px;
+}
+
+.vc-cs-icon-button {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--interactive-icon-default, var(--interactive-normal));
+    cursor: pointer;
+}
+
+.vc-cs-icon-button:hover {
+    background: var(--vc-cs-hover);
+    color: var(--interactive-icon-hover, var(--interactive-hover));
+}
+
+.vc-cs-icon-button-danger {
+    color: var(--vc-cs-live);
+}
+
+.vc-cs-icon-button-danger:hover {
+    background: color-mix(in srgb, var(--vc-cs-live) 16%, transparent);
+    color: var(--vc-cs-live);
+}
+
+.vc-cs-icon-button-muted,
+.vc-cs-icon-button-muted:hover {
+    background: none;
+    color: var(--interactive-icon-default, var(--interactive-normal));
+    opacity: 0.4;
+    cursor: default;
+}
+
+.vc-cs-health-list {
+    text-align: left;
+    line-height: 1.5;
+}
+
+.vc-cs-library {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.vc-cs-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 32px;
+}
+
+.vc-cs-toolbar-label {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    color: var(--text-muted);
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+}
+
+.vc-cs-toolbar-label strong {
+    color: var(--text-strong, var(--header-primary));
+    font-weight: 600;
+}
+
+.vc-cs-toolbar-hint {
+    margin-left: 12px;
+    padding-left: 12px;
+    border-left: 1px solid var(--vc-cs-border);
+    font-size: 13px;
+}
+
+.vc-cs-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.vc-cs-toolbar-actions .vc-btn-base {
+    gap: 6px;
+}
+
+.vc-cs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+    gap: 10px;
+}
+
+.vc-cs-tile {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #000;
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    cursor: grab;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 90px;
+}
+
+.vc-cs-tile:focus-visible {
+    outline-color: var(--border-focus, #00b0f4);
+}
+
+.vc-cs-tile-next {
+    outline-color: var(--vc-cs-next);
+}
+
+.vc-cs-tile-live {
+    outline-color: var(--vc-cs-live);
+}
+
+.vc-cs-tile-drop {
+    outline: 2px dashed var(--vc-cs-next);
+}
+
+.vc-cs-tile-dragged {
+    opacity: 0.35;
+    cursor: grabbing;
+}
+
+.vc-cs-thumb {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.vc-cs-thumb-pending {
+    background: var(--vc-cs-surface);
+}
+
+.vc-cs-tile-number,
+.vc-cs-tile-tag {
+    position: absolute;
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 16px;
+    pointer-events: none;
+}
+
+.vc-cs-tile-number {
+    bottom: 6px;
+    left: 6px;
+    background: var(--vc-cs-chip);
+    font-variant-numeric: tabular-nums;
+}
+
+.vc-cs-tile-tag {
+    top: 6px;
+    left: 6px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.vc-cs-tile-tag-live {
+    background: var(--vc-cs-live);
+}
+
+.vc-cs-tile-tag-next {
+    background: var(--vc-cs-next);
+}
+
+.vc-cs-tile-tag-sending {
+    background: var(--vc-cs-warning);
+    color: #1e1f22;
+}
+
+.vc-cs-tile-check {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 2px solid rgb(255 255 255 / 85%);
+    border-radius: 50%;
+    background: var(--vc-cs-chip);
+    color: transparent;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.vc-cs-tile-actions {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 6px;
+    background: var(--vc-cs-chip);
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.vc-cs-tile:hover .vc-cs-tile-check,
+.vc-cs-tile:hover .vc-cs-tile-actions,
+.vc-cs-tile:focus-within .vc-cs-tile-check,
+.vc-cs-tile:focus-within .vc-cs-tile-actions,
+.vc-cs-grid-selecting .vc-cs-tile-check {
+    opacity: 1;
+}
+
+.vc-cs-tile-selected::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 3px solid var(--vc-cs-next);
+    border-radius: 8px;
+    background: rgb(0 0 0 / 35%);
+    pointer-events: none;
+}
+
+.vc-cs-tile-selected .vc-cs-tile-check {
+    z-index: 1;
+    border-color: var(--vc-cs-next);
+    background: var(--vc-cs-next);
+    color: #fff;
+    opacity: 1;
+}
+
+.vc-cs-grid-selecting .vc-cs-tile-actions {
+    display: none;
+}
+
+.vc-cs-tile-actions button {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: #fff;
+    cursor: pointer;
+}
+
+.vc-cs-tile-actions button:hover {
+    background: rgb(255 255 255 / 16%);
+}
+
+.vc-cs-tile-actions .vc-cs-tile-delete:hover {
+    background: var(--vc-cs-live);
+}
+
+.vc-cs-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 36px 20px;
+    border: 2px dashed var(--vc-cs-border);
+    border-radius: 12px;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.vc-cs-empty:hover {
+    border-color: var(--vc-cs-next);
+    color: var(--text-default);
+}
+
+.vc-cs-empty-title {
+    margin-top: 4px;
+    color: var(--text-strong, var(--header-primary));
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.vc-cs-empty-note {
+    font-size: 13px;
+}
+
+.vc-cs-dropzone {
+    position: absolute;
+    inset: -8px;
+    z-index: 3;
+    display: grid;
+    place-items: center;
+    border: 2px dashed var(--vc-cs-next);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--vc-cs-next) 14%, var(--background-base-low, var(--background-primary)) 86%);
+    color: var(--text-strong, var(--header-primary));
+    font-size: 16px;
+    font-weight: 600;
+    pointer-events: none;
+}
+
+.vc-cs-footnote {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.vc-cs-health {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    padding-right: 12px;
+    border-right: 1px solid var(--vc-cs-border, var(--border-subtle));
+    cursor: default;
+}
+
+.vc-cs-health-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    opacity: 0.7;
+}
+
+.vc-cs-health-partial {
+    color: var(--status-warning, #f0b232);
+}
+
+.vc-cs-health-partial .vc-cs-health-dot {
+    background: var(--status-warning, #f0b232);
+    opacity: 1;
+}
+
+.vc-cs-health-broken {
+    color: var(--status-danger, #f23f43);
+    font-weight: 600;
+}
+
+.vc-cs-health-broken .vc-cs-health-dot {
+    background: var(--status-danger, #f23f43);
+    opacity: 1;
+}
+
+.vc-cs-air-alert {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--status-danger, #f23f43) 16%, transparent);
+    color: var(--text-strong, var(--header-primary));
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.vc-cs-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: grid;
+    place-items: center;
+    background: rgb(0 0 0 / 88%);
+    cursor: zoom-out;
+}
+
+.vc-cs-lightbox-image {
+    max-width: min(90vw, 1280px);
+    max-height: 80vh;
+    border-radius: 8px;
+    cursor: default;
+}
+
+.vc-cs-lightbox-bar {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    display: flex;
+    gap: 14px;
+    padding: 6px 14px;
+    border-radius: 8px;
+    background: rgb(0 0 0 / 60%);
+    color: #fff;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    transform: translateX(-50%);
+    cursor: default;
+}
+
+.vc-cs-lightbox-meta {
+    color: rgb(255 255 255 / 60%);
+}
+
+.vc-cs-lightbox-close,
+.vc-cs-lightbox-nav {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 10%);
+    color: #fff;
+    cursor: pointer;
+}
+
+.vc-cs-lightbox-close:hover,
+.vc-cs-lightbox-nav:hover {
+    background: rgb(255 255 255 / 22%);
+}
+
+.vc-cs-lightbox-close {
+    top: 20px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+}
+
+.vc-cs-lightbox-nav {
+    top: 50%;
+    width: 48px;
+    height: 48px;
+    transform: translateY(-50%);
+}
+
+.vc-cs-lightbox-prev {
+    left: 24px;
+}
+
+.vc-cs-lightbox-next {
+    right: 24px;
+}
+
+.vc-cs-panel-icon {
+    position: relative;
+    display: inline-flex;
+}
+
+.vc-cs-panel-icon-picture {
+    fill: var(--status-positive, #23a55a);
+}
+
+.vc-cs-panel-icon-off .vc-cs-panel-icon-picture {
+    fill: currentColor;
+    opacity: 0.45;
+}
+
+.vc-cs-panel-icon-alert {
+    position: absolute;
+    top: -2px;
+    right: -3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--status-danger, #f23f43);
+    box-shadow: 0 0 0 2px var(--status-danger, #f23f43);
+}
+
+.vc-cs-panel-icon-live {
+    position: absolute;
+    top: -2px;
+    right: -3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--status-danger, #f23f43);
+}
+
+.vc-cs-tip {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 180px;
+    overflow-wrap: break-word;
+    padding: 2px 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.vc-cs-tip-image {
+    width: 180px;
+    height: 101px;
+    margin-bottom: 4px;
+    border-radius: 6px;
+}
+
+.vc-cs-tip-headline {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.vc-cs-tip-detail {
+    font-size: 12px;
+    line-height: 1.35;
+    opacity: 0.85;
+}
+
+@media (width <= 900px) {
+    .vc-cs-air {
+        grid-template-columns: 1fr;
+    }
+
+    .vc-cs-options {
+        grid-template-columns: 1fr;
+    }
+
+    .vc-cs-option + .vc-cs-option {
+        border-top: 1px solid var(--vc-cs-border);
+        border-left: 0;
+    }
+}

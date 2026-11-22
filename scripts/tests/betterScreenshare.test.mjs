@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { compileFunction } from "node:vm";
+import { compileFunction, Script } from "node:vm";
 
 import { transformSync } from "esbuild";
 
@@ -23,6 +23,7 @@ function loadSource(path, dependencies = {}, globals = {}) {
 }
 
 const { SettingsStore } = loadSource("shared/SettingsStore.ts");
+const { canonicalizeMatch } = loadSource("utils/patches.ts", { "./intlHash": { runtimeHashMessageKey: () => assert.fail("Unexpected intl lookup.") } });
 const customProfile = { width: 1920, height: 1080, framerate: 75, resolutionEnabled: true, framerateEnabled: true };
 
 function fixture(profile = {}) {
@@ -31,6 +32,7 @@ function fixture(profile = {}) {
     const other = { id: "other", stream: { ownerId: "other" }, maxFrameRate: 60, maxResolution: { width: 2560, height: 1440 } };
     const state = { participants: [own, other], changes: 0 };
     const patchers = [];
+    const subscriptions = [];
     const store = {
         getParticipants(channelId) { assert.equal(this, store); assert.equal(channelId, "channel"); return state.participants; },
         getFilteredParticipants(channelId) { return this.getParticipants(channelId); },
@@ -45,7 +47,7 @@ function fixture(profile = {}) {
     }
     const dependencies = {
         "@api/ContextMenu": {},
-        "@api/Settings": { definePluginSettings: def => ({ def }), SettingsStore: settingsStore },
+        "@api/Settings": { definePluginSettings: def => ({ def }), SettingsStore: settingsStore, useSettings: paths => { subscriptions.push(paths); return settingsStore.store; } },
         "@components/Heading": {},
         "@components/Icons": {},
         "@components/Paragraph": {},
@@ -68,7 +70,7 @@ function fixture(profile = {}) {
     const plugin = loadSource("illegalcordplugins/betterScreenshare.desktop/index.tsx", dependencies, {
         document: new Proxy({}, { get: forbidden }), MutationObserver: forbidden, setTimeout: forbidden
     }).default;
-    return { plugin, store, state, settingsStore, patchers, own, other };
+    return { plugin, store, state, settingsStore, patchers, own, other, subscriptions };
 }
 
 test("starts without DOM observers or timers and restores store methods on stop", () => {
@@ -174,4 +176,50 @@ test("reuses unchanged quality options and copies only the overridden encoding f
     assert.notEqual(quality.encode, options.encode);
     assert.equal(options.capture.width, 1280);
     assert.equal(options.bitrateTarget, 2000000);
+});
+
+test("shows configured local FPS when Discord's quality hook still returns 60", () => {
+    const f = fixture({ ...customProfile, framerate: 165 });
+    const participant = { user: { id: "self" }, maxFrameRate: 165 };
+    const nativeQuality = { maxFrameRate: 60, maxResolution: { width: 0, height: 720, type: "source" } };
+    const quality = f.plugin.useDisplayedStreamQuality(participant, nativeQuality);
+    assert.equal(quality.maxFrameRate, 165);
+    assert.deepEqual(quality.maxResolution, { width: 1920, height: 1080, type: "fixed" });
+    assert.equal(nativeQuality.maxFrameRate, 60);
+    assert.equal(nativeQuality.maxResolution.type, "source");
+    assert.equal(f.plugin.useDisplayedStreamQuality({ user: { id: "other" } }, nativeQuality), nativeQuality);
+    const profile = f.settingsStore.store.plugins.BetterScreenshare.stores.ScreenshareStore.currentProfile;
+    profile.framerate = 240;
+    assert.equal(f.plugin.useDisplayedStreamQuality(participant, nativeQuality).maxFrameRate, 240);
+    profile.framerateEnabled = false;
+    profile.resolutionEnabled = false;
+    assert.equal(f.plugin.useDisplayedStreamQuality(participant, nativeQuality), nativeQuality);
+    assert.deepEqual(f.subscriptions[0], ["plugins.BetterScreenshare.stores.ScreenshareStore.*"]);
+    assert.ok(f.subscriptions.every(paths => paths === f.subscriptions[0]));
+});
+
+test("keeps matching quality references and handles missing quality", () => {
+    const f = fixture(customProfile);
+    const participant = { user: { id: "self" } };
+    const quality = { maxFrameRate: 75, maxResolution: { width: 1920, height: 1080, type: "fixed" } };
+    assert.equal(f.plugin.useDisplayedStreamQuality(participant, quality), quality);
+    assert.equal(f.plugin.useDisplayedStreamQuality(participant, null), null);
+    const sourceQuality = { ...quality, maxResolution: { ...quality.maxResolution, type: "source" } };
+    assert.equal(f.plugin.useDisplayedStreamQuality(participant, sourceQuality).maxResolution.type, "fixed");
+});
+
+test("wraps Discord's memoized local quality after its native 60 FPS calculation", () => {
+    const f = fixture({ ...customProfile, framerate: 165 });
+    const patch = f.plugin.patches.find(patch => patch.find === '"useMaxQuality"');
+    const module = '({quality:function(p){let q={fps:60,resolution:720};return R.useMemo(()=>p.user.id==="self"?{maxFrameRate:q.fps,maxResolution:resolve("useMaxQuality",null,{width:0,height:q.resolution,type:"fixed"},q.fps)}:p.quality,[p,q])}})';
+    const match = canonicalizeMatch(patch.replacement.match);
+    assert.equal([...module.matchAll(new RegExp(match.source, "g"))].length, 1);
+    const patched = module.replace(match, patch.replacement.replace.replaceAll("$self", "plugin"));
+    new Script(patched);
+    const hook = compileFunction(`return ${patched};`, ["R", "resolve", "plugin"])(
+        { useMemo: callback => callback() }, (location, guild, quality) => quality, f.plugin
+    ).quality;
+    assert.equal(hook({ user: { id: "self" } }).maxFrameRate, 165);
+    const otherQuality = { maxFrameRate: 30, maxResolution: { height: 480, width: 720, type: "fixed" } };
+    assert.equal(hook({ user: { id: "other" }, quality: otherQuality }), otherQuality);
 });

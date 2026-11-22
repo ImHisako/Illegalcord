@@ -17,14 +17,14 @@
 */
 
 import { findGroupChildrenByChildId, type NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { definePluginSettings, SettingsStore } from "@api/Settings";
+import { definePluginSettings, SettingsStore, useSettings } from "@api/Settings";
 import { Heading } from "@components/Heading";
 import { MainSettingsIcon } from "@components/Icons";
 import { Paragraph } from "@components/Paragraph";
 import { Devs } from "@utils/constants";
 import { getIntlMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
-import type { RenderModalProps } from "@vencord/discord-types";
+import type { RenderModalProps, StreamParticipant } from "@vencord/discord-types";
 import { findComponentByCodeLazy } from "@webpack";
 import { ChannelRTCStore, Menu, Modal, openModal, showToast, TextInput, UserStore, useState } from "@webpack/common";
 
@@ -36,6 +36,7 @@ import { initScreenshareAudioStore, initScreenshareStore, type ScreenshareProfil
 import { Emitter, ScreenshareSettingsIcon } from "../philsPluginLibrary";
 
 const Button = findComponentByCodeLazy(".NONE,disabled:", ".PANEL_BUTTON");
+const STREAM_QUALITY_SETTINGS_KEYS: Parameters<typeof useSettings>[0] = ["plugins.BetterScreenshare.stores.ScreenshareStore.*"];
 
 interface StreamVideoQualityOptions {
     width?: number;
@@ -541,11 +542,11 @@ function patchStreamFramerates(framerates: StreamFramerateOption[]) {
     return next.sort((a, b) => a.value - b.value);
 }
 
-function patchDisplayedStreamParticipant<T>(participant: T): T {
+function patchDisplayedStreamQuality<T>(participant: T, ownerId?: string): T {
     if (!isRecord(participant) || !screenshareStore) return participant;
 
     const { stream } = participant;
-    if (!isRecord(stream) || stream.ownerId !== UserStore.getCurrentUser().id) return participant;
+    if ((ownerId ?? (isRecord(stream) ? stream.ownerId : undefined)) !== UserStore.getCurrentUser().id) return participant;
 
     const { currentProfile } = screenshareStore.get();
     const {
@@ -561,17 +562,25 @@ function patchDisplayedStreamParticipant<T>(participant: T): T {
         next = { ...participant, maxFrameRate: framerate };
 
     const resolution = participant.maxResolution;
-    if (resolutionEnabled && width && height && (!isRecord(resolution) || resolution.width !== width || resolution.height !== height))
-        next = { ...(next ?? participant), maxResolution: { width, height } };
+    if (resolutionEnabled && width && height && (!isRecord(resolution) || resolution.width !== width || resolution.height !== height || resolution.type === "source")) {
+        const maxResolution = { ...(isRecord(resolution) ? resolution : {}), width, height };
+        if ("type" in maxResolution) maxResolution.type = "fixed";
+        next = { ...(next ?? participant), maxResolution };
+    }
 
     return (next ?? participant) as T;
+}
+
+function useDisplayedStreamQuality<T>(participant: Pick<StreamParticipant, "user">, quality: T): T {
+    useSettings(STREAM_QUALITY_SETTINGS_KEYS);
+    return patchDisplayedStreamQuality(quality, participant.user.id);
 }
 
 function patchDisplayedStreamParticipants<T>(participants: T[]): T[] {
     let next = participants;
     for (let i = 0; i < participants.length; i++) {
         const participant = participants[i];
-        const patchedParticipant = patchDisplayedStreamParticipant(participant);
+        const patchedParticipant = patchDisplayedStreamQuality(participant);
         if (patchedParticipant === participant) continue;
 
         if (next === participants) next = participants.slice();
@@ -593,7 +602,7 @@ function patchChannelRTCStore() {
     };
 
     ChannelRTCStore.getParticipant = function (...args: Parameters<typeof oldGetParticipant>) {
-        return patchDisplayedStreamParticipant(Reflect.apply(oldGetParticipant, this, args));
+        return patchDisplayedStreamQuality(Reflect.apply(oldGetParticipant, this, args));
     };
 
     ChannelRTCStore.getParticipants = function (...args: Parameters<typeof oldGetParticipants>) {
@@ -601,7 +610,7 @@ function patchChannelRTCStore() {
     };
 
     ChannelRTCStore.getSelectedParticipant = function (...args: Parameters<typeof oldGetSelectedParticipant>) {
-        return patchDisplayedStreamParticipant(Reflect.apply(oldGetSelectedParticipant, this, args));
+        return patchDisplayedStreamQuality(Reflect.apply(oldGetSelectedParticipant, this, args));
     };
 
     ChannelRTCStore.getStreamParticipants = function (...args: Parameters<typeof oldGetStreamParticipants>) {
@@ -632,6 +641,13 @@ const BetterScreenshare = definePlugin({
     enabledByDefault: false,
     dependencies: ["PhilsPluginLibrary"],
     patches: [
+        {
+            find: '"useMaxQuality"',
+            replacement: {
+                match: /(?<=return )\i\.useMemo\(.{0,150}?"useMaxQuality".{0,250}?\]\)/,
+                replace: "$self.useDisplayedStreamQuality(arguments[0],$&)"
+            }
+        },
         {
             find: "GoLiveModal: user cannot be undefined",
             replacement: {
@@ -710,7 +726,8 @@ const BetterScreenshare = definePlugin({
     patchStreamFramerates,
     patchStreamQuality,
     patchStreamSubmitOptions,
-    screenshareSettingsButton
+    screenshareSettingsButton,
+    useDisplayedStreamQuality
 });
 
 export default BetterScreenshare;

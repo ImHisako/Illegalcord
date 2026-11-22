@@ -94,6 +94,7 @@ interface SourceSnippet {
     surface: string;
     label: string;
     code: string;
+    source?: object;
 }
 
 interface ImpactReason {
@@ -109,7 +110,6 @@ interface ImpactAnalysisItem {
     recommendation: string;
     shouldDisable: boolean;
     summary: string;
-    snippets: SourceSnippet[];
 }
 
 const PLUGIN_NAME = "ClientDiagnostics";
@@ -311,6 +311,8 @@ const frameOwners = new Map<number, string>();
 let listenerOwners = new WeakMap<EventTarget, Map<string, Map<EventListenerOrEventListenerObject, string>>>();
 const listenerCountByPlugin = new Map<string, number>();
 const sourceSnippets = new Map<string, SourceSnippet[]>();
+const sourceCode = new WeakMap<object, string>();
+const patchSnippets = new WeakMap<Plugin, SourceSnippet[]>();
 
 let startedAt = Date.now();
 let restoreGlobalProbes: (() => void) | undefined;
@@ -433,20 +435,26 @@ function normalizeCodeSnippet(code: string) {
 }
 
 function stringifyCodePart(value: unknown) {
-    if (typeof value === "function") return normalizeCodeSnippet(value.toString());
+    if (typeof value === "function") {
+        let code = sourceCode.get(value);
+        if (code === undefined) {
+            code = normalizeCodeSnippet(value.toString());
+            sourceCode.set(value, code);
+        }
+        return code;
+    }
     if (value instanceof RegExp) return value.toString();
     if (typeof value === "string") return value;
     return String(value);
 }
 
 function rememberSourceSnippet(pluginName: string, surface: string, label: string, source: unknown) {
-    const code = normalizeCodeSnippet(stringifyCodePart(source));
-    if (!code || code.includes("[native code]")) return;
+    if (typeof source !== "function") return;
 
     const snippets = sourceSnippets.get(pluginName) ?? [];
-    if (snippets.some(snippet => snippet.surface === surface && snippet.code === code)) return;
+    if (snippets.some(snippet => snippet.surface === surface && snippet.source === source)) return;
 
-    snippets.push({ surface, label, code });
+    snippets.push({ surface, label, source, get code() { return stringifyCodePart(source); } });
     if (snippets.length > 30) snippets.shift();
     sourceSnippets.set(pluginName, snippets);
 }
@@ -507,23 +515,31 @@ function asRecord(value: unknown) {
     return isObject(value) ? value as Record<PropertyKey, unknown> : null;
 }
 
-function rememberPatchSnippets(plugin: Plugin) {
+function getPatchSnippets(plugin: Plugin): SourceSnippet[] {
+    const cached = patchSnippets.get(plugin);
+    if (cached) return cached;
+
+    const snippets: SourceSnippet[] = [];
     for (const [patchIndex, patch] of (plugin.patches ?? []).entries()) {
         const replacements = Array.isArray(patch.replacement) ? patch.replacement : [patch.replacement];
 
         for (const [replacementIndex, replacement] of replacements.entries()) {
-            rememberSourceSnippet(
-                plugin.name,
-                "patch",
-                `patch ${patchIndex + 1}.${replacementIndex + 1}`,
-                [
-                    `find: ${stringifyCodePart(patch.find)}`,
-                    `match: ${stringifyCodePart(replacement.match)}`,
-                    `replace: ${stringifyCodePart(replacement.replace)}`
-                ].join("\n")
-            );
+            let code: string | undefined;
+            snippets.push({
+                surface: "patch",
+                label: `patch ${patchIndex + 1}.${replacementIndex + 1}`,
+                get code() {
+                    return code ??= normalizeCodeSnippet([
+                        `find: ${stringifyCodePart(patch.find)}`,
+                        `match: ${stringifyCodePart(replacement.match)}`,
+                        `replace: ${stringifyCodePart(replacement.replace)}`
+                    ].join("\n"));
+                }
+            });
         }
     }
+    patchSnippets.set(plugin, snippets);
+    return snippets;
 }
 
 function instrumentPlugin(plugin: Plugin) {
@@ -531,8 +547,6 @@ function instrumentPlugin(plugin: Plugin) {
 
     const pluginRecord = asRecord(plugin);
     if (!pluginRecord) return;
-
-    rememberPatchSnippets(plugin);
 
     wrapObjectMethod(pluginRecord, "start", plugin.name, "start");
     wrapObjectMethod(pluginRecord, "stop", plugin.name, "stop");
@@ -1162,17 +1176,24 @@ function getRecommendation(row: DiagnosticsRow, reasons: ImpactReason[]) {
 }
 
 function getRelevantSnippets(row: DiagnosticsRow) {
-    const snippets = sourceSnippets.get(row.name) ?? [];
-
-    return [...snippets]
+    const plugin = plugins[row.name];
+    const snippets = [...(sourceSnippets.get(row.name) ?? []), ...(plugin ? getPatchSnippets(plugin) : [])]
         .sort((a, b) => {
+            if (a.surface === b.surface) return 0;
             if (a.surface === row.hotSurface) return -1;
             if (b.surface === row.hotSurface) return 1;
             if (a.surface === "patch") return -1;
             if (b.surface === "patch") return 1;
             return a.surface.localeCompare(b.surface);
-        })
-        .slice(0, 6);
+        });
+    const relevant: SourceSnippet[] = [];
+    for (const snippet of snippets) {
+        const { code } = snippet;
+        if (!code || code.includes("[native code]") || relevant.some(other => other.surface === snippet.surface && other.code === code)) continue;
+        relevant.push(snippet);
+        if (relevant.length === 6) break;
+    }
+    return relevant;
 }
 
 function buildImpactAnalysis(rows: DiagnosticsRow[]) {
@@ -1188,8 +1209,7 @@ function buildImpactAnalysis(rows: DiagnosticsRow[]) {
                 reasons,
                 recommendation: recommendation.text,
                 shouldDisable: recommendation.shouldDisable,
-                summary: strongestReason,
-                snippets: getRelevantSnippets(row)
+                summary: strongestReason
             };
         })
         .sort((a, b) => b.row.impact - a.row.impact);
@@ -1491,7 +1511,8 @@ function SurfaceBreakdown({ row }: { row: DiagnosticsRow; }) {
 }
 
 function SnippetList({ item }: { item: ImpactAnalysisItem; }) {
-    if (item.snippets.length === 0) {
+    const snippets = getRelevantSnippets(item.row);
+    if (snippets.length === 0) {
         return (
             <BaseText size="sm" color="text-muted">
                 No snippet is available. This happens when the cost comes from code already patched into Discord or from functions that cannot be inspected at runtime.
@@ -1501,7 +1522,7 @@ function SnippetList({ item }: { item: ImpactAnalysisItem; }) {
 
     return (
         <div className={cl("snippet-list")}>
-            {item.snippets.map((snippet, index) => (
+            {snippets.map((snippet, index) => (
                 <div className={cl("snippet")} key={`${snippet.surface}-${index}`}>
                     <div className={cl("snippet-title")}>
                         <BaseText size="sm" weight="semibold">{snippet.label}</BaseText>
