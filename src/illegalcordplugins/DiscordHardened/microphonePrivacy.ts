@@ -134,7 +134,7 @@ function hookPttConnection(connection: unknown): void {
 }
 
 function ensurePttConnectionHooks(): void {
-    if (typeof MediaEngineStore === "undefined") return;
+    if (typeof MediaEngineStore === "undefined" || SelectedChannelStore.getVoiceChannelId() == null) return;
 
     try {
         mediaEngine ??= MediaEngineStore.getMediaEngine();

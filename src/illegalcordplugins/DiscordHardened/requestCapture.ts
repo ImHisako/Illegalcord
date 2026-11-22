@@ -26,6 +26,7 @@ export function getVoiceLoggingStatus(): string {
 
 export function refreshRequestLogging(): void {
     const enabled = activeSettings.enabled !== false && activeSettings.recordNetworkRequests === true;
+    if (enabled && timer === undefined) timer = setInterval(browserRequestLog.prune, 30_000);
     if (enabled && captureBrowser) {
         if (!observer) startBrowserCapture();
     } else {
@@ -74,7 +75,6 @@ export function startRequestLogging(settings: RequestLogSettings, desktop: boole
     captureBrowser = !desktop && typeof PerformanceObserver !== "undefined";
     configureDesktop = configure;
     refreshRequestLogging();
-    timer = setInterval(browserRequestLog.prune, 30_000);
 }
 
 export function stopRequestLogging(): Promise<void> {

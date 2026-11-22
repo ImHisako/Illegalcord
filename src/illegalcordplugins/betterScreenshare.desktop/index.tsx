@@ -17,7 +17,7 @@
 */
 
 import { findGroupChildrenByChildId, type NavContextMenuPatchCallback } from "@api/ContextMenu";
-import { definePluginSettings } from "@api/Settings";
+import { definePluginSettings, SettingsStore } from "@api/Settings";
 import { Heading } from "@components/Heading";
 import { MainSettingsIcon } from "@components/Icons";
 import { Paragraph } from "@components/Paragraph";
@@ -473,9 +473,10 @@ function patchStreamQuality(opts: StreamQualityOptions) {
         videoBitrateEnabled,
         width
     } = currentProfile;
+    if (!(videoBitrateEnabled && videoBitrate || resolutionEnabled && width && height || framerateEnabled && framerate)) return opts;
+
     const next = { ...opts };
-    let capture = opts.capture ? { ...opts.capture } : undefined;
-    let encode = opts.encode ? { ...opts.encode } : undefined;
+    let { capture, encode } = opts;
 
     if (videoBitrateEnabled && videoBitrate) {
         const bitrate = Math.round(videoBitrate * 1000);
@@ -510,8 +511,10 @@ function patchStreamSubmitOptions(opts: unknown) {
     if (!isStreamQualityOptions(opts)) return opts;
 
     const submitOptions = opts as StreamSubmitOptions;
-    if (isStreamQualityOptions(submitOptions.quality))
-        return { ...submitOptions, quality: patchStreamQuality(submitOptions.quality) };
+    if (isStreamQualityOptions(submitOptions.quality)) {
+        const quality = patchStreamQuality(submitOptions.quality);
+        return quality === submitOptions.quality ? opts : { ...submitOptions, quality };
+    }
 
     return patchStreamQuality(opts);
 }
@@ -554,31 +557,36 @@ function patchDisplayedStreamParticipant<T>(participant: T): T {
     } = currentProfile;
     let next: Record<string, unknown> | undefined;
 
-    if (framerateEnabled && framerate)
+    if (framerateEnabled && framerate && participant.maxFrameRate !== framerate)
         next = { ...participant, maxFrameRate: framerate };
 
-    if (resolutionEnabled && width && height)
+    const resolution = participant.maxResolution;
+    if (resolutionEnabled && width && height && (!isRecord(resolution) || resolution.width !== width || resolution.height !== height))
         next = { ...(next ?? participant), maxResolution: { width, height } };
 
     return (next ?? participant) as T;
 }
 
 function patchDisplayedStreamParticipants<T>(participants: T[]): T[] {
-    let changed = false;
-    const next = participants.map(participant => {
+    let next = participants;
+    for (let i = 0; i < participants.length; i++) {
+        const participant = participants[i];
         const patchedParticipant = patchDisplayedStreamParticipant(participant);
-        changed ||= patchedParticipant !== participant;
+        if (patchedParticipant === participant) continue;
 
-        return patchedParticipant;
-    });
+        if (next === participants) next = participants.slice();
+        next[i] = patchedParticipant;
+    }
 
-    return changed ? next : participants;
+    return next;
 }
 
 function patchChannelRTCStore() {
     const oldGetFilteredParticipants = ChannelRTCStore.getFilteredParticipants;
     const oldGetParticipant = ChannelRTCStore.getParticipant;
     const oldGetParticipants = ChannelRTCStore.getParticipants;
+    const oldGetSelectedParticipant = ChannelRTCStore.getSelectedParticipant;
+    const oldGetStreamParticipants = ChannelRTCStore.getStreamParticipants;
 
     ChannelRTCStore.getFilteredParticipants = function (...args: Parameters<typeof oldGetFilteredParticipants>) {
         return patchDisplayedStreamParticipants(Reflect.apply(oldGetFilteredParticipants, this, args));
@@ -592,10 +600,27 @@ function patchChannelRTCStore() {
         return patchDisplayedStreamParticipants(Reflect.apply(oldGetParticipants, this, args));
     };
 
+    ChannelRTCStore.getSelectedParticipant = function (...args: Parameters<typeof oldGetSelectedParticipant>) {
+        return patchDisplayedStreamParticipant(Reflect.apply(oldGetSelectedParticipant, this, args));
+    };
+
+    ChannelRTCStore.getStreamParticipants = function (...args: Parameters<typeof oldGetStreamParticipants>) {
+        return patchDisplayedStreamParticipants(Reflect.apply(oldGetStreamParticipants, this, args));
+    };
+
+    const settingsPath = `plugins.${PluginInfo.PLUGIN_NAME}.stores.ScreenshareStore`;
+    const refresh = () => ChannelRTCStore.emitChange();
+    SettingsStore.addPrefixChangeListener(settingsPath, refresh);
+    refresh();
+
     return () => {
+        SettingsStore.removePrefixChangeListener(settingsPath, refresh);
         ChannelRTCStore.getFilteredParticipants = oldGetFilteredParticipants;
         ChannelRTCStore.getParticipant = oldGetParticipant;
         ChannelRTCStore.getParticipants = oldGetParticipants;
+        ChannelRTCStore.getSelectedParticipant = oldGetSelectedParticipant;
+        ChannelRTCStore.getStreamParticipants = oldGetStreamParticipants;
+        refresh();
     };
 }
 
@@ -668,72 +693,6 @@ const BetterScreenshare = definePlugin({
         this.unpatchChannelRTCStore = patchChannelRTCStore();
         this.screensharePatcher = new ScreensharePatcher().patch();
         this.screenshareAudioPatcher = new ScreenshareAudioPatcher().patch();
-
-        let updateTimeout: ReturnType<typeof setTimeout> | null = null;
-
-        const getCurrentUserId = (): string | null => {
-            const user = UserStore.getCurrentUser();
-            return user?.id ?? null;
-        };
-
-        const updateMyStreamQuality = () => {
-            const currentUserId = getCurrentUserId();
-            if (!currentUserId) return;
-
-            const { currentProfile } = screenshareStore.get();
-            const { resolutionEnabled, height, framerateEnabled, framerate } = currentProfile;
-
-            let newResolution = "";
-            let newFps = "";
-            if (resolutionEnabled && height) newResolution = `${height}p`;
-            if (framerateEnabled && framerate) newFps = `${framerate}`;
-
-            const topBar = document.querySelector('[class*="topControls_"], [class*="controlSection_"]');
-            if (topBar) {
-                const avatarImg = topBar.querySelector('img[class*="avatar__"]');
-                if (avatarImg && avatarImg instanceof HTMLImageElement) {
-                    const userId = avatarImg.src.match(/\/avatars\/(\d+)\//)?.[1];
-                    if (userId === currentUserId) {
-                        const qualityContainer = topBar.querySelector('[class*="streamQualityIndicator__"]');
-                        if (qualityContainer) {
-                            const resolutionSpan = qualityContainer.querySelector('[class*="qualityResolution__"]');
-                            const fpsSpan = resolutionSpan?.nextElementSibling;
-                            if (resolutionSpan && fpsSpan) {
-                                if (newResolution && resolutionSpan.textContent !== newResolution) resolutionSpan.textContent = newResolution;
-                                if (newFps && fpsSpan.textContent !== `${newFps} FPS`) fpsSpan.textContent = `${newFps} FPS`;
-                            }
-                        }
-                    }
-                }
-            }
-
-            const myTiles = document.querySelectorAll(`[data-selenium-video-tile="${currentUserId}"]`);
-            for (const tile of myTiles) {
-                const qualityContainer = tile.querySelector('[class*="streamQualityIndicator__"]');
-                if (!qualityContainer) continue;
-                const resolutionSpan = qualityContainer.querySelector('[class*="qualityResolution__"]');
-                const fpsSpan = resolutionSpan?.nextElementSibling;
-                if (resolutionSpan && fpsSpan) {
-                    if (newResolution && resolutionSpan.textContent !== newResolution) resolutionSpan.textContent = newResolution;
-                    if (newFps && fpsSpan.textContent !== `${newFps} FPS`) fpsSpan.textContent = `${newFps} FPS`;
-                }
-            }
-        };
-
-        const debouncedUpdate = () => {
-            if (updateTimeout) clearTimeout(updateTimeout);
-            updateTimeout = setTimeout(updateMyStreamQuality, 100);
-        };
-
-        this.qualityObserver = new MutationObserver(debouncedUpdate);
-        this.qualityObserver.observe(document.body, {
-            subtree: true,
-            childList: true,
-            attributes: true,
-            attributeFilter: ["class", "src", "data-selenium-video-tile"]
-        });
-
-        updateMyStreamQuality();
     },
     stop(): void {
         this.unpatchChannelRTCStore?.();
@@ -741,8 +700,6 @@ const BetterScreenshare = definePlugin({
         this.screenshareAudioPatcher?.unpatch();
         this.screensharePatcher?.unpatch();
         Emitter.removeAllListeners(PluginInfo.PLUGIN_NAME);
-        this.qualityObserver?.disconnect();
-        if (this.updateTimeout) clearTimeout(this.updateTimeout);
     },
     toolboxActions: {
         "Open Screenshare Settings": openScreenshareModal

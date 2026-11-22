@@ -382,7 +382,7 @@ const StaffVoiceName = ErrorBoundary.wrap(({ user, guildId, children }: VoiceNam
     const options = settings.use(VOICE_NAME_SETTINGS_KEYS);
     const isStaff = useStateFromStores(
         [GuildStore, GuildRoleStore, GuildMemberStore, UserStore],
-        () => Boolean(guildId && shouldFlag(user.id, guildId, getStaffRoleIds(guildId))),
+        () => Boolean(guildId && shouldFlag(user.id, guildId, getStaffPermissionMask())),
         [user.id, guildId, ...VOICE_NAME_SETTINGS_KEYS.map(key => options[key])]
     );
 
@@ -404,69 +404,58 @@ function parseIdSet(raw: string): Set<string> {
     return ids;
 }
 
-function shouldFlag(userId: string, guildId: string, staffRoleIds: Set<string>): boolean {
-    if (settings.store.ignoreBots && UserStore.getUser(userId)?.bot) return false;
+function shouldFlag(userId: string, guildId: string, staffPermissions: bigint): boolean {
+    const { ignoreBots, userExcludeIds, userIncludeIds, serverFilterMode, serverIncludeIds, serverExcludeIds } = settings.plain;
+    if (ignoreBots && UserStore.getUser(userId)?.bot) return false;
 
-    const excludedUsers = parseIdSet(settings.store.userExcludeIds);
+    const excludedUsers = parseIdSet(userExcludeIds);
     if (excludedUsers.size > 0 && excludedUsers.has(userId)) return false;
 
-    const includedUsers = parseIdSet(settings.store.userIncludeIds);
+    const includedUsers = parseIdSet(userIncludeIds);
     if (includedUsers.size > 0) return includedUsers.has(userId);
 
-    const mode = settings.store.serverFilterMode;
+    const mode = serverFilterMode;
     if (mode === "include") {
-        const includedServers = parseIdSet(settings.store.serverIncludeIds);
+        const includedServers = parseIdSet(serverIncludeIds);
         if (includedServers.size > 0 && !includedServers.has(guildId)) return false;
     } else if (mode === "exclude") {
-        const excludedServers = parseIdSet(settings.store.serverExcludeIds);
+        const excludedServers = parseIdSet(serverExcludeIds);
         if (excludedServers.has(guildId)) return false;
     }
 
-    return isUserStaff(userId, guildId, staffRoleIds);
+    return isUserStaff(userId, guildId, staffPermissions);
 }
 
 function getStaffPermissionMask(): bigint {
+    const options = settings.plain;
     let permissions = 0n;
     for (let i = 0; i < permChecks.length; i++) {
         const [key, permission] = permChecks[i];
-        if (settings.store[key]) permissions |= PermissionsBits[permission];
+        if (options[key]) permissions |= PermissionsBits[permission];
     }
     return permissions;
 }
 
-function getStaffRoleIds(guildId: string): Set<string> {
-    const staffPermissions = getStaffPermissionMask();
-    const staffRoleIds = new Set<string>();
-    if (staffPermissions === 0n) return staffRoleIds;
-
-    const roles = GuildRoleStore.getSortedRoles(guildId);
-    for (let i = 0; i < roles.length; i++) {
-        const role = roles[i];
-        if (!role?.id) continue;
-
-        const permissions = BigInt(role.permissions);
-        if ((permissions & PermissionsBits.ADMINISTRATOR) !== 0n || (permissions & staffPermissions) !== 0n) {
-            staffRoleIds.add(role.id);
-        }
-    }
-
-    return staffRoleIds;
-}
-
-function isUserStaff(userId: string, guildId: string, staffRoleIds: Set<string>): boolean {
+function isUserStaff(userId: string, guildId: string, staffPermissions: bigint): boolean {
     const guild = GuildStore.getGuild(guildId);
     if (!guild) return false;
 
     if (guild.ownerId === userId) return true;
-    if (staffRoleIds.has(guildId)) return true;
+    if (staffPermissions === 0n) return false;
+
+    staffPermissions |= PermissionsBits.ADMINISTRATOR;
+    const everyone = GuildRoleStore.getRole(guildId, guildId);
+    if (everyone && (BigInt(everyone.permissions) & staffPermissions) !== 0n) return true;
 
     const member = GuildMemberStore.getMember(guildId, userId);
     if (!member?.roles?.length) {
         return false;
     }
 
-    for (let i = 0; i < member.roles.length; i++)
-        if (staffRoleIds.has(member.roles[i])) return true;
+    for (let i = 0; i < member.roles.length; i++) {
+        const role = GuildRoleStore.getRole(guildId, member.roles[i]);
+        if (role && (BigInt(role.permissions) & staffPermissions) !== 0n) return true;
+    }
 
     return false;
 }
@@ -628,11 +617,11 @@ function getChannelContext(channelId: string): string {
     return "";
 }
 
-function notify(title: string, body: string, icon?: string): void {
+function notify(title: string, body: string, userId: string): void {
     if (settings.store.showToasts)
         showToast({ text: `${title}  ${body}` });
     if (settings.store.showNotifications)
-        showNotification({ title, body, icon, permanent: false, onClick: () => { } });
+        showNotification({ title, body, icon: getAvatarUrl(userId), permanent: false, onClick: () => { } });
 }
 
 function isValidSoundUrl(value: string): true | string {
@@ -670,7 +659,7 @@ function updateSoundPlayback(): void {
 function refreshSounds(): void {
     if (!running) return;
 
-    const sources = settings.store.enableSounds ? [getSoundSource(true), getSoundSource(false)] : [];
+    const sources = currentVoiceChannelId && settings.store.enableSounds ? [getSoundSource(true), getSoundSource(false)] : [];
     for (const [source, player] of soundPlayers) {
         if (sources.includes(source)) continue;
         player.delete();
@@ -708,6 +697,7 @@ function syncVoiceChannel(): void {
 
     currentVoiceChannelId = channelId;
     currentChannelStaff.clear();
+    refreshSounds();
     if (!channelId) return;
 
     logVoiceChannelDetails(channelId);
@@ -727,11 +717,11 @@ function scanChannelStaff(channelId: string, notifyExisting: boolean): void {
     const userIds = Object.keys(voiceStates);
     currentChannelStaff.clear();
     const staffFound: string[] = [];
-    const staffRoleIds = getStaffRoleIds(channel.guild_id);
+    const staffPermissions = getStaffPermissionMask();
     for (let i = 0; i < userIds.length; i++) {
         const uid = userIds[i];
         if (uid === myUserId) continue;
-        if (shouldFlag(uid, channel.guild_id, staffRoleIds)) {
+        if (shouldFlag(uid, channel.guild_id, staffPermissions)) {
             currentChannelStaff.add(uid);
             staffFound.push(uid);
         }
@@ -742,11 +732,11 @@ function scanChannelStaff(channelId: string, notifyExisting: boolean): void {
     if (staffFound.length === 1) {
         const name = getUsername(staffFound[0]);
         if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" already in VC - ${ctx}`);
-        notify("⚠️ StaffDetector:", `"${name}" already here - ${ctx}`, getAvatarUrl(staffFound[0]));
+        notify("⚠️ StaffDetector:", `"${name}" already here - ${ctx}`, staffFound[0]);
     } else {
         const names = staffFound.map(id => `"${getUsername(id)}"`).join(", ");
         if (settings.store.enableLogs) logger.info(`StaffDetector: ${staffFound.length} staff already in VC - ${ctx}`);
-        notify("⚠️ StaffDetector:", `${staffFound.length} staff: ${names} - ${ctx}`, getAvatarUrl(staffFound[0]));
+        notify("⚠️ StaffDetector:", `${staffFound.length} staff: ${names} - ${ctx}`, staffFound[0]);
     }
 }
 
@@ -775,7 +765,6 @@ export default definePlugin({
 
     start() {
         running = true;
-        refreshSounds();
         MediaEngineStore.addChangeListener(updateSoundPlayback);
         StreamerModeStore.addChangeListener(updateSoundPlayback);
         ApplicationStreamingStore.addChangeListener(updateSoundPlayback);
@@ -801,7 +790,7 @@ export default definePlugin({
             if (!myUserId) return;
 
             let context: string | undefined;
-            let staffRoleIds: Set<string> | undefined;
+            let staffPermissions: bigint | undefined;
             let soundIsJoin: boolean | undefined;
             for (let i = 0; i < voiceStates.length; i++) {
                 const { userId, channelId: nextChannelId, oldChannelId } = voiceStates[i];
@@ -812,14 +801,14 @@ export default definePlugin({
 
                 if (entered) {
                     if (currentChannelStaff.has(userId)) continue;
-                    staffRoleIds ??= getStaffRoleIds(guildId);
-                    if (!shouldFlag(userId, guildId, staffRoleIds)) continue;
+                    staffPermissions ??= getStaffPermissionMask();
+                    if (!shouldFlag(userId, guildId, staffPermissions)) continue;
                     currentChannelStaff.add(userId);
                     const name = getUsername(userId);
                     context ??= getChannelContext(channelId);
                     if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" joined - ${context}`);
                     soundIsJoin = true;
-                    notify("🚨 StaffDetector:", `"${name}" joined - ${context}`, getAvatarUrl(userId));
+                    notify("🚨 StaffDetector:", `"${name}" joined - ${context}`, userId);
                     continue;
                 }
 
@@ -831,7 +820,7 @@ export default definePlugin({
                     const suffix = remaining > 0 ? ` - ${remaining} staff remaining` : " - No staff remaining";
                     if (settings.store.enableLogs) logger.info(`StaffDetector: "${name}" left - ${context} (${remaining} remaining)`);
                     soundIsJoin ??= false;
-                    notify("✅ StaffDetector:", `"${name}" left - ${context}${suffix}`, getAvatarUrl(userId));
+                    notify("✅ StaffDetector:", `"${name}" left - ${context}${suffix}`, userId);
                 }
             }
             if (soundIsJoin !== undefined) playStaffSound(soundIsJoin);

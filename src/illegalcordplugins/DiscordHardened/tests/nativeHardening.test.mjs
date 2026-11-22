@@ -537,8 +537,65 @@ test("Request cleanup runs while idle and releases its timer and listeners", asy
     assert.deepEqual(handlers, { completed: null, redirect: null, error: null });
 });
 
+test("Microphone guards avoid the voice engine outside calls and protect new calls", async t => {
+    let channelId = null;
+    let engineReads = 0;
+    const setPTTActive = () => {};
+    const conn = { setPTTActive };
+    class Track extends EventTarget {
+        kind = "audio";
+        readyState = "live";
+        value = true;
+        get enabled() { return this.value; }
+        set enabled(value) { this.value = value; }
+        clone() { return new Track(); }
+        stop() { this.readyState = "ended"; }
+    }
+    const privacy = await load("microphonePrivacy.ts", {
+        "@utils/Logger": { Logger: class { warn() {} } },
+        "@utils/misc": { isObject: value => typeof value === "object" && value !== null },
+        "@webpack/common": {
+            FluxDispatcher: { dispatch() {} }, VoiceActions: {},
+            MediaEngineStore: {
+                getMediaEngine: () => { engineReads++; return { connections: [{ context: "default", conn }] }; },
+                getMode: () => "PUSH_TO_TALK", isSelfMute: () => false,
+            },
+            SelectedChannelStore: { getVoiceChannelId: () => channelId },
+        },
+        "./session": await load("session.ts"),
+    }, { window: Object.assign(new EventTarget(), { setTimeout }), MediaStreamTrack: Track });
+    privacy.startMicrophonePrivacy({
+        allowCamera: true, allowMicrophone: true, privatePushToTalk: true,
+        lockMicrophoneWhenMuted: true, blockMicrophoneOutsideCalls: false,
+        releaseMicrophoneOnDisconnect: true, lockPttOnWindowBlur: true, maximumPttSeconds: 60,
+    });
+    t.after(() => privacy.stopMicrophonePrivacy());
+    privacy.refreshMicrophonePrivacy();
+    assert.equal(engineReads, 0);
+    assert.equal(conn.setPTTActive, setPTTActive);
+    channelId = "call";
+    privacy.scheduleMicrophonePrivacyRefresh();
+    await Promise.resolve();
+    assert.equal(engineReads, 1);
+    assert.notEqual(conn.setPTTActive, setPTTActive);
+    const track = new Track();
+    privacy.registerMicrophoneStream({ getAudioTracks: () => [track] });
+    assert.equal(track.enabled, false);
+    conn.setPTTActive(true);
+    assert.equal(track.enabled, true);
+    conn.setPTTActive(false);
+    assert.equal(track.enabled, false);
+    channelId = null;
+    privacy.refreshMicrophonePrivacy();
+    assert.equal(engineReads, 1);
+    assert.equal(track.readyState, "ended");
+    privacy.stopMicrophonePrivacy();
+    assert.equal(conn.setPTTActive, setPTTActive);
+});
+
 test("Browser capture observes new resource loads, honors pause and disconnects on stop", async () => {
     const requestLog = await load("requestLog.ts");
+    const timers = new Set();
     let receive;
     let disconnected = false;
     let cleared = false;
@@ -558,25 +615,32 @@ test("Browser capture observes new resource loads, honors pause and disconnects 
             disconnect() { disconnected = true; }
         },
         performance: { now: () => 100, timeOrigin: Date.now() },
-        setInterval: () => 1,
-        clearInterval: () => { cleared = true; },
+        setInterval: () => { const id = timers.size + 1; timers.add(id); return id; },
+        clearInterval: id => { timers.delete(id); cleared = true; },
     });
     const settings = {};
     capture.startRequestLogging(settings, false);
     assert.equal(observation, undefined);
+    assert.equal(timers.size, 0);
     settings.recordNetworkRequests = true;
     capture.refreshRequestLogging();
+    assert.equal(timers.size, 1);
+    capture.refreshRequestLogging();
+    assert.equal(timers.size, 1);
     assert.deepEqual(observation, { type: "resource", buffered: true });
     const entry = { name: "https://discord.com/resource?secret=value", startTime: 120, initiatorType: "fetch", duration: 12, responseStatus: 200 };
     receive({ getEntries: () => [new Timing({ ...entry, startTime: 80 }), new Timing(entry)] });
     assert.equal(capture.browserRequestLog.snapshot().entries.length, 1);
     assert.equal(capture.browserRequestLog.snapshot().entries[0].url, "https://discord.com/resource");
     settings.recordNetworkRequests = false;
+    capture.refreshRequestLogging();
+    assert.equal(timers.size, 1);
     receive({ getEntries: () => [new Timing(entry)] });
     assert.equal(capture.browserRequestLog.snapshot().entries.length, 1);
     capture.stopRequestLogging();
     assert.equal(disconnected, true);
     assert.equal(cleared, true);
+    assert.equal(timers.size, 0);
     assert.deepEqual(capture.browserRequestLog.snapshot().entries, []);
 });
 

@@ -16,6 +16,9 @@ const { code } = transformSync(readFileSync(new URL("index.tsx", import.meta.url
 function fixture({ connected = true, present = [] } = {}) {
     const state = { connected, channelId: "voice", deaf: false, outputVolume: 100, streaming: false };
     const voiceUsers = new Set(["10000", ...present]);
+    const roles = new Map([["staff-role", { id: "staff-role", permissions: 8n }], ["guild", { id: "guild", permissions: 0n }]]);
+    const memberRoles = new Map();
+    const reads = { sortedRoles: 0, roles: [], avatars: 0 };
     const players = [], playback = [], toasts = [];
     const observable = properties => Object.assign({
         listeners: new Set(),
@@ -30,11 +33,14 @@ function fixture({ connected = true, present = [] } = {}) {
         RTCConnectionStore: { isConnected: () => state.connected, getChannelId: () => state.channelId },
         ChannelStore: { getChannel: () => ({ guild_id: "guild", name: "Voice" }) },
         GuildStore: { getGuild: () => ({ ownerId: "owner", name: "Guild" }) },
-        GuildRoleStore: { getSortedRoles: () => [{ id: "staff-role", permissions: 8n }] },
-        GuildMemberStore: { getMember: () => ({ roles: ["staff-role"] }) },
+        GuildRoleStore: {
+            getSortedRoles: () => { reads.sortedRoles++; return [...roles.values()]; },
+            getRole: (guildId, roleId) => { assert.equal(guildId, "guild"); reads.roles.push(roleId); return roles.get(roleId); }
+        },
+        GuildMemberStore: { getMember: (guildId, userId) => ({ roles: memberRoles.get(userId) ?? ["staff-role"] }) },
         UserStore: { getCurrentUser: () => ({ id: "10000" }), getUser: id => ({ id, username: id, bot: id === "30000" }) },
         VoiceStateStore: { getVoiceStatesForChannel: () => Object.fromEntries([...voiceUsers].map(id => [id, { userId: id }])) },
-        IconUtils: { getDefaultAvatarURL: () => "avatar", getUserAvatarURL: () => "avatar" },
+        IconUtils: { getDefaultAvatarURL: () => "avatar", getUserAvatarURL: () => { reads.avatars++; return "avatar"; } },
         PermissionsBits: Object.fromEntries(["ADMINISTRATOR", "MANAGE_GUILD", "MANAGE_CHANNELS", "MANAGE_ROLES", "MANAGE_NICKNAMES", "MANAGE_MESSAGES", "KICK_MEMBERS", "BAN_MEMBERS", "MODERATE_MEMBERS", "MOVE_MEMBERS", "MUTE_MEMBERS", "DEAFEN_MEMBERS"].map((key, i) => [key, 1n << BigInt(i + 3)])),
         React: { createElement: (type, props, ...children) => ({ type, props: { ...props, children } }), Fragment: "fragment" },
         showToast: toast => toasts.push(toast),
@@ -59,7 +65,7 @@ function fixture({ connected = true, present = [] } = {}) {
                 def[key].onChange?.(value);
                 return true;
             } });
-            return { def, store, use: () => store };
+            return { def, store, plain: values, use: () => store };
         } },
         "@components/Button": {},
         "@components/ErrorBoundary": { wrap: component => component },
@@ -80,7 +86,7 @@ function fixture({ connected = true, present = [] } = {}) {
         for (const id of ids) entering ? voiceUsers.add(id) : voiceUsers.delete(id);
         plugin.flux.VOICE_STATE_UPDATES({ voiceStates: ids.map(userId => ({ userId, channelId: entering ? "voice" : undefined, oldChannelId: entering ? undefined : "voice", guildId: "guild" })) });
     };
-    return { plugin, settings: plugin.settings.store, state, stores, players, playback, toasts, join: (...ids) => changeVoice(true, ids), leave: (...ids) => changeVoice(false, ids) };
+    return { plugin, settings: plugin.settings.store, state, stores, players, playback, toasts, roles, memberRoles, reads, join: (...ids) => changeVoice(true, ids), leave: (...ids) => changeVoice(false, ids) };
 }
 
 test("preloads two sounds and reuses them with one playback per batch", () => {
@@ -108,6 +114,7 @@ test("preloads two sounds and reuses them with one playback per batch", () => {
 test("ignores a remembered voice channel until RTC connects, then seeds once", () => {
     const f = fixture({ connected: false, present: ["20000"] });
     f.plugin.start();
+    assert.equal(f.players.length, 0);
     f.plugin.flux.CONNECTION_OPEN();
     f.plugin.flux.VOICE_CHANNEL_SELECT({ channelId: "voice" });
     f.join("40000");
@@ -115,9 +122,80 @@ test("ignores a remembered voice channel until RTC connects, then seeds once", (
     f.state.connected = true;
     f.plugin.flux.RTC_CONNECTION_STATE();
     f.plugin.flux.RTC_CONNECTION_STATE();
+    assert.equal(f.players.length, 2);
     f.join("20000", "40000");
     assert.equal(f.toasts.length, 1);
     assert.equal(f.playback.length, 1);
+    f.plugin.stop();
+});
+
+test("releases disconnected audio and preloads the current settings on reconnect", () => {
+    const f = fixture();
+    f.plugin.start();
+    f.state.connected = false;
+    f.plugin.flux.RTC_CONNECTION_STATE();
+    assert.ok(f.players.every(player => player.deleted));
+    f.settings.useCustomSounds = true;
+    f.settings.customJoinSound = "https://example.com/changed.mp3";
+    assert.equal(f.players.length, 2);
+    f.state.connected = true;
+    f.plugin.flux.RTC_CONNECTION_STATE();
+    assert.equal(f.players.length, 4);
+    f.join("20000");
+    assert.equal(f.playback[0].source, "https://example.com/changed.mp3");
+    f.plugin.stop();
+    assert.ok(f.players.every(player => player.deleted));
+});
+
+test("checks only assigned roles and reads live permission changes for voice names", () => {
+    const f = fixture({ present: ["20000"] });
+    f.roles.set("unassigned", { id: "unassigned", permissions: 8n });
+    f.plugin.start();
+    assert.deepEqual(f.reads.roles, ["guild", "staff-role"]);
+    const name = f.plugin.renderVoiceName({ user: { id: "20000" }, guildId: "guild" }, "Staff");
+    assert.equal(name.type(name.props).type, "span");
+    f.roles.set("staff-role", { id: "staff-role", permissions: 0n });
+    assert.equal(name.type(name.props).type, "fragment");
+    f.roles.set("staff-role", { id: "staff-role", permissions: f.stores.PermissionsBits.MANAGE_MESSAGES });
+    assert.equal(name.type(name.props).type, "span");
+    f.settings.manageMessagesPermission = false;
+    assert.equal(name.type(name.props).type, "fragment");
+    f.roles.delete("staff-role");
+    assert.equal(name.type(name.props).type, "fragment");
+    f.roles.set("guild", { id: "guild", permissions: f.stores.PermissionsBits.KICK_MEMBERS });
+    assert.equal(name.type(name.props).type, "span");
+    assert.equal(f.reads.sortedRoles, 0);
+    assert.ok(!f.reads.roles.includes("unassigned"));
+    f.plugin.stop();
+});
+
+test("preserves administrator, owner and explicit user filters with permissions disabled", () => {
+    const f = fixture();
+    f.plugin.start();
+    f.settings.adminPermission = false;
+    const name = f.plugin.renderVoiceName({ user: { id: "20000" }, guildId: "guild" }, "Staff");
+    assert.equal(name.type(name.props).type, "span");
+    for (const key of Object.keys(f.plugin.settings.def).filter(key => key.endsWith("Permission"))) f.settings[key] = false;
+    assert.equal(name.type(name.props).type, "fragment");
+    const owner = f.plugin.renderVoiceName({ user: { id: "owner" }, guildId: "guild" }, "Owner");
+    assert.equal(owner.type(owner.props).type, "span");
+    f.settings.userIncludeIds = "20000";
+    assert.equal(name.type(name.props).type, "span");
+    f.settings.userExcludeIds = "20000";
+    assert.equal(name.type(name.props).type, "fragment");
+    f.plugin.stop();
+});
+
+test("resolves notification avatars only when desktop notifications are enabled", () => {
+    const f = fixture({ present: ["20000"] });
+    f.plugin.start();
+    f.join("40000");
+    f.leave("40000");
+    assert.equal(f.reads.avatars, 0);
+    f.settings.showNotifications = true;
+    f.join("50000");
+    assert.equal(f.reads.avatars, 1);
+    assert.equal(f.toasts.at(-1).icon, "avatar");
     f.plugin.stop();
 });
 
