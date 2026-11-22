@@ -10,13 +10,17 @@ import { definePluginSettings } from "@api/Settings";
 import { compileStyle, disableStyle, enableStyle, requireStyle } from "@api/Styles";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { EquicordDevs } from "@utils/constants";
+import { classNameToSelector } from "@utils/css";
 import definePlugin, { IconComponent, OptionType } from "@utils/types";
 import type { Channel, Message } from "@vencord/discord-types";
+import { findCssClassesLazy } from "@webpack";
 import { ApplicationStreamingStore, Menu, React, showToast, StreamerModeStore, useEffect, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 import style from "./styles.css?managed";
 
 const managedStyle = requireStyle(style);
+const PrivateChannelClasses = findCssClassesLazy("channel", "interactive", "subtext");
+const ChannelNameClasses = findCssClassesLazy("name", "nameAndDecorators", "avatar");
 
 const ProtectionMode = {
     Blur: "blur",
@@ -94,11 +98,8 @@ function getFilter(mode: ProtectionMode, blurStrength: number, strong: boolean) 
 }
 
 function getRevealRule(selector: string) {
+    selector = `:is(${selector})`;
     return `${selector}{filter:none!important;/* override StreamProof hide filter while revealed */opacity:1!important;/* override StreamProof dim mode while revealed */color:var(--text-normal,#dcddde)!important;/* override Discord message text colors while revealed */-webkit-text-fill-color:var(--text-normal,#dcddde)!important;/* override Discord message text fill while revealed */background:transparent!important;/* override StreamProof blackout background while revealed */text-shadow:none!important;/* override Discord text effects while revealed */user-select:text;}${selector} *{filter:none!important;/* override inherited StreamProof hide filter while revealed */opacity:1!important;/* override inherited StreamProof dim mode while revealed */color:var(--text-normal,#dcddde)!important;/* override Discord nested text colors while revealed */-webkit-text-fill-color:var(--text-normal,#dcddde)!important;/* override Discord nested text fill while revealed */text-shadow:none!important;/* override Discord nested text effects while revealed */}${selector} a{pointer-events:auto;}`;
-}
-
-function getHoverSelector(selector: string) {
-    return selector.split(",").map(part => `${part.trim()}:hover`).join(",");
 }
 
 function getClickRevealSelectors() {
@@ -129,10 +130,10 @@ function getMessageHoverRevealRule(protectMessages: boolean, protectMedia: boole
 }
 
 function buildRules(selector: string, filter: string, revealOnHover: boolean) {
-    const hoverSelector = revealOnHover ? getHoverSelector(selector) : "";
-    const reveal = hoverSelector ? getRevealRule(hoverSelector) : "";
+    selector = `:is(${selector})`;
+    const reveal = revealOnHover ? getRevealRule(`${selector}:hover`) : "";
 
-    return `${selector}{${filter}transition:filter .16s ease,opacity .16s ease;user-select:none;cursor:help;border-radius:4px;}${selector} a{pointer-events:none;}${reveal}${reveal ? `${hoverSelector} a{pointer-events:auto;}` : ""}`;
+    return `${selector}{${filter}transition:filter .16s ease,opacity .16s ease;user-select:none;cursor:help;border-radius:4px;}${selector} a{pointer-events:none;}${reveal}`;
 }
 
 function buildStyle() {
@@ -141,6 +142,7 @@ function buildStyle() {
             blurStrength,
             protectChannelList,
             protectDmList,
+            protectDmNames,
             protectionMode,
             protectMedia,
             protectMessages,
@@ -163,8 +165,10 @@ function buildStyle() {
             rules.push(buildRules('[id^="message-username-"],[id^="message-reply-context-"]', filter, revealOnHover));
         }
 
-        if (protectDmList) {
-            rules.push(buildRules('[data-list-id="private-channels"] [data-list-item-id^="private-channels-uid_"],[data-list-id="private-channels"] [href^="/channels/@me/"]', filter, revealOnHover));
+        if (protectDmList || protectDmNames) {
+            const channelSelector = classNameToSelector(PrivateChannelClasses.channel);
+            const selector = protectDmList ? channelSelector : `${channelSelector} ${classNameToSelector(ChannelNameClasses.name)}`;
+            rules.push(buildRules(selector, filter, revealOnHover));
         }
 
         if (protectChannelList) {
@@ -396,8 +400,15 @@ const settings = definePluginSettings({
     },
     protectDmList: {
         type: OptionType.BOOLEAN,
-        description: "Hide direct messages in the sidebar.",
+        description: "Hide entire direct message entries in the chat list.",
         default: true,
+        onChange: updateActiveStyle
+    },
+    protectDmNames: {
+        type: OptionType.BOOLEAN,
+        description: "Hide user and group names in the chat list.",
+        default: true,
+        disabled: () => settings.store.protectDmList,
         onChange: updateActiveStyle
     },
     protectChannelList: {
