@@ -8,6 +8,7 @@ import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/Co
 import { migratePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { ImageIcon } from "@components/Icons";
+import { EquicordDevs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import { closeModal, Menu, openModal, UserStore } from "@webpack/common";
 
@@ -95,11 +96,9 @@ const PanelButton = ErrorBoundary.wrap(
 );
 
 export default definePlugin({
-    name: PLUGIN_NAME,
-    get description() {
-        return T.pluginDescription;
-    },
-    authors: [{ name: "TopQ", id: 523800559791374356n }],
+    name: "CustomStream-Preview",
+    description: "Replace your stream preview with your own images, with profiles and a slideshow.",
+    authors: [EquicordDevs.TopQ],
     settings,
     managedStyle,
 
