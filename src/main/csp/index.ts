@@ -98,7 +98,7 @@ export const CspPolicies: PolicyMap = {
     "audio-ssl.itunes.apple.com": ImageAndMediaSrc,
     "*.tidal.com": ImageAndMediaSrc,
     "embed.tidal.com": ["frame-src"],
-    "spotify-lyrics-api-pi.vercel.app": ConnectSrc,
+    "lyrica.thororen.com": ConnectSrc,
     "translate.googleapis.com": ConnectSrc,
     "dc.songspotlight.nexpid.xyz": ConnectSrc,
     "api.stats.fm": ConnectSrc,

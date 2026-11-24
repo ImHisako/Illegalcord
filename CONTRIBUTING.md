@@ -12,9 +12,9 @@ Vencord, Equicord, and their contributors deserve credit for the foundation. Ill
 
 ## AI is a development tool
 
-AI assistance is welcome for code, debugging, tests, documentation, translations, pull request descriptions, and communication. There is no requirement that a contribution be majority human written, and using AI is not grounds for rejection or a ban.
+- **All AI usage in any form must be disclosed.** You must state the tool you used (e.g. Claude Code, Codex) along with the extent that the work was AI-assisted. Commits should include an Assisted-by: Model trailer
 
-We review the submitted work on its merits. What matters is whether you understand it, review it, verify its behavior, and can address feedback. Check generated code and factual claims, describe the testing you actually performed, and explain any limitations. The same expectations apply regardless of the tools used.
+- **The human-in-the-loop must fully understand all code.** If you can't explain what your changes do and how they interact with the greater system without the aid of AI tools, do not contribute to this project.
 
 ## Submitting a contribution
 

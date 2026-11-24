@@ -92,6 +92,8 @@ function createIllegalcordMenuItems(): MenuItemConstructorOptions[] {
                             app.exit();
                         } catch (e) {
                             notify(window, "Update Error", `An error occurred while updating Illegalcord.\n\n${String(e)}`);
+                        } finally {
+                            isUpdating = false;
                         }
                     }
                 },
