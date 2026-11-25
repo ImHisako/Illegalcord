@@ -19,12 +19,11 @@
 import { ApplicationCommandInputType, ApplicationCommandOptionType, findOption } from "@api/Commands";
 import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
+import { AutomationLegalWarning } from "@illegalcordplugins/legalWarnings";
 import { EquicordDevs } from "@utils/constants";
 import { sendMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
 import { GuildMemberStore, UserStore } from "@webpack/common";
-
-import { AutomationLegalWarning } from "../_legalWarnings";
 
 const settings = definePluginSettings({
     delayBetweenMessages: {

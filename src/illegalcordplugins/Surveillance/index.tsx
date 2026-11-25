@@ -8,6 +8,7 @@ import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/Co
 import { showNotification } from "@api/Notifications";
 import { definePluginSettings } from "@api/Settings";
 import { LogIcon } from "@components/Icons";
+import { MonitoringLegalWarning } from "@illegalcordplugins/legalWarnings";
 import SettingsPlugin from "@plugins/_core/settings";
 import { EquicordDevs } from "@utils/constants";
 import { LazyComponent } from "@utils/lazyReact";
@@ -17,7 +18,6 @@ import type { Activity, Channel, Guild, GuildMember, Message, OnlineStatus, Role
 import { ActivityType } from "@vencord/discord-types/enums";
 import { ChannelStore, FluxDispatcher, GuildStore, Menu, PresenceStore, RelationshipStore, SettingsRouter, UserStore, VoiceStateStore } from "@webpack/common";
 
-import { MonitoringLegalWarning } from "../_legalWarnings";
 import { recordEvent, trimEvents } from "./store";
 import type { MessageSnapshot, SurveillanceEvent, SurveillanceEventType, SurveillanceScope, VoiceParticipant, VoiceState, VoiceStateFlag } from "./types";
 

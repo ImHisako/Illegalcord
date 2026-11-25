@@ -107,6 +107,8 @@ export const OSINT_TOOLS = [
     { id: "proximity", name: "Proximity OSINT", url: "https://www.proximityosint.com/", description: "Provides OSINT workflows and resources." },
     { id: "deadeye", name: "DeadEye", url: "https://deadeye.cc/", description: "Searches public profile signals." },
     { id: "indicia", name: "Indicia", url: "https://indicia.app/", description: "Enriches public indicators." },
+    { id: "openarchive", name: "OpenArchive", url: "https://openarchivex.net/#top", description: "Searches OSINT sources and breach data." },
+    { id: "osintcat", name: "OsintCat", url: "https://www.osintcat.net/", description: "Searches and correlates data across OSINT sources." },
     { id: "tempemail", name: "Snapmail", url: "https://www.snapmail.in/", description: "Creates temporary email inboxes." }
 ] as const;
 
@@ -114,6 +116,7 @@ export const OSINT_RESOURCES = [
     { id: "osint-catalog", name: "Osint Catalog", url: "https://osint-catalog.xyz/", description: "Catalog of OSINT tools and resources." },
     { id: "pikaosint", name: "PikaOSINT", url: "https://pikaosint.pages.dev/", description: "Curated OSINT tools collection." },
     { id: "osintframework", name: "OSINT Framework", url: "https://osintframework.com/", description: "Categorized OSINT resource index." },
+    { id: "osint-place", name: "OSINT.place", url: "https://www.osint.place/", description: "Directory of OSINT tools and resources." },
     { id: "photo-osint", name: "Photo OSINT", url: "https://start.me/p/0PgzqO/photo-osint", description: "Photo investigation resource board." }
 ] as const;
 

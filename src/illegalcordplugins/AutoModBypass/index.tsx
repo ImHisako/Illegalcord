@@ -5,10 +5,9 @@
  */
 
 import { definePluginSettings } from "@api/Settings";
+import { AutomationLegalWarning } from "@illegalcordplugins/legalWarnings";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-
-import { AutomationLegalWarning } from "../_legalWarnings";
 
 const TEXT_STYLES = {
     fraktur: {

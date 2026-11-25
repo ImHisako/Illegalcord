@@ -13,13 +13,13 @@ import { isPluginEnabled } from "@api/PluginManager";
 import { Settings } from "@api/Settings";
 import { Button } from "@components/Button";
 import { LogsIcon } from "@components/Icons";
+import { MessageLoggerLegalWarning } from "@illegalcordplugins/legalWarnings";
 import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import type { Message } from "@vencord/discord-types";
 import { Alerts, Menu, showToast } from "@webpack/common";
 
-import { MessageLoggerLegalWarning } from "../_legalWarnings";
 import { getChannelLogsAfter } from "./db";
 import { clearAllLogs, handleMessageCreate, handleMessageDelete, handleMessageDeleteBulk, handleMessageUpdate, runMaintenanceNow, startEngine, stopEngine } from "./engine";
 import { openLogs } from "./LogsModal";

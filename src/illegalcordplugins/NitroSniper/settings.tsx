@@ -7,10 +7,10 @@
 import { definePluginSettings, migratePluginSetting, PlainSettings, SettingsStore } from "@api/Settings";
 import { Button } from "@components/Button";
 import { Notice } from "@components/Notice";
+import { SniperLegalWarning } from "@illegalcordplugins/legalWarnings";
 import { OptionType, type PluginNative } from "@utils/types";
 import { showToast, useState } from "@webpack/common";
 
-import { SniperLegalWarning } from "../_legalWarnings";
 import { sendTestWebhook } from "./webhook";
 
 const BRUXSOLVER_KEYS = ["bruxSolverApiKey"] as const;

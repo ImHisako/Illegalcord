@@ -25,7 +25,7 @@ function fixture() {
         "@utils/Logger": { Logger: class {} },
         "@utils/types": { __esModule: true, default: plugin => plugin, OptionType: {} },
         "@webpack/common": { Menu: { MenuItem: "item" } },
-        "../_legalWarnings": { MonitoringLegalWarning: "warning" },
+        "@illegalcordplugins/legalWarnings": { MonitoringLegalWarning: "warning" },
         "./activity": lifecycle,
         "./status": lifecycle,
         "./voice": lifecycle
