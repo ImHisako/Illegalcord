@@ -7,6 +7,7 @@
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
+import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Margins } from "@components/margins";
 import { Notice } from "@components/Notice";
@@ -203,47 +204,32 @@ export default definePlugin({
         if (!warning || !settings.store.showActivationWarnings) return true;
 
         const { Component, details, apiAbuse } = warning;
-        return new Promise<boolean>(resolve => {
-            Alerts.show({
-                title: `Enable ${pluginName}?`,
-                body: (
-                    <>
-                        {Component ? <Component /> : null}
-                        {details ? <Notice.Warning className={Margins.bottom8}>{details}</Notice.Warning> : null}
-                        <p>
-                            <strong>API abuse risk: </strong>
-                            {apiAbuse
-                                ? "This plugin automates Discord API actions, which may put your account at greater risk if used excessively or abusively."
-                                : "This plugin is not flagged for bulk Discord API automation. The safety warning above still applies."}
-                        </p>
-                    </>
-                ),
-                confirmText: "Enable plugin",
-                cancelText: "Cancel",
-                onConfirm: () => resolve(true),
-                onCancel: () => resolve(false),
-                secondaryConfirmText: "Do not show these warnings again",
-                onConfirmSecondary: async () => {
-                    resolve(false);
-                    if (await Alerts.confirm({
-                        title: "Are you sure?",
-                        body: "You will no longer see safety popups when enabling plugins, including warnings about which plugins use Discord's APIs or may pose an API abuse risk. You can turn these popups back on in the LegalWarnings settings.",
-                        confirmText: "Stop showing warnings",
-                        cancelText: "Keep warnings"
-                    })) settings.store.showActivationWarnings = false;
-                }
-            });
+        return Alerts.confirm({
+            title: `Enable ${pluginName}?`,
+            body: (
+                <>
+                    {Component ? <Component /> : null}
+                    {details ? <Notice.Warning className={Margins.bottom8}>{details}</Notice.Warning> : null}
+                    <p>
+                        <strong>API abuse risk: </strong>
+                        {apiAbuse
+                            ? "This plugin automates Discord API actions, which may put your account at greater risk if used excessively or abusively."
+                            : "This plugin is not flagged for bulk Discord API automation. The safety warning above still applies."}
+                    </p>
+                    <Button type="button" variant="secondary" onClick={async () => {
+                        if (await Alerts.confirm({
+                            title: "Are you sure?",
+                            body: "You will no longer see safety popups when enabling plugins, including warnings about which plugins use Discord's APIs or may pose an API abuse risk. You can turn these popups back on in the LegalWarnings settings.",
+                            confirmText: "Stop showing warnings",
+                            cancelText: "Keep warnings"
+                        })) settings.store.showActivationWarnings = false;
+                    }}>
+                        Do not show these warnings again
+                    </Button>
+                </>
+            ),
+            confirmText: "Enable plugin",
+            cancelText: "Cancel"
         });
-    },
-
-    settingsAboutComponent: ErrorBoundary.wrap(() => (
-        <>
-            <MonitoringLegalWarning />
-            <GhostSelfbotLegalWarning />
-            <AutomationLegalWarning />
-            <ApiUsageLegalWarning />
-            <MessageLoggerLegalWarning />
-            <SniperLegalWarning />
-        </>
-    ), { noop: true })
+    }
 });
