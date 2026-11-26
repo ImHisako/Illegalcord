@@ -20,6 +20,7 @@ interface HealthSample {
     fps?: number;
     p95?: number;
     worst?: number;
+    frameSampleMs: number;
     stalls: number;
     longTasks: number;
     blocking: number;
@@ -43,6 +44,7 @@ let worstFrame = 0;
 let stalls = 0;
 let longTasks = 0;
 let blocking = 0;
+let detailedFrames = false;
 
 function clearWindow() {
     previousFrame = 0;
@@ -55,6 +57,7 @@ export function resetHealth() {
     samples.length = 0;
     observer?.takeRecords();
     clearWindow();
+    if (timer !== undefined && frame === undefined && !document.hidden) frame = requestFrame(recordFrame);
 }
 
 function recordFrame(time: number) {
@@ -66,8 +69,13 @@ function recordFrame(time: number) {
         frameBuckets[Math.min(1000, Math.round(duration))]++;
         if (duration > 50) stalls++;
     }
-    previousFrame = time;
-    frame = requestFrame(recordFrame);
+    if (detailedFrames || frameTime < 1000) {
+        previousFrame = time;
+        frame = requestFrame(recordFrame);
+    } else {
+        previousFrame = 0;
+        frame = undefined;
+    }
 }
 
 function visibilityChanged() {
@@ -98,6 +106,7 @@ function sampleHealth() {
         fps: frameTime ? frameCount * 1000 / frameTime : undefined,
         p95: frameCount ? p95 : undefined,
         worst: frameCount ? worstFrame : undefined,
+        frameSampleMs: frameTime,
         stalls, longTasks, blocking,
         causes: takeCauses(blocking)
     });
@@ -105,6 +114,7 @@ function sampleHealth() {
     const lastFrame = previousFrame;
     clearWindow();
     previousFrame = lastFrame;
+    if (frame === undefined) frame = requestFrame(recordFrame);
 }
 
 function recordLongTasks(entries: PerformanceEntry[]) {
@@ -180,7 +190,13 @@ function HealthMetric({ label, value, detail }: HealthMetricProps) {
 }
 
 export function ClientHealthPage() {
-    useFixedTimer({ interval: 1000 });
+    const initialTime = React.useMemo(Date.now, []);
+    useFixedTimer({ interval: 1000, initialTime });
+    React.useEffect(() => {
+        detailedFrames = true;
+        if (timer !== undefined && frame === undefined && !document.hidden) frame = requestFrame(recordFrame);
+        return () => { detailedFrames = false; };
+    }, []);
     const latest = samples.at(-1);
     const trend = memoryTrend();
     const memoryPending = latest && latest.heap === undefined ? "Unavailable" : "Collecting";
@@ -214,10 +230,11 @@ export function ClientHealthPage() {
             <HealthMetric label="Frame cadence" value={latest?.fps === undefined ? "Collecting" : `${latest.fps.toFixed(1)} FPS`} detail="Animation callback cadence, not GPU presentation FPS." />
             <HealthMetric label="Frame time P95" value={ms(latest?.p95)} detail="95% of frame intervals are below this value. Capped at 1000 ms." />
             <HealthMetric label="Worst frame" value={ms(latest?.worst)} detail="Longest frame interval in the latest sample." />
-            <HealthMetric label="Stutters" value={String(latest?.stalls ?? 0)} detail="Frame intervals above 50 ms in the latest sample." />
+            <HealthMetric label="Stutters" value={String(latest?.stalls ?? 0)} detail="Frame intervals above 50 ms during frame sampling." />
             <HealthMetric label="Long tasks" value={observer ? String(latest?.longTasks ?? 0) : "Unavailable"} detail="Main thread tasks over 50 ms in the latest sample." />
             <HealthMetric label="Blocking time" value={observer ? ms(latest?.blocking) : "Unavailable"} detail="Sum of long task duration beyond 50 ms." />
         </div>
+        <BaseText size="sm" color="text-muted">Frames are sampled for one second every five seconds while this page is closed and continuously while it is open. Memory and long task monitoring continue between frame samples.</BaseText>
         <BaseText size="sm" color="text-muted">Hidden windows are excluded. Refresh rate, power saving, Discord itself and this profiler affect these numbers.</BaseText>
         <ClientCauses snapshot={latest?.causes} blocking={latest?.blocking ?? 0} supported={observer !== undefined} />
         <div className={cl("table")}>

@@ -12,7 +12,7 @@ import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
 import type { Message, User } from "@vencord/discord-types";
-import { ChannelStore, GuildStore, Menu } from "@webpack/common";
+import { ChannelStore, FluxDispatcher, GuildStore, Menu } from "@webpack/common";
 
 import * as activity from "./activity";
 import * as status from "./status";
@@ -52,82 +52,29 @@ export interface StalkerLogEntry {
     metadata?: Record<string, string | number | boolean | null>;
 }
 
-// Cache separata per ogni utente: userId -> { logs, date }
-// La "date" serve a invalidare la cache quando cambia il giorno
-interface UserLogCache {
-    logs: StalkerLogEntry[];
-    date: string; // formato YYYY-MM-DD
-}
-
-const cachedLogsPerUser = new Map<string, UserLogCache>();
-
-// Coda di scrittura per evitare race conditions: userId -> Promise
-const writeLocks = new Map<string, Promise<void>>();
-
-function getTodayDate(): string {
-    return new Date().toISOString().slice(0, 10);
-}
-
-async function getLogsFromFile(userId: string, username: string): Promise<StalkerLogEntry[]> {
-    if (!Native?.readStalkerLog) return [];
-
-    try {
-        const fileContents = await Native.readStalkerLog(userId, username);
-        const parsed = JSON.parse(fileContents);
-        return Array.isArray(parsed) ? parsed : [];
-    } catch (error) {
-        // Se il JSON è corrotto, logga l'errore e parti da zero invece di perdere silenziosamente i dati
-        logger.error(`Failed to parse stalker log for user ${userId}, starting fresh:`, error);
-        return [];
-    }
-}
-
-function getCacheForUser(userId: string): UserLogCache | undefined {
-    const cache = cachedLogsPerUser.get(userId);
-    // Invalida la cache se il giorno è cambiato
-    if (cache && cache.date !== getTodayDate()) {
-        cachedLogsPerUser.delete(userId);
-        return undefined;
-    }
-    return cache;
-}
-
 export async function logStalkerEvent(entry: StalkerLogEntry) {
     if (!settings.store.enableLogging) return;
-    if (!Native?.writeStalkerLog) return;
+    if (!Native?.appendStalkerLog) return;
 
-    // Serializza le scritture per questo utente per evitare race conditions
-    const previousLock = writeLocks.get(entry.userId) ?? Promise.resolve();
-
-    const newLock = previousLock.then(async () => {
-        try {
-            let cache = getCacheForUser(entry.userId);
-
-            if (!cache) {
-                const logs = await getLogsFromFile(entry.userId, entry.username);
-                cache = { logs, date: getTodayDate() };
-                cachedLogsPerUser.set(entry.userId, cache);
-            }
-
-            cache.logs.push(entry);
-
-            await Native.writeStalkerLog(JSON.stringify(cache.logs, null, 2), entry.userId, entry.username);
-        } catch (error) {
-            logger.error("Failed to write stalker log:", error);
-        }
-    });
-
-    writeLocks.set(entry.userId, newLock);
-    await newLock;
+    try {
+        const result = await Native.appendStalkerLog(JSON.stringify(entry), entry.userId, entry.username);
+        if (!result.success) logger.error(result.error);
+    } catch (error) {
+        logger.error("Failed to write stalker log:", error);
+    }
 }
 
 export let targets: string[] = [];
+export const targetIds = new Set<string>();
+let started = false;
+let messageSubscribed = false;
 
 const parseTargets = (parse: string): string[] => {
-    const regex = /\s*(,?)\s*([0-9]+)/g;
-    const matches = [...parse.matchAll(regex)].map(match => match.at(match.length - 1) as string);
-    targets = matches;
-    return matches;
+    targets = [...new Set(parse.match(/[0-9]+/g) ?? [])];
+    targetIds.clear();
+    for (const id of targets) targetIds.add(id);
+    syncTracking();
+    return targets;
 };
 
 export const settings = definePluginSettings({
@@ -141,48 +88,56 @@ export const settings = definePluginSettings({
         type: OptionType.BOOLEAN,
         default: true,
         description: "Send a notification when a user joins a voice channel.",
+        onChange: syncTracking,
     },
 
     notifyCallLeave: {
         type: OptionType.BOOLEAN,
         default: true,
         description: "Send a notification when a user leaves a voice channel.",
+        onChange: syncTracking,
     },
 
     notifyOffline: {
         type: OptionType.BOOLEAN,
         default: true,
-        description: "Send a notification when a user goes offline."
+        description: "Send a notification when a user goes offline.",
+        onChange: syncTracking
     },
 
     notifyOnline: {
         type: OptionType.BOOLEAN,
         default: true,
         description: "Send a notification when a user goes online.",
+        onChange: syncTracking,
     },
 
     notifyDnd: {
         type: OptionType.BOOLEAN,
         default: true,
         description: "Send a notification when a user goes on Do Not Disturb.",
+        onChange: syncTracking,
     },
 
     notifyIdle: {
         type: OptionType.BOOLEAN,
         default: false,
         description: "Send a notification when a user goes idle.",
+        onChange: syncTracking,
     },
 
     notifyGoOnline: {
         type: OptionType.BOOLEAN,
         default: true,
-        description: "Send a notification when a user logs onto Discord or leaves invisible, regardless of the 4 above options."
+        description: "Send a notification when a user logs onto Discord or leaves invisible, regardless of the 4 above options.",
+        onChange: syncTracking
     },
 
     enableLogging: {
         type: OptionType.BOOLEAN,
         default: false,
-        description: "Enable logging of stalker events to a local file."
+        description: "Enable logging of stalker events to a local file.",
+        onChange: syncTracking
     },
 
     openStalkingFolder: {
@@ -194,7 +149,8 @@ export const settings = definePluginSettings({
     logMessages: {
         type: OptionType.BOOLEAN,
         default: false,
-        description: "Log when a user sends a message in any channel."
+        description: "Log when a user sends a message in any channel.",
+        onChange: syncTracking
     },
 
     logMessagePreview: {
@@ -206,25 +162,29 @@ export const settings = definePluginSettings({
     logActivities: {
         type: OptionType.BOOLEAN,
         default: true,
-        description: "Log when a user starts, stops, or changes an activity."
+        description: "Log when a user starts, stops, or changes an activity.",
+        onChange: syncTracking
     },
 
     notifyActivities: {
         type: OptionType.BOOLEAN,
         default: false,
-        description: "Send a notification when a user starts an activity."
+        description: "Send a notification when a user starts an activity.",
+        onChange: syncTracking
     },
 
     logCustomStatus: {
         type: OptionType.BOOLEAN,
         default: true,
-        description: "Log custom status changes."
+        description: "Log custom status changes.",
+        onChange: syncTracking
     },
 
     logClientStatus: {
         type: OptionType.BOOLEAN,
         default: true,
-        description: "Log whether a user is online from desktop, mobile, or web."
+        description: "Log whether a user is online from desktop, mobile, or web.",
+        onChange: syncTracking
     },
 
     logVoiceStateChanges: {
@@ -242,6 +202,55 @@ export const settings = definePluginSettings({
     },
 });
 
+function logMessage({ message }: { message: Message; }) {
+    if (!targetIds.has(message.author.id)) return;
+    if (!settings.store.enableLogging || !settings.store.logMessages) return;
+
+    const channel = ChannelStore.getChannel(message.channel_id);
+    const guild = channel?.guild_id ? GuildStore.getGuild(channel.guild_id) : null;
+    const preview = settings.store.logMessagePreview ? message.content.slice(0, 100) : "";
+    logStalkerEvent({
+        timestamp: new Date().toISOString(),
+        userId: message.author.id,
+        username: message.author.username,
+        action: "message_send",
+        details: preview ? `Sent message: ${preview}${message.content.length > 100 ? "..." : ""}` : "Sent a message.",
+        channelName: channel?.name,
+        guildName: guild?.name,
+        metadata: {
+            channelId: message.channel_id,
+            guildId: channel?.guild_id ?? null,
+            messageId: message.id,
+            hasContent: message.content.length > 0
+        }
+    });
+}
+
+function syncTracking() {
+    if (!started) return;
+    activity.deinit();
+    status.deinit();
+    voice.deinit();
+    if (messageSubscribed) {
+        FluxDispatcher.unsubscribe("MESSAGE_CREATE", logMessage);
+        messageSubscribed = false;
+    }
+    if (!targets.length) return;
+
+    const {
+        enableLogging, logMessages, logActivities, logCustomStatus, logClientStatus,
+        notifyActivities, notifyCallJoin, notifyCallLeave, notifyOffline, notifyOnline, notifyDnd, notifyIdle, notifyGoOnline
+    } = settings.store;
+    const logging = enableLogging && !!Native?.appendStalkerLog;
+    if (logging || notifyOffline || notifyOnline || notifyDnd || notifyIdle || notifyGoOnline) status.init();
+    if (logging || notifyCallJoin || notifyCallLeave) voice.init();
+    if (notifyActivities || logging && (logActivities || logCustomStatus || logClientStatus)) activity.init();
+    if (logging && logMessages) {
+        FluxDispatcher.subscribe("MESSAGE_CREATE", logMessage);
+        messageSubscribed = true;
+    }
+}
+
 interface UserContextProps {
     user?: User;
 }
@@ -249,7 +258,7 @@ interface UserContextProps {
 const patchUserContext: NavContextMenuPatchCallback = (children, { user }: UserContextProps) => {
     if (!settings.store.stalkContext || !user) return;
 
-    const stalked = targets.includes(user.id);
+    const stalked = targetIds.has(user.id);
     const group = findGroupChildrenByChildId("apps", children) ?? children;
     for (let index = group.length - 1; index >= 0; index--) {
         if (group[index]?.props?.id === "vc-st-stalk") group.splice(index, 1);
@@ -262,12 +271,10 @@ const patchUserContext: NavContextMenuPatchCallback = (children, { user }: UserC
             id="vc-st-stalk"
             label={stalked ? "Unstalk" : "Stalk"}
             action={() => {
-                const currentTargets = new Set(parseTargets(settings.store.targets));
+                const currentTargets = new Set(targets);
 
                 if (stalked) {
                     currentTargets.delete(user.id);
-                    cachedLogsPerUser.delete(user.id);
-                    writeLocks.delete(user.id);
                 } else {
                     currentTargets.add(user.id);
                 }
@@ -293,49 +300,17 @@ export default definePlugin({
     },
 
     start() {
+        started = true;
         parseTargets(settings.store.targets);
-        status.init();
-        voice.init();
-        activity.init();
     },
 
     stop() {
+        started = false;
         activity.deinit();
         status.deinit();
         voice.deinit();
-        cachedLogsPerUser.clear();
-        writeLocks.clear();
-    },
-
-    flux: {
-        MESSAGE_CREATE({ message }: { message: Message; }) {
-            if (!settings.store.logMessages) return;
-            if (!targets.includes(message.author.id)) return;
-
-            const channel = ChannelStore.getChannel(message.channel_id);
-            const guild = channel?.guild_id ? GuildStore.getGuild(channel.guild_id) : null;
-            const preview = settings.store.logMessagePreview
-                ? message.content.length > 100
-                    ? `${message.content.substring(0, 100)}...`
-                    : message.content
-                : null;
-
-            logStalkerEvent({
-                timestamp: new Date().toISOString(),
-                userId: message.author.id,
-                username: message.author.username,
-                action: "message_send",
-                details: preview ? `Sent message: ${preview}` : "Sent a message.",
-                channelName: channel?.name,
-                guildName: guild?.name,
-                metadata: {
-                    channelId: message.channel_id,
-                    guildId: channel?.guild_id ?? null,
-                    messageId: message.id,
-                    hasContent: message.content.length > 0
-                }
-            });
-        },
+        if (messageSubscribed) FluxDispatcher.unsubscribe("MESSAGE_CREATE", logMessage);
+        messageSubscribed = false;
     },
 
     settings,

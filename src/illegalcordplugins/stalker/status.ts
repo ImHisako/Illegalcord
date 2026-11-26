@@ -10,9 +10,7 @@ import { ChannelStore, NavigationRouter, PresenceStore, UserStore } from "@webpa
 
 import { logStalkerEvent, settings, targets } from ".";
 
-type Statuses = Record<string, OnlineStatus>;
-
-let lastStatuses: Statuses | undefined;
+const lastStatuses = new Map<string, OnlineStatus>();
 
 const NOTIFICATION_COLOR = "#5865f2";
 
@@ -29,36 +27,22 @@ const formatStatus = (status: OnlineStatus): string =>
     status === "dnd" ? "in dnd" : status;
 
 export const init = () => {
+    for (const id of targets) lastStatuses.set(id, PresenceStore.getStatus(id));
     PresenceStore.addChangeListener(statusChange);
 };
 
 export const deinit = () => {
     PresenceStore.removeChangeListener(statusChange);
-    lastStatuses = undefined;
+    lastStatuses.clear();
 };
 
 export const statusChange = () => {
-    const rawNewStatuses: Statuses = PresenceStore.getState()?.statuses;
-    if (typeof rawNewStatuses !== "object") return;
-
-    const newStatuses: Statuses = { ...rawNewStatuses };
-
-    // Assicura che gli utenti stalked offline siano esplicitamente "offline"
     for (const id of targets) {
-        if (!newStatuses[id]) newStatuses[id] = "offline";
-    }
-
-    // Prima inizializzazione: memorizza lo stato attuale senza notificare
-    if (!lastStatuses) {
-        lastStatuses = { ...newStatuses };
-        return;
-    }
-
-    for (const id of targets) {
-        const newStatus = newStatuses[id] ?? "offline";
-        const lastStatus = lastStatuses[id] ?? "offline";
+        const newStatus = PresenceStore.getStatus(id);
+        const lastStatus = lastStatuses.get(id) ?? newStatus;
 
         if (lastStatus === newStatus) continue;
+        lastStatuses.set(id, newStatus);
 
         const user = UserStore.getUser(id);
         if (!user) continue;
@@ -76,7 +60,7 @@ export const statusChange = () => {
             });
         }
 
-        logStalkerEvent({
+        if (settings.store.enableLogging) logStalkerEvent({
             timestamp: new Date().toISOString(),
             userId: user.id,
             username: user.username,
@@ -84,6 +68,4 @@ export const statusChange = () => {
             details: `Status changed from ${lastStatus} to ${newStatus}.`
         });
     }
-
-    lastStatuses = { ...newStatuses };
 };

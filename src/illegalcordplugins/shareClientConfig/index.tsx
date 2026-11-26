@@ -84,15 +84,19 @@ function sanitizeObject(input: object, path: string, omitted: string[]): Record<
 }
 
 function sanitizeValue(value: unknown, path: string, omitted: string[]): unknown {
-    if (Array.isArray(value)) return value.flatMap((item, index) => {
-        const itemPath = `${path}.${index}`;
-        if (typeof item === "string" && SENSITIVE_VALUES.test(item)) {
-            omitted.push(itemPath);
-            return [];
+    if (Array.isArray(value)) {
+        const result: unknown[] = [];
+        for (let index = 0; index < value.length; index++) {
+            const item = value[index];
+            const itemPath = `${path}.${index}`;
+            if (typeof item === "string" && SENSITIVE_VALUES.test(item)) {
+                omitted.push(itemPath);
+                continue;
+            }
+            result.push(sanitizeValue(item, itemPath, omitted));
         }
-
-        return [sanitizeValue(item, itemPath, omitted)];
-    });
+        return result;
+    }
     if (isObject(value)) return sanitizeObject(value, path, omitted);
     return value;
 }
@@ -168,10 +172,11 @@ interface ConfigAccessoryProps {
     message?: Message;
 }
 
+const isConfigAttachment = (attachment: MessageAttachment) => attachment.filename === FILE_NAME;
+
 const ConfigAccessory = ErrorBoundary.wrap(function ConfigAccessory({ message }: ConfigAccessoryProps) {
     if (!message) return null;
-    const attachments = message.attachments.filter((attachment: MessageAttachment) => attachment.filename === FILE_NAME);
-    if (!attachments.length) return null;
+    const attachments = message.attachments.filter(isConfigAttachment);
 
     return <>
         {attachments.map((attachment: MessageAttachment) => (
@@ -261,12 +266,15 @@ export default definePlugin({
         }
     }],
 
-    renderMessageAccessory: (props: ConfigAccessoryProps) => <ConfigAccessory {...props} />,
+    renderMessageAccessory(props: ConfigAccessoryProps) {
+        if (!props.message?.attachments.some(isConfigAttachment)) return null;
+        return <ConfigAccessory {...props} />;
+    },
 
     messagePopoverButton: {
         icon: ConfigIcon,
         render(message) {
-            const attachment = message.attachments.find(item => item.filename === FILE_NAME);
+            const attachment = message.attachments.find(isConfigAttachment);
             if (!attachment) return null;
 
             return {

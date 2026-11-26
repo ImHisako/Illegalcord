@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { ReactDOM, useEffect, useMemo } from "@webpack/common";
+import { ReactDOM, useEffect, useState } from "@webpack/common";
 
 import { formatSize } from "../format";
 import { T } from "../i18n";
-import { StoredImage } from "../library";
+import { loadImage, StoredImage } from "../library";
 import { PREVIEW_HEIGHT, PREVIEW_WIDTH } from "../media";
-import { cl } from "../utils";
+import { cl, logger } from "../utils";
 import { ChevronIcon, CloseIcon } from "./icons";
 
 export function Lightbox({ images, index, onChange, onClose }: {
@@ -20,8 +20,22 @@ export function Lightbox({ images, index, onChange, onClose }: {
     onClose(): void;
 }) {
     const image = images[index];
-    const url = useMemo(() => (image ? URL.createObjectURL(image.blob) : null), [image]);
-    useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+    const [preview, setPreview] = useState<{ id: string; url: string; } | null>(null);
+    const url = preview?.id === image?.id ? preview?.url : null;
+    useEffect(() => {
+        if (!image) return;
+        let alive = true;
+        let objectUrl: string | undefined;
+        void loadImage(image).then(blob => {
+            if (!alive) return;
+            objectUrl = URL.createObjectURL(blob);
+            setPreview({ id: image.id, url: objectUrl });
+        }).catch(error => logger.error("Could not open the preview image", error));
+        return () => {
+            alive = false;
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
+    }, [image]);
 
     useEffect(() => {
         if (!image) onClose();
@@ -54,7 +68,7 @@ export function Lightbox({ images, index, onChange, onClose }: {
 
             <div className={cl("lightbox-bar")} onClick={e => e.stopPropagation()}>
                 <span>{index + 1} / {images.length}</span>
-                <span className={cl("lightbox-meta")}>{PREVIEW_WIDTH}×{PREVIEW_HEIGHT} · {formatSize(image.blob.size)}</span>
+                <span className={cl("lightbox-meta")}>{PREVIEW_WIDTH}×{PREVIEW_HEIGHT} · {formatSize(image.size)}</span>
             </div>
 
             <button type="button" className={cl("lightbox-close")} aria-label={T.close} onClick={onClose}>

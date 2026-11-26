@@ -49,14 +49,24 @@ export function resetCauses(enabled: boolean) {
 export function recordHealthCallback(plugin: string, surface: string, start: number, end: number) {
     if (!running || document.hidden || start < since || end - start < 1) return;
     if (spans.length === 2048) overwritten++;
-    spans[cursor] = { plugin, surface, start, end };
+    const span = spans[cursor];
+    if (span) {
+        span.plugin = plugin;
+        span.surface = surface;
+        span.start = start;
+        span.end = end;
+    } else {
+        spans[cursor] = { plugin, surface, start, end };
+    }
     cursor = (cursor + 1) % 2048;
 }
 
 export function correlateTask(start: number, duration: number) {
     if (start < since) return;
     const matched = new Set<string>();
-    for (const span of spans) {
+    for (let offset = 0; offset < spans.length; offset++) {
+        const span = spans[(cursor - 1 - offset + spans.length) % spans.length];
+        if (span.end <= start + 50) break;
         const overlap = Math.min(span.end, start + duration) - Math.max(span.start, start + 50);
         if (overlap <= 0) continue;
         const cause = causes.get(span.plugin) ?? { plugin: span.plugin, blocking: 0, tasks: 0, longest: 0, surfaces: {} };

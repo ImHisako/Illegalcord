@@ -23,9 +23,15 @@ let loading: Promise<SurveillanceEvent[]> | undefined;
 let notifyQueued = false;
 let loadSaveTimer: ReturnType<typeof setTimeout> | undefined;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let currentLimit = 1000;
+let generation = 0;
+let saving: Promise<void> | undefined;
+let saveQueued = false;
+let saveFailed = false;
 
 const flushNotify = () => {
     notifyQueued = false;
+    if (loaded) applyPendingEvents(currentLimit);
 
     for (const listener of listeners) {
         listener();
@@ -45,13 +51,26 @@ export const subscribe = (listener: () => void) => {
 };
 
 export const getEvents = () =>
-    pendingEvents.length ? [...pendingEvents, ...events] : events;
+    pendingEvents.length ? [...pendingEvents].reverse().concat(events) : events;
 
-const persistEvents = () =>
-    DataStore.set(STORE_KEY, events).catch(error => logger.error("Failed to save surveillance events:", error));
+const persistEvents = (): Promise<void> => {
+    saveQueued = true;
+    saving ??= Promise.resolve().then(async () => {
+        while (saveQueued) {
+            saveQueued = false;
+            applyPendingEvents(currentLimit);
+            await DataStore.set(STORE_KEY, events);
+            saveFailed = false;
+        }
+    }).catch(error => {
+        saveFailed = true;
+        logger.error("Failed to save surveillance events:", error);
+    }).finally(() => { saving = undefined; });
+    return saving.then(() => saveQueued ? persistEvents() : undefined);
+};
 
 const scheduleSave = () => {
-    if (saveTimer) clearTimeout(saveTimer);
+    if (saveTimer !== undefined) return;
 
     saveTimer = setTimeout(() => {
         saveTimer = undefined;
@@ -60,7 +79,7 @@ const scheduleSave = () => {
 };
 
 const scheduleLoadSave = (limit: number) => {
-    if (loadSaveTimer) clearTimeout(loadSaveTimer);
+    if (loadSaveTimer !== undefined) return;
 
     loadSaveTimer = setTimeout(() => {
         loadSaveTimer = undefined;
@@ -85,13 +104,13 @@ const persistNow = async () => {
 const trimToLimit = (nextEvents: SurveillanceEvent[], limit?: number) => {
     if (limit == null) return nextEvents;
 
-    return nextEvents.slice(0, Math.max(MIN_EVENTS, limit));
+    return nextEvents.slice(0, Number.isFinite(limit) ? Math.max(MIN_EVENTS, Math.trunc(limit)) : 1000);
 };
 
 const applyPendingEvents = (limit?: number) => {
     if (!pendingEvents.length) return false;
 
-    events = trimToLimit([...pendingEvents, ...events], limit);
+    events = trimToLimit([...pendingEvents].reverse().concat(events), limit);
     pendingEvents = [];
     return true;
 };
@@ -107,6 +126,7 @@ const applyLimit = async (limit?: number) => {
 };
 
 export async function loadEvents(limit?: number) {
+    if (limit !== undefined) currentLimit = limit;
     if (loaded) {
         await applyLimit(limit);
         return events;
@@ -118,11 +138,13 @@ export async function loadEvents(limit?: number) {
         return events;
     }
 
-    loading = DataStore.get<SurveillanceEvent[]>(STORE_KEY)
+    const run = generation;
+    const job = DataStore.get<SurveillanceEvent[]>(STORE_KEY)
         .then(async savedEvents => {
+            if (run !== generation) return [];
             const saved = Array.isArray(savedEvents) ? savedEvents : [];
             const hadPendingEvents = pendingEvents.length > 0;
-            events = trimToLimit([...pendingEvents, ...saved], limit);
+            events = trimToLimit([...pendingEvents].reverse().concat(saved), currentLimit);
             pendingEvents = [];
             loaded = true;
             notify();
@@ -131,33 +153,29 @@ export async function loadEvents(limit?: number) {
         })
         .catch(error => {
             logger.error("Failed to load surveillance events:", error);
-            events = trimToLimit(pendingEvents, limit);
-            pendingEvents = [];
-            loaded = true;
-            notify();
-            return events;
-        });
+            if (run !== generation) return [];
+            return getEvents();
+        }).finally(() => { if (loading === job) loading = undefined; });
 
+    loading = job;
     return loading;
 }
 
-export async function recordEvent(event: SurveillanceEvent, limit: number) {
-    if (!loaded) {
-        pendingEvents = [event, ...pendingEvents].slice(0, Math.max(MIN_EVENTS, limit));
-        notify();
-        scheduleLoadSave(limit);
-        return;
-    }
-
-    events = [event, ...events].slice(0, Math.max(MIN_EVENTS, limit));
+export function recordEvent(event: SurveillanceEvent, limit: number) {
+    currentLimit = limit;
+    const maximum = Number.isFinite(limit) ? Math.max(MIN_EVENTS, Math.trunc(limit)) : 1000;
+    pendingEvents.push(event);
+    if (pendingEvents.length > maximum) pendingEvents.splice(0, pendingEvents.length - maximum);
     notify();
-    scheduleSave();
+    if (loaded) scheduleSave();
+    else scheduleLoadSave(limit);
 }
 
 const matchesScope = (event: SurveillanceEvent, scope: SurveillanceScope) =>
     scope === "server" ? event.scope === "server" : event.scope !== "server";
 
 export async function clearEvents(scope?: SurveillanceScope) {
+    await loadEvents(currentLimit);
     if (scope) {
         events = events.filter(event => !matchesScope(event, scope));
         pendingEvents = pendingEvents.filter(event => !matchesScope(event, scope));
@@ -173,4 +191,23 @@ export async function clearEvents(scope?: SurveillanceScope) {
 
 export async function trimEvents(limit: number) {
     await loadEvents(limit);
+}
+
+export async function stopStore(limit: number) {
+    const dirty = saveTimer !== undefined || loadSaveTimer !== undefined || pendingEvents.length > 0 || saveQueued || saveFailed;
+    clearTimeout(saveTimer);
+    clearTimeout(loadSaveTimer);
+    saveTimer = undefined;
+    loadSaveTimer = undefined;
+    if (dirty) {
+        await loadEvents(limit);
+        if (!loaded) return;
+        await persistNow();
+    } else await saving;
+    if (saveFailed) return;
+    generation++;
+    events = [];
+    pendingEvents = [];
+    loaded = false;
+    loading = undefined;
 }

@@ -36,13 +36,14 @@ import {
 } from "./onAir";
 import { DEFAULT_HOTKEY, PLUGIN_NAME, settings, unwatchSettings, watchSettings } from "./settings";
 import managedStyle from "./style.css?managed";
-import { forgetAllThumbs, warmThumbs } from "./thumbs";
+import { forgetAllThumbs } from "./thumbs";
 import { logger } from "./utils";
 
 migratePluginSettings(PLUGIN_NAME, ...OLD_PLUGIN_NAMES);
 
 const GALLERY_MODAL_KEY = "custom-stream-preview-gallery";
 let galleryOpen = false;
+let generation = 0;
 
 function openGallery() {
     if (galleryOpen) return;
@@ -181,20 +182,22 @@ export default definePlugin({
     nextPreviewFrame,
 
     async start() {
+        const run = ++generation;
         registerHotkey(() => settings.store.hotkey || DEFAULT_HOTKEY, toggleGallery);
         watchSettings();
 
         await loadLibrary();
+        if (run !== generation) return;
         await startOnAir();
+        if (run !== generation) return;
 
         const active = getActiveProfile();
         logger.info(`Loaded ${getProfiles().length} profiles, "${active.name}" is active with ${active.images.length} images`);
 
-        const others = getProfiles().filter(profile => profile.id !== active.id);
-        void warmThumbs([...active.images, ...others.flatMap(profile => profile.images)]);
     },
 
     stop() {
+        generation++;
         unregisterHotkey();
         unwatchSettings();
         stopOnAir();

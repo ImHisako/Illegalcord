@@ -7,7 +7,7 @@
 import { DataStore } from "@api/index";
 import { UserStore } from "@webpack/common";
 
-import { getActiveProfile, libraryChanged, Profile, setCurrentIndex, StoredImage } from "./library";
+import { findImage, getActiveProfile, libraryChanged, loadImage, Profile, setCurrentIndex, StoredImage } from "./library";
 import { toUploadDataUrl } from "./media";
 import { IDLE_UPLOADER, isRateLimitError, nextIndex, shouldHold, shuffledIds, UploaderState } from "./schedule";
 import { settings, settingsChanged } from "./settings";
@@ -26,6 +26,9 @@ let picked = false;
 let bag: { profileId: string; ids: string[]; } = { profileId: "", ids: [] };
 let lastReturned: string | null = null;
 const dataUris = new Map<string, string>();
+const preparing = new Map<string, Promise<void>>();
+let active = false;
+let generation = 0;
 
 export function getUploader(): UploaderState {
     return uploader;
@@ -170,17 +173,28 @@ function rememberDataUri(id: string, uri: string) {
 }
 
 async function prepareUpcoming(): Promise<void> {
-    if (!settings.store.replaceEnabled) return;
+    if (!active || !settings.store.replaceEnabled) return;
 
     const profile = getActiveProfile();
     const image = profile.images[getUpcomingIndex(profile)];
     if (!image || dataUris.has(image.id)) return;
-
-    try {
-        rememberDataUri(image.id, await toUploadDataUrl(image.blob));
-    } catch (error) {
-        logger.error("Could not prepare the next preview image", error);
-    }
+    const pending = preparing.get(image.id);
+    if (pending) return pending;
+    const run = generation;
+    const job = (async () => {
+        try {
+            const blob = await loadImage(image);
+            if (run !== generation) return;
+            const uri = await toUploadDataUrl(blob);
+            if (run === generation && findImage(image.id)) rememberDataUri(image.id, uri);
+        } catch (error) {
+            logger.error("Could not prepare the next preview image", error);
+        }
+    })().finally(() => {
+        if (preparing.get(image.id) === job) preparing.delete(image.id);
+    });
+    preparing.set(image.id, job);
+    return job;
 }
 
 let prepareQueued = false;
@@ -247,7 +261,11 @@ async function loadLastSent() {
 }
 
 export async function startOnAir() {
-    lastSentId = await loadLastSent();
+    active = true;
+    const run = ++generation;
+    const lastSent = await loadLastSent();
+    if (run !== generation) return;
+    lastSentId = lastSent;
     unsubscribers = [
         libraryChanged.subscribe(schedulePrepare),
         settingsChanged.subscribe(() => {
@@ -259,6 +277,9 @@ export async function startOnAir() {
 }
 
 export function stopOnAir() {
+    active = false;
+    generation++;
+    preparing.clear();
     unsubscribers.forEach(unsubscribe => unsubscribe());
     unsubscribers = [];
     uploader = IDLE_UPLOADER;

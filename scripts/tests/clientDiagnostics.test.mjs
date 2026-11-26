@@ -68,7 +68,7 @@ function fixture(options = {}) {
                 def[key]?.onChange?.(value);
                 return true;
             } });
-            return { store, def, withPrivateSettings() { return this; } };
+            return { store, def, get plain() { return values; }, withPrivateSettings() { return this; } };
         } },
         "@components/BaseText": {}, "@components/Button": {}, "@components/CodeBlock": {},
         "@components/ErrorBoundary": { wrap: component => component },

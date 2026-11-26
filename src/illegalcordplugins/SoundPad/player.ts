@@ -21,6 +21,7 @@ const playbacks = new Set<Playback>();
 const listeners = new Set<() => void>();
 let microphoneStream: MediaStream | null = null;
 let microphoneOutput: HTMLAudioElement | null = null;
+let microphoneRequest: symbol | null = null;
 
 function emitChange() {
     listeners.forEach(listener => listener());
@@ -53,35 +54,47 @@ export function isPlaying(soundId: string) {
 }
 
 export function isMicrophoneActive() {
-    return microphoneStream != null;
+    return microphoneRequest != null;
 }
 
 export async function startMicrophone(inputDeviceId: string, sinkId: string, volume: number) {
     stopMicrophone();
-
-    const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-            deviceId: inputDeviceId === "default" ? void 0 : { exact: inputDeviceId },
-            autoGainControl: false,
-            echoCancellation: false,
-            noiseSuppression: false
-        }
-    });
-    const output = new Audio();
-    output.srcObject = stream;
-    output.volume = volume / 100;
+    const request = microphoneRequest = Symbol();
+    emitChange();
 
     try {
-        await output.setSinkId(sinkId);
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                deviceId: inputDeviceId === "default" ? void 0 : { exact: inputDeviceId },
+                autoGainControl: false,
+                echoCancellation: false,
+                noiseSuppression: false
+            }
+        });
+        if (microphoneRequest !== request) {
+            stream.getTracks().forEach(track => track.stop());
+            return false;
+        }
+
+        microphoneStream = stream;
+        const output = microphoneOutput = new Audio();
+        output.srcObject = stream;
+        output.volume = volume / 100;
+        await output.setSinkId(sinkId === "default" ? "" : sinkId);
+        if (microphoneRequest !== request) return false;
+
         await output.play();
+        if (microphoneRequest !== request) {
+            output.pause();
+            output.srcObject = null;
+            return false;
+        }
+        return true;
     } catch (error) {
-        stream.getTracks().forEach(track => track.stop());
+        if (microphoneRequest !== request) return false;
+        stopMicrophone();
         throw error;
     }
-
-    microphoneStream = stream;
-    microphoneOutput = output;
-    emitChange();
 }
 
 export function setMicrophoneVolume(volume: number) {
@@ -89,6 +102,7 @@ export function setMicrophoneVolume(volume: number) {
 }
 
 export function stopMicrophone() {
+    microphoneRequest = null;
     microphoneStream?.getTracks().forEach(track => track.stop());
     microphoneOutput?.pause();
     if (microphoneOutput) microphoneOutput.srcObject = null;
@@ -113,7 +127,6 @@ export function addSound(file: File) {
 export async function playSound(sound: SoundPadSound, sinkId: string, volume: number, monitorLocally: boolean) {
     const routedAudio = new Audio(sound.url);
     routedAudio.volume = volume / 100;
-    await routedAudio.setSinkId(sinkId);
 
     const outputs = [routedAudio];
     if (monitorLocally && sinkId !== "default") {
@@ -129,7 +142,10 @@ export async function playSound(sound: SoundPadSound, sinkId: string, volume: nu
     emitChange();
 
     try {
+        await routedAudio.setSinkId(sinkId === "default" ? "" : sinkId);
+        if (!playbacks.has(playback)) return;
         await Promise.all(outputs.map(audio => audio.play()));
+        if (!playbacks.has(playback)) destroyPlayback(playback);
     } catch (error) {
         destroyPlayback(playback);
         throw error;

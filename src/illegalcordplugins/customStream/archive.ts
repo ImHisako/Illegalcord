@@ -6,7 +6,7 @@
 
 import { unzipSync, zipSync } from "fflate";
 
-import type { StoredImage } from "./library";
+import { loadImage, type StoredImage } from "./library";
 
 const IMAGE_TYPES: Record<string, string> = {
     jpg: "image/jpeg",
@@ -35,7 +35,7 @@ export async function imagesToZip(images: readonly StoredImage[]): Promise<Blob>
     const files: Record<string, Uint8Array> = {};
 
     for (const [i, image] of images.entries()) {
-        files[`${String(i + 1).padStart(width, "0")}.jpg`] = new Uint8Array(await image.blob.arrayBuffer());
+        files[`${String(i + 1).padStart(width, "0")}.jpg`] = new Uint8Array(await (await loadImage(image)).arrayBuffer());
     }
 
     return new Blob([zipSync(files, { level: 0 })], { type: "application/zip" });

@@ -16,8 +16,8 @@ import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { makeRange, OptionType } from "@utils/types";
 import { chooseFile } from "@utils/web";
-import type { AudioDevice, RenderModalProps } from "@vencord/discord-types";
-import { MediaEngineStore, Modal, openModal, React, SearchableSelect,showToast } from "@webpack/common";
+import type { RenderModalProps } from "@vencord/discord-types";
+import { Modal, openModal, React, SearchableSelect, showToast } from "@webpack/common";
 
 import {
     addSound,
@@ -73,6 +73,8 @@ const settings = definePluginSettings({
     }
 });
 
+const SETTING_KEYS = ["inputDeviceId", "monitorLocally", "outputDeviceId"] satisfies (keyof typeof settings.store)[];
+
 interface SoundPadModalProps {
     modalProps: RenderModalProps;
 }
@@ -82,12 +84,12 @@ interface DeviceOption {
     value: string;
 }
 
-function getDeviceOptions(devices: AudioDevice[], defaultLabel: string) {
+function getDeviceOptions(devices: MediaDeviceInfo[], kind: MediaDeviceKind, defaultLabel: string) {
     const options = devices
-        .filter(device => !device.disabled)
+        .filter(device => device.kind === kind && device.deviceId)
         .map(device => ({
-            label: device.name,
-            value: device.index === -1 ? "default" : device.id
+            label: device.label || defaultLabel,
+            value: device.deviceId
         }));
 
     if (!options.some(device => device.value === "default")) {
@@ -116,6 +118,11 @@ async function addAudioFile() {
 }
 
 async function startSound(sound: SoundPadSound) {
+    if (settings.store.outputDeviceId === "default") {
+        showToast({ text: "Select a virtual audio cable as the output first.", variant: "critical" });
+        return;
+    }
+
     try {
         await playSound(
             sound,
@@ -141,12 +148,12 @@ async function toggleMicrophone(enabled: boolean) {
     }
 
     try {
-        await startMicrophone(
+        const started = await startMicrophone(
             settings.store.inputDeviceId,
             settings.store.outputDeviceId,
             settings.store.microphoneVolume
         );
-        showToast({ text: "Physical microphone added to the mix.", variant: "success" });
+        if (started) showToast({ text: "Physical microphone added to the mix.", variant: "success" });
     } catch (error) {
         logger.error("Could not route the physical microphone.", error);
         showToast({ text: "Could not connect the physical microphone.", variant: "critical" });
@@ -154,7 +161,7 @@ async function toggleMicrophone(enabled: boolean) {
 }
 
 function SoundPadModal({ modalProps }: SoundPadModalProps) {
-    const { inputDeviceId, monitorLocally, outputDeviceId } = settings.use(["inputDeviceId", "monitorLocally", "outputDeviceId"]);
+    const { inputDeviceId, monitorLocally, outputDeviceId } = settings.use(SETTING_KEYS);
     const [, forceUpdate] = React.useReducer(value => value + 1, 0);
     const [inputs, setInputs] = React.useState<DeviceOption[]>([]);
     const [outputs, setOutputs] = React.useState<DeviceOption[]>([]);
@@ -163,34 +170,47 @@ function SoundPadModal({ modalProps }: SoundPadModalProps) {
 
     React.useEffect(() => {
         let active = true;
-        const mediaEngine = MediaEngineStore.getMediaEngine();
-
-        async function refreshDevices() {
+        async function refreshDevices(requestPermission = false) {
             try {
-                const [inputDevices, outputDevices] = await Promise.all([
-                    mediaEngine.getAudioInputDevices(),
-                    mediaEngine.getAudioOutputDevices()
-                ]);
+                let devices = await navigator.mediaDevices.enumerateDevices();
                 if (!active) return;
 
-                setInputs(getDeviceOptions(inputDevices, "Default microphone"));
-                setOutputs(getDeviceOptions(outputDevices, "Default output"));
+                if (requestPermission && devices.some(device => device.kind === "audioinput" && !device.label)) {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    stream.getTracks().forEach(track => track.stop());
+                    if (!active) return;
+                    devices = await navigator.mediaDevices.enumerateDevices();
+                }
+                if (!active) return;
+
+                const inputOptions = getDeviceOptions(devices, "audioinput", "Default microphone");
+                const outputOptions = getDeviceOptions(devices, "audiooutput", "Default output");
+                if (!inputOptions.some(device => device.value === settings.store.inputDeviceId)) {
+                    stopMicrophone();
+                    settings.store.inputDeviceId = "default";
+                }
+                if (!outputOptions.some(device => device.value === settings.store.outputDeviceId)) {
+                    stopMicrophone();
+                    stopAll();
+                    settings.store.outputDeviceId = "default";
+                }
+                setInputs(inputOptions);
+                setOutputs(outputOptions);
             } catch (error) {
-                logger.error("Could not read audio devices from Discord.", error);
+                logger.error("Could not access audio devices.", error);
+                if (active) showToast({ text: "Could not access audio devices. Check microphone permissions.", variant: "critical" });
             }
         }
 
-        function handleDeviceChange(inputDevices: AudioDevice[], outputDevices: AudioDevice[]) {
-            if (!active) return;
-            setInputs(getDeviceOptions(inputDevices, "Default microphone"));
-            setOutputs(getDeviceOptions(outputDevices, "Default output"));
+        function handleDeviceChange() {
+            void refreshDevices();
         }
 
-        void refreshDevices();
-        mediaEngine.on("DeviceChange", handleDeviceChange);
+        void refreshDevices(true);
+        navigator.mediaDevices.addEventListener("devicechange", handleDeviceChange);
         return () => {
             active = false;
-            mediaEngine.off("DeviceChange", handleDeviceChange);
+            navigator.mediaDevices.removeEventListener("devicechange", handleDeviceChange);
         };
     }, []);
 
@@ -220,6 +240,7 @@ function SoundPadModal({ modalProps }: SoundPadModalProps) {
                         placeholder="Select an audio output device"
                         onChange={value => {
                             stopMicrophone();
+                            stopAll();
                             settings.store.outputDeviceId = value;
                         }}
                         maxVisibleItems={6}

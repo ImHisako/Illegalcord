@@ -6,7 +6,7 @@
 
 import { DataStore } from "@api/index";
 
-import type { StoredImage } from "./library";
+import { findImage, loadImage, type StoredImage } from "./library";
 import { makeThumbnail } from "./media";
 import { logger } from "./utils";
 
@@ -16,7 +16,7 @@ export const thumbKey = (id: string) => `CustomStreamTopQ_Thumb_${id}`;
 
 const urls = new Map<string, string>();
 const jobs = new Map<string, Promise<string>>();
-const dropped = new Set<string>();
+let generation = 0;
 
 let readBatch = new Map<string, ((blob: Blob | undefined) => void)[]>();
 let readScheduled = false;
@@ -49,46 +49,47 @@ async function flushReads() {
     }
 }
 
-const generateQueue: (() => void)[] = [];
+const generateQueue: { start(): void; cancel(): void; }[] = [];
 let generating = 0;
 
-function queued<T>(task: () => Promise<T>): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
+function queued(task: () => Promise<Blob | undefined>, run: number): Promise<Blob | undefined> {
+    return new Promise((resolve, reject) => {
         const start = () => {
+            if (run !== generation) return resolve(undefined);
             generating++;
             task().then(resolve, reject).finally(() => {
                 generating--;
-                generateQueue.shift()?.();
+                generateQueue.shift()?.start();
             });
         };
 
         if (generating < GENERATE_CONCURRENCY) start();
-        else generateQueue.push(start);
+        else generateQueue.push({ start, cancel: () => resolve(undefined) });
     });
 }
 
-function remember(id: string, thumb: Blob): string {
+function remember(id: string, thumb: Blob, run: number): string {
+    if (run !== generation || !findImage(id)) return "";
     const existing = urls.get(id);
     if (existing) return existing;
 
     const url = URL.createObjectURL(thumb);
-    if (dropped.has(id)) {
-        URL.revokeObjectURL(url);
-        return url;
-    }
     urls.set(id, url);
     return url;
 }
 
-async function storedOrFresh(image: StoredImage): Promise<string> {
+async function storedOrFresh(image: StoredImage, run: number): Promise<string> {
     const stored = await readStored(image.id);
-    if (stored) return remember(image.id, stored);
+    if (run !== generation || !findImage(image.id)) return "";
+    if (stored) return remember(image.id, stored, run);
 
-    const thumb = await queued(() => makeThumbnail(image.blob));
-    if (!dropped.has(image.id)) {
-        DataStore.set(thumbKey(image.id), thumb).catch(error => logger.error("Could not save a thumbnail", error));
-    }
-    return remember(image.id, thumb);
+    const thumb = await queued(async () => {
+        const blob = await loadImage(image);
+        return run === generation && findImage(image.id) ? makeThumbnail(blob) : undefined;
+    }, run);
+    if (!thumb || run !== generation || !findImage(image.id)) return "";
+    DataStore.set(thumbKey(image.id), thumb).catch(error => logger.error("Could not save a thumbnail", error));
+    return remember(image.id, thumb, run);
 }
 
 export function peekThumb(id: string): string | undefined {
@@ -101,38 +102,16 @@ export function loadThumb(image: StoredImage): Promise<string> {
 
     let job = jobs.get(image.id);
     if (!job) {
-        job = storedOrFresh(image).finally(() => jobs.delete(image.id));
+        job = storedOrFresh(image, generation).finally(() => {
+            if (jobs.get(image.id) === job) jobs.delete(image.id);
+        });
         jobs.set(image.id, job);
     }
     return job;
 }
 
-let warmRun = 0;
-
-const idle = () => new Promise<void>(resolve => requestIdleCallback(() => resolve(), { timeout: 5000 }));
-
-export async function warmThumbs(images: readonly StoredImage[]): Promise<void> {
-    const run = ++warmRun;
-    await idle();
-    if (run !== warmRun) return;
-
-    const missing: StoredImage[] = [];
-    await Promise.all(images.filter(image => !urls.has(image.id) && !jobs.has(image.id)).map(async image => {
-        const stored = await readStored(image.id);
-        if (stored) remember(image.id, stored);
-        else missing.push(image);
-    }));
-
-    for (const image of missing) {
-        await idle();
-        if (run !== warmRun) return;
-        await loadThumb(image).catch(error => logger.error("Could not prepare a thumbnail", error));
-    }
-}
-
 export function dropThumbs(ids: Iterable<string>) {
     for (const id of ids) {
-        dropped.add(id);
         const url = urls.get(id);
         if (url) URL.revokeObjectURL(url);
         urls.delete(id);
@@ -140,8 +119,12 @@ export function dropThumbs(ids: Iterable<string>) {
 }
 
 export function forgetAllThumbs() {
-    warmRun++;
+    generation++;
     for (const url of urls.values()) URL.revokeObjectURL(url);
     urls.clear();
-    dropped.clear();
+    jobs.clear();
+    for (const task of generateQueue) task.cancel();
+    generateQueue.length = 0;
+    for (const waiting of readBatch.values()) for (const resolve of waiting) resolve(undefined);
+    readBatch.clear();
 }

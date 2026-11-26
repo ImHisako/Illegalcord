@@ -13,7 +13,6 @@ import { logStalkerEvent, settings, targets } from ".";
 
 interface ActivitySnapshot {
     key: string;
-    signature: string;
     type: ActivityType;
     name: string;
     details?: string;
@@ -30,12 +29,7 @@ let lastCustomStatuses = new Map<string, string>();
 let lastClientStatuses = new Map<string, string>();
 
 const getActivityKey = (activity: Activity): string =>
-    [
-        activity.type,
-        activity.application_id ?? "",
-        activity.name,
-        activity.platform ?? ""
-    ].join(":");
+    `${activity.type}:${activity.application_id ?? ""}:${activity.name}:${activity.platform ?? ""}`;
 
 const formatActivityType = (type: ActivityType): string => {
     switch (type) {
@@ -62,25 +56,17 @@ const getCustomStatusText = (activity: Activity | undefined): string => {
     return [emoji, text].filter(Boolean).join(" ");
 };
 
-const toSnapshot = (activity: Activity): ActivitySnapshot => {
-    const snapshot = {
-        key: getActivityKey(activity),
-        type: activity.type,
-        name: activity.name,
-        details: activity.details,
-        state: activity.state,
-        applicationId: activity.application_id,
-        platform: activity.platform
-    };
+const toSnapshot = (activity: Activity): ActivitySnapshot => ({
+    key: getActivityKey(activity),
+    type: activity.type,
+    name: activity.name,
+    details: activity.details,
+    state: activity.state,
+    applicationId: activity.application_id,
+    platform: activity.platform
+});
 
-    return {
-        ...snapshot,
-        signature: JSON.stringify(snapshot)
-    };
-};
-
-const getActivityMap = (userId: string): Map<string, ActivitySnapshot> => {
-    const activities = PresenceStore.getActivities(userId) ?? [];
+const getActivityMap = (activities: Activity[]): Map<string, ActivitySnapshot> => {
     const activityMap = new Map<string, ActivitySnapshot>();
 
     for (const activity of activities) {
@@ -93,8 +79,7 @@ const getActivityMap = (userId: string): Map<string, ActivitySnapshot> => {
     return activityMap;
 };
 
-const getCustomStatus = (userId: string): string => {
-    const activities = PresenceStore.getActivities(userId) ?? [];
+const getCustomStatus = (activities: Activity[]): string => {
     const customStatus = activities.find(activity => activity.type === ActivityType.CUSTOM_STATUS);
     return getCustomStatusText(customStatus);
 };
@@ -106,14 +91,14 @@ const formatActivity = (activity: ActivitySnapshot): string => {
     return `${formatActivityType(activity.type)} ${activity.name}${details}${state}`;
 };
 
-const formatClientStatus = (clientStatus: Partial<Record<DiscordPlatform, OnlineStatus>> | undefined): string =>
-    platforms
-        .map(platform => {
-            const status = clientStatus?.[platform];
-            return status ? `${platform}:${status}` : "";
-        })
-        .filter(Boolean)
-        .join(", ");
+const formatClientStatus = (clientStatus: Partial<Record<DiscordPlatform, OnlineStatus>> | undefined): string => {
+    const statuses: string[] = [];
+    for (const platform of platforms) {
+        const status = clientStatus?.[platform];
+        if (status) statuses.push(`${platform}:${status}`);
+    }
+    return statuses.join(", ");
+};
 
 const getUsername = (userId: string): string =>
     UserStore.getUser(userId)?.username ?? userId;
@@ -148,29 +133,15 @@ const maybeNotifyActivityStart = (userId: string, activity: ActivitySnapshot) =>
 };
 
 const seedUser = (userId: string) => {
-    lastActivities.set(userId, getActivityMap(userId));
-    lastCustomStatuses.set(userId, getCustomStatus(userId));
+    const activities = PresenceStore.getActivities(userId);
+    lastActivities.set(userId, getActivityMap(activities));
+    lastCustomStatuses.set(userId, getCustomStatus(activities));
     lastClientStatuses.set(userId, formatClientStatus(PresenceStore.getClientStatus(userId)));
 };
 
-const pruneRemovedTargets = () => {
-    const targetSet = new Set(targets);
-
-    for (const userId of lastActivities.keys()) {
-        if (!targetSet.has(userId)) lastActivities.delete(userId);
-    }
-
-    for (const userId of lastCustomStatuses.keys()) {
-        if (!targetSet.has(userId)) lastCustomStatuses.delete(userId);
-    }
-
-    for (const userId of lastClientStatuses.keys()) {
-        if (!targetSet.has(userId)) lastClientStatuses.delete(userId);
-    }
-};
-
 const handleActivities = (userId: string, currentActivities: Map<string, ActivitySnapshot>) => {
-    if (!settings.store.logActivities && !settings.store.notifyActivities) return;
+    const logging = settings.store.enableLogging && settings.store.logActivities;
+    if (!logging && !settings.store.notifyActivities) return;
 
     const previousActivities = lastActivities.get(userId) ?? new Map<string, ActivitySnapshot>();
 
@@ -178,17 +149,17 @@ const handleActivities = (userId: string, currentActivities: Map<string, Activit
         const previousActivity = previousActivities.get(key);
 
         if (!previousActivity) {
-            if (settings.store.logActivities) logActivity(userId, activity, "activity_start", `Started ${formatActivity(activity)}.`);
+            if (logging) logActivity(userId, activity, "activity_start", `Started ${formatActivity(activity)}.`);
             maybeNotifyActivityStart(userId, activity);
             continue;
         }
 
-        if (settings.store.logActivities && previousActivity.signature !== activity.signature) {
+        if (logging && (previousActivity.details !== activity.details || previousActivity.state !== activity.state)) {
             logActivity(userId, activity, "activity_update", `Changed activity from ${formatActivity(previousActivity)} to ${formatActivity(activity)}.`);
         }
     }
 
-    if (!settings.store.logActivities) return;
+    if (!logging) return;
 
     for (const [key, activity] of previousActivities) {
         if (!currentActivities.has(key)) logActivity(userId, activity, "activity_stop", `Stopped ${formatActivity(activity)}.`);
@@ -232,25 +203,30 @@ const handleClientStatus = (userId: string, currentClientStatus: string) => {
 };
 
 const presenceChange = () => {
-    pruneRemovedTargets();
+    const { enableLogging, logActivities, logCustomStatus, logClientStatus, notifyActivities } = settings.store;
 
     for (const userId of targets) {
-        const currentActivities = getActivityMap(userId);
-        const currentCustomStatus = getCustomStatus(userId);
-        const currentClientStatus = formatClientStatus(PresenceStore.getClientStatus(userId));
-
         if (!lastActivities.has(userId) || !lastCustomStatuses.has(userId) || !lastClientStatuses.has(userId)) {
             seedUser(userId);
             continue;
         }
 
-        handleActivities(userId, currentActivities);
-        handleCustomStatus(userId, currentCustomStatus);
-        handleClientStatus(userId, currentClientStatus);
-
-        lastActivities.set(userId, currentActivities);
-        lastCustomStatuses.set(userId, currentCustomStatus);
-        lastClientStatuses.set(userId, currentClientStatus);
+        const activities = PresenceStore.getActivities(userId);
+        if (notifyActivities || enableLogging && logActivities) {
+            const currentActivities = getActivityMap(activities);
+            handleActivities(userId, currentActivities);
+            lastActivities.set(userId, currentActivities);
+        }
+        if (enableLogging && logCustomStatus) {
+            const currentCustomStatus = getCustomStatus(activities);
+            handleCustomStatus(userId, currentCustomStatus);
+            lastCustomStatuses.set(userId, currentCustomStatus);
+        }
+        if (enableLogging && logClientStatus) {
+            const currentClientStatus = formatClientStatus(PresenceStore.getClientStatus(userId));
+            handleClientStatus(userId, currentClientStatus);
+            lastClientStatuses.set(userId, currentClientStatus);
+        }
     }
 };
 

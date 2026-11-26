@@ -18,7 +18,7 @@ import { ChannelStore, GuildStore, MessageStore, UserStore } from "@webpack/comm
 import { removeKamidereRuntimeTask, SEND_TRAIL_PURGE_TASK_ID } from "../_kamidereCompat/runtimeActivity";
 import RuntimeActivityButton from "../_kamidereCompat/RuntimeActivityButton";
 import { settings } from "./settings";
-import { appendSentTrailRecord, clearSentTrailRecordsWhere, hasSentTrailRecord, mergeSentTrailRecordMedia, removeSentTrailRecord } from "./store";
+import { appendSentTrailRecord, clearSentTrailRecordsWhere, hasSentTrailRecord, mergeSentTrailRecordMedia, removeSentTrailRecord, stopStore } from "./store";
 import type { MessageCreatePayload, MessageDeletePayload, MessageUpdatePayload, PendingSendDraft, SendTrailMessage, SentTrailRecord } from "./types";
 import { buildJumpLink, collectMessageMediaItems, getChannelRecipientIds, getMessageDisplayContent, getMessageTimestamp, getRecordPreview, hasMediaLinks, isForwardedMessage, makeAttachmentSignature, makeUploadSignature, normalizeContent } from "./utils";
 
@@ -199,7 +199,8 @@ async function maybeCreateRecordFromUpdate(payload: MessageUpdatePayload) {
 
     if ((message.author?.id ?? cachedMessage?.author.id) !== currentUserId) return;
     if (!isForwardedMessage(message)) return;
-    if (hasSentTrailRecord(currentUserId, message.channel_id, message.id)) return;
+    if (await hasSentTrailRecord(currentUserId, message.channel_id, message.id)) return;
+    if (UserStore.getCurrentUser()?.id !== currentUserId) return;
 
     const record = buildRecord(message, payload.guildId ?? payload.message.guild_id);
 
@@ -281,6 +282,7 @@ export default definePlugin({
 
     stop() {
         generation++;
+        stopStore();
         pendingDrafts.clear();
         removeKamidereRuntimeTask(SEND_TRAIL_PURGE_TASK_ID);
         unregisterSendTrailSettingsTab();

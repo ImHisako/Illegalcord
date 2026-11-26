@@ -73,6 +73,8 @@ interface PluginStats {
     heapIncrease: number;
     heapDecrease: number;
     lastHeapDelta: number;
+    memorySamples: number;
+    nextMemorySample: number;
     intervals: number;
     pendingTimeouts: number;
     animationFrames: number;
@@ -94,7 +96,12 @@ interface SourceSnippet {
     surface: string;
     label: string;
     code: string;
-    source?: object;
+    source?: WeakRef<object>;
+}
+
+interface ListenerOwner {
+    pluginName: string;
+    cleanup?(): void;
 }
 
 interface ImpactReason {
@@ -141,7 +148,7 @@ const GUIDE_ITEMS = [
     },
     {
         label: "Heap net",
-        description: "Shows positive JavaScript heap deltas minus observed decreases during plugin calls. It uses Chromium heap data, so it does not represent the full process RAM."
+        description: "Shows increases minus decreases in sampled plugin heap measurements. It uses Chromium heap data, so it does not represent the full process RAM."
     },
     {
         label: "Resources",
@@ -232,8 +239,15 @@ const settings = definePluginSettings({
     },
     trackMemory: {
         type: OptionType.BOOLEAN,
-        description: "Measure Chromium JS heap deltas when available.",
+        description: "Measure sampled Chromium JS heap changes when available.",
         default: true
+    },
+    memorySamplingMs: {
+        type: OptionType.SLIDER,
+        displayName: "Memory sampling interval (ms)",
+        description: "Minimum time between heap measurements for each plugin. Set to 0 to measure every callback.",
+        markers: [0, 100, 250, 1000],
+        default: 100
     },
     lagNotifications: {
         type: OptionType.BOOLEAN,
@@ -304,11 +318,11 @@ const PROFILING_KEYS: ("profilingEnabled" | "pausedUntil")[] = ["profilingEnable
 
 const activeStack: ActiveContext[] = [];
 const stats = new Map<string, PluginStats>();
-const measuredFunctions = new WeakSet<object>();
+const measuredFunctions = new WeakMap<object, AnyCallback>();
 const intervalOwners = new Map<number, string>();
 const timeoutOwners = new Map<number, string>();
 const frameOwners = new Map<number, string>();
-let listenerOwners = new WeakMap<EventTarget, Map<string, Map<EventListenerOrEventListenerObject, string>>>();
+let listenerOwners = new WeakMap<EventTarget, Map<string, Map<EventListenerOrEventListenerObject, ListenerOwner>>>();
 const listenerCountByPlugin = new Map<string, number>();
 const sourceSnippets = new Map<string, SourceSnippet[]>();
 const sourceCode = new WeakMap<object, string>();
@@ -319,6 +333,7 @@ let restoreGlobalProbes: (() => void) | undefined;
 let profilingSession: object | undefined;
 let resumeTimer: number | undefined;
 let lagNotificationInterval: number | undefined;
+let lagNotificationPending = false;
 let pluginStarted = false;
 const lagNotificationTimes = new Map<string, number>();
 
@@ -337,6 +352,8 @@ function createPluginStats(pluginName: string): PluginStats {
         heapIncrease: 0,
         heapDecrease: 0,
         lastHeapDelta: 0,
+        memorySamples: 0,
+        nextMemorySample: 0,
         intervals: 0,
         pendingTimeouts: 0,
         animationFrames: 0,
@@ -369,18 +386,13 @@ function getSurfaceStats(stat: PluginStats, surface: string) {
 }
 
 function getHeapUsed() {
-    if (!settings.store.trackMemory) return undefined;
-
     const { memory } = (performance as PerformanceWithMemory);
-    return typeof memory?.usedJSHeapSize === "number"
-        ? memory.usedJSHeapSize
-        : undefined;
+    return memory?.usedJSHeapSize;
 }
 
-function recordCall(pluginName: string, surface: string, duration: number, failed: boolean, beforeHeap?: number, afterHeap?: number) {
-    const stat = getPluginStats(pluginName);
+function recordCall(stat: PluginStats, surface: string, duration: number, failed: boolean, beforeHeap?: number, afterHeap?: number) {
     const surfaceStat = getSurfaceStats(stat, surface);
-    const isSlow = duration >= settings.store.slowCallThresholdMs;
+    const isSlow = duration >= (settings.plain.slowCallThresholdMs ?? settings.def.slowCallThresholdMs.default);
 
     stat.calls++;
     stat.totalMs += duration;
@@ -399,6 +411,7 @@ function recordCall(pluginName: string, surface: string, duration: number, faile
     if (failed) stat.errors++;
 
     if (beforeHeap !== undefined && afterHeap !== undefined) {
+        stat.memorySamples++;
         const delta = afterHeap - beforeHeap;
         stat.lastHeapDelta = delta;
 
@@ -452,25 +465,40 @@ function rememberSourceSnippet(pluginName: string, surface: string, label: strin
     if (typeof source !== "function") return;
 
     const snippets = sourceSnippets.get(pluginName) ?? [];
-    if (snippets.some(snippet => snippet.surface === surface && snippet.source === source)) return;
+    for (const snippet of snippets) {
+        if (snippet.surface === surface && snippet.source?.deref() === source) return;
+    }
+    const reference = new WeakRef(source);
 
-    snippets.push({ surface, label, source, get code() { return stringifyCodePart(source); } });
+    let code: string | undefined;
+    snippets.push({
+        surface, label, source: reference,
+        get code() {
+            const callback = reference.deref();
+            return code ??= callback ? stringifyCodePart(callback) : "";
+        }
+    });
     if (snippets.length > 30) snippets.shift();
     sourceSnippets.set(pluginName, snippets);
 }
 
-function runMeasured<T>(pluginName: string, surface: string, callback: () => T): T {
-    const session = profilingSession;
-    if (!session) return callback();
-
-    const beforeHeap = getHeapUsed();
-    const start = performance.now();
+function runMeasured<T extends AnyCallback>(context: ActiveContext, original: T, receiver: ThisParameterType<T>, args: Parameters<T>): ReturnType<T> {
+    const { pluginName, surface, session } = context;
+    const stat = getPluginStats(pluginName);
+    const { trackMemory = settings.def.trackMemory.default, memorySamplingMs = settings.def.memorySamplingMs.default } = settings.plain;
+    let start = performance.now();
+    const sampleMemory = trackMemory && (memorySamplingMs === 0 || start >= stat.nextMemorySample);
+    const beforeHeap = sampleMemory ? getHeapUsed() : undefined;
+    if (sampleMemory) {
+        stat.nextMemorySample = start + memorySamplingMs;
+        start = performance.now();
+    }
     let failed = true;
 
-    activeStack.push({ pluginName, surface, session });
+    activeStack.push(context);
 
     try {
-        const result = callback();
+        const result = original.apply(receiver, args) as ReturnType<T>;
 
         if (session === profilingSession && isPromiseLike(result)) {
             const asyncStart = performance.now();
@@ -487,28 +515,31 @@ function runMeasured<T>(pluginName: string, surface: string, callback: () => T):
         if (session === profilingSession) {
             const end = performance.now();
             if (activeStack.length === 0) recordHealthCallback(pluginName, surface, start, end);
-            recordCall(pluginName, surface, end - start, failed, beforeHeap, getHeapUsed());
+            recordCall(stat, surface, end - start, failed, beforeHeap, beforeHeap === undefined ? undefined : getHeapUsed());
         }
     }
 }
 
 function wrapMeasured<T extends AnyCallback>(pluginName: string, surface: string, original: T): T {
+    let context: ActiveContext | undefined;
     const wrapped = function (this: ThisParameterType<T>, ...args: Parameters<T>): ReturnType<T> {
-        if (!profilingSession) return original.apply(this, args) as ReturnType<T>;
-        return runMeasured(pluginName, surface, () => original.apply(this, args)) as ReturnType<T>;
+        const session = profilingSession;
+        if (!session) return original.apply(this, args) as ReturnType<T>;
+        if (context?.session !== session) context = { pluginName, surface, session };
+        return runMeasured(context, original, this, args);
     } as T;
 
-    measuredFunctions.add(wrapped);
+    measuredFunctions.set(wrapped, original);
     return wrapped;
 }
 
 function wrapObjectMethod(owner: Record<PropertyKey, unknown>, key: string, pluginName: string, surface: string) {
     const original = owner[key];
 
-    if (typeof original !== "function" || measuredFunctions.has(original)) return;
+    if (typeof original !== "function") return;
 
-    rememberSourceSnippet(pluginName, surface, `${surface} callback`, original);
-    owner[key] = wrapMeasured(pluginName, surface, original as AnyCallback);
+    rememberSourceSnippet(pluginName, surface, `${surface} callback`, measuredFunctions.get(original) ?? original);
+    if (!measuredFunctions.has(original)) owner[key] = wrapMeasured(pluginName, surface, original as AnyCallback);
 }
 
 function asRecord(value: unknown) {
@@ -669,22 +700,25 @@ function rememberListener(target: EventTarget, type: string, listener: EventList
 
     if (listeners.has(listener)) return;
 
-    listeners.set(listener, pluginName);
+    const owner: ListenerOwner = { pluginName };
+    listeners.set(listener, owner);
     rememberSourceSnippet(pluginName, `event listener ${type}`, `event listener ${type}`, getListenerSource(listener));
     changeListenerCount(pluginName, 1);
+    return owner;
 }
 
 function forgetListener(target: EventTarget, type: string, listener: EventListenerOrEventListenerObject, options?: boolean | EventListenerOptions) {
     const targetListeners = listenerOwners.get(target);
     const key = getEventKey(type, options);
     const listeners = targetListeners?.get(key);
-    const pluginName = listeners?.get(listener);
+    const owner = listeners?.get(listener);
 
-    if (!pluginName) return;
+    if (!owner) return;
 
+    owner.cleanup?.();
     listeners?.delete(listener);
     if (listeners?.size === 0) targetListeners?.delete(key);
-    changeListenerCount(pluginName, -1);
+    changeListenerCount(owner.pluginName, -1);
 }
 
 function installGlobalProbes() {
@@ -706,9 +740,10 @@ function installGlobalProbes() {
         }
 
         let id = 0;
+        const measured = wrapMeasured(context.pluginName, "timeout", handler);
         const wrapped = (...callbackArgs: unknown[]) => {
             forgetResource(timeoutOwners, id, "pendingTimeouts");
-            return runMeasured(context.pluginName, "timeout", () => handler(...callbackArgs));
+            return measured(...callbackArgs);
         };
 
         rememberSourceSnippet(context.pluginName, "timeout", "setTimeout callback", handler);
@@ -732,8 +767,7 @@ function installGlobalProbes() {
             return originalSetInterval(handler, timeout, ...args);
         }
 
-        const wrapped = (...callbackArgs: unknown[]) =>
-            runMeasured(context.pluginName, "interval", () => handler(...callbackArgs));
+        const wrapped = wrapMeasured(context.pluginName, "interval", handler);
         const id = originalSetInterval(wrapped, timeout, ...args);
 
         rememberSourceSnippet(context.pluginName, "interval", "setInterval callback", handler);
@@ -755,9 +789,10 @@ function installGlobalProbes() {
         if (!context) return originalRequestAnimationFrame(callback);
 
         let id = 0;
+        const measured = wrapMeasured(context.pluginName, "animation frame", callback);
         const wrapped = (timestamp: DOMHighResTimeStamp) => {
             forgetResource(frameOwners, id, "animationFrames");
-            return runMeasured(context.pluginName, "animation frame", () => callback(timestamp));
+            return measured(timestamp);
         };
 
         rememberSourceSnippet(context.pluginName, "animation frame", "requestAnimationFrame callback", callback);
@@ -779,12 +814,15 @@ function installGlobalProbes() {
             if (optionObject?.once) {
                 rememberSourceSnippet(context.pluginName, `event listener ${type}`, `event listener ${type}`, getListenerSource(listener));
             } else {
-                rememberListener(this, type, listener, context.pluginName, options);
-                if (optionObject?.signal) {
+                const owner = rememberListener(this, type, listener, context.pluginName, options);
+                if (owner && optionObject?.signal) {
                     const target = this;
-                    originalAddEventListener.call(optionObject.signal, "abort", () => {
+                    const signal = AbortSignal.any([optionObject.signal, probeListeners.signal]);
+                    const handleAbort = () => {
                         if (context.session === profilingSession) forgetListener(target, type, listener, options);
-                    }, { once: true, signal: probeListeners.signal });
+                    };
+                    owner.cleanup = () => originalRemoveEventListener.call(signal, "abort", handleAbort);
+                    originalAddEventListener.call(signal, "abort", handleAbort, { once: true });
                 }
             }
         }
@@ -1225,7 +1263,7 @@ function getLagNotificationCandidates() {
 }
 
 function maybeSendLagNotification() {
-    if (!settings.store.lagNotifications) return;
+    if (!settings.store.lagNotifications || lagNotificationPending) return;
     if (isGhostClientActive()) return;
     if (Date.now() - startedAt < LAG_NOTIFICATION_MIN_COLLECTION_MS) return;
 
@@ -1239,11 +1277,15 @@ function maybeSendLagNotification() {
     const signalText = signal ? `${signal.label}: ${signal.value}.` : `Impact: ${candidate.row.impact.toFixed(0)}.`;
 
     lagNotificationTimes.set(candidate.row.name, now);
+    lagNotificationPending = true;
     void showNotification({
         title: "Client Diagnostics",
         body: `${candidate.row.name} may be making Discord lag. ${signalText} Open Client Diagnostics to review it.`,
-        permanent: true,
-        onClick: openClientDiagnosticsSettings
+        onClick: openClientDiagnosticsSettings,
+        onClose: () => { lagNotificationPending = false; }
+    }).catch(error => {
+        lagNotificationPending = false;
+        logger.error("Could not show the lag notification.", error);
     });
 }
 
@@ -1290,6 +1332,7 @@ function stopProfiling() {
     frameOwners.clear();
     listenerOwners = new WeakMap();
     listenerCountByPlugin.clear();
+    sourceSnippets.clear();
 }
 
 function syncProfiling() {
@@ -1314,6 +1357,7 @@ function syncProfiling() {
     } else if (!profilingSession) {
         startedAt = Date.now();
         profilingSession = {};
+        for (const plugin of Object.values(plugins)) instrumentPlugin(plugin);
         installGlobalProbes();
         startHealth();
         syncLagNotifications();
@@ -1331,8 +1375,9 @@ function copyReport() {
         "Client diagnostics",
         `Collected for ${formatMs(Date.now() - startedAt)}`,
         `Heap used: ${formatBytes(memory?.usedJSHeapSize)}`,
+        `Memory sampling interval: ${settings.store.memorySamplingMs} ms per plugin`,
         "",
-        "Plugin | Impact | CPU | Calls | Slow | Errors | Heap net | Resources | Hot surface",
+        "Plugin | Impact | CPU | Calls | Slow | Errors | Heap net | Heap samples | Resources | Hot surface",
         ...getReportRows().map(row => [
             row.name,
             row.impact.toFixed(0),
@@ -1341,6 +1386,7 @@ function copyReport() {
             formatNumber(row.slowCalls),
             formatNumber(row.errors),
             formatBytes(getHeapGrowth(row)),
+            formatNumber(row.memorySamples),
             formatNumber(row.resources),
             row.hotSurface
         ].join(" | "))
@@ -1391,6 +1437,7 @@ function copyPluginMonitorReport(selectedRow: DiagnosticsRow, rows: DiagnosticsR
         `Extra RAM | ${formatPercent(memory ? getPercent(getHeapGrowth(selectedRow), memory.usedJSHeapSize) : undefined)}`,
         `RAM share | ${formatPercent(getPercent(getHeapGrowth(selectedRow), totalHeapGrowth))}`,
         `Observed net heap | ${formatBytes(getHeapGrowth(selectedRow))}`,
+        `Memory samples | ${formatNumber(selectedRow.memorySamples)}`,
         `Errors | ${formatNumber(selectedRow.errors)}`,
         `Max call | ${formatMs(selectedRow.maxMs)}`,
         `Slow calls | ${formatNumber(selectedRow.slowCalls)}`,
@@ -1611,7 +1658,8 @@ function ImpactAnalysisPage() {
     const { refreshMs } = settings.use(REFRESH_SETTING_KEYS);
     const [query, setQuery] = useState("");
     const [selectedPlugin, setSelectedPlugin] = useState<string | undefined>();
-    const elapsed = useFixedTimer({ interval: refreshMs });
+    const initialTime = React.useMemo(Date.now, [refreshMs]);
+    const elapsed = useFixedTimer({ interval: refreshMs, initialTime });
     const items = React.useMemo(
         () => buildImpactAnalysis(buildRows(false, false, "impact")),
         [elapsed]
@@ -1687,7 +1735,8 @@ function PluginMonitorPage() {
     const { showDisabled, showApiPlugins, refreshMs } = settings.use(MONITOR_SETTING_KEYS);
     const [query, setQuery] = useState("");
     const [selectedPlugin, setSelectedPlugin] = useState<string | undefined>();
-    const elapsed = useFixedTimer({ interval: refreshMs });
+    const initialTime = React.useMemo(Date.now, [refreshMs]);
+    const elapsed = useFixedTimer({ interval: refreshMs, initialTime });
     const memory = getMemory();
     const rows = React.useMemo(
         () => buildRows(showDisabled, showApiPlugins, "impact"),
@@ -1815,7 +1864,8 @@ function PluginMonitorPage() {
 function DiagnosticsPage() {
     const { sortBy, showDisabled, showApiPlugins, refreshMs } = settings.use(SETTINGS_KEYS);
     const [query, setQuery] = useState("");
-    const elapsed = useFixedTimer({ interval: refreshMs });
+    const initialTime = React.useMemo(Date.now, [refreshMs]);
+    const elapsed = useFixedTimer({ interval: refreshMs, initialTime });
     const memory = getMemory();
     const rows = React.useMemo(
         () => buildRows(showDisabled, showApiPlugins, sortBy as SortBy),
@@ -2046,7 +2096,6 @@ export default definePlugin({
         try {
             pluginStarted = true;
             syncProfiling();
-            for (const plugin of Object.values(plugins)) instrumentPlugin(plugin);
             if (!SettingsPlugin.customEntries.some(entry => entry.key === ENTRY_KEY)) {
                 SettingsPlugin.customEntries.push({
                     key: ENTRY_KEY,

@@ -12,7 +12,7 @@ import type { DragEvent, MouseEvent } from "react";
 import { imagesToZip, safeFileName } from "../archive";
 import { formatSize } from "../format";
 import { T } from "../i18n";
-import { MAX_IMAGES_PER_PROFILE, moveImage, Profile, removeImages, shuffleImages, StoredImage } from "../library";
+import { loadImage, MAX_IMAGES_PER_PROFILE, moveImage, Profile, removeImages, shuffleImages, StoredImage } from "../library";
 import { downloadBlob } from "../media";
 import { airChanged, chooseImage, getPendingImage, getSentImage, getUpcomingIndex, getUploader } from "../onAir";
 import { settings } from "../settings";
@@ -106,7 +106,7 @@ function TileView({ image, index, isNext, nextTag, isLive, isSending, isSelected
                 <HintButton hint={T.view} className="" onClick={() => handlers.view(index)}>
                     <ExpandIcon size={16} />
                 </HintButton>
-                <HintButton hint={T.download(formatSize(image.blob.size))} className="" onClick={() => handlers.download(index)}>
+                <HintButton hint={T.download(formatSize(image.size))} className="" onClick={() => handlers.download(index)}>
                     <DownloadIcon size={16} />
                 </HintButton>
                 <HintButton hint={T.delete} className={cl("tile-delete")} onClick={() => handlers.remove(index)}>
@@ -180,7 +180,7 @@ export function Library({ profile, busy, onAdd, onAddArchive, onView }: {
             },
             download(index) {
                 const image = latest.current.images[index];
-                if (image) downloadBlob(image.blob, `stream-preview-${index + 1}.jpg`);
+                if (image) void loadImage(image).then(blob => downloadBlob(blob, `stream-preview-${index + 1}.jpg`)).catch(error => logger.error("Could not download the preview image", error));
             },
             remove(index) {
                 const image = latest.current.images[index];

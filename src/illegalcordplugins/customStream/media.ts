@@ -57,21 +57,20 @@ export function discordPreviewSize(width: number, height: number) {
 export async function toUploadDataUrl(image: Blob): Promise<string> {
     const bitmap = await createImageBitmap(image);
     try {
-        const full = document.createElement("canvas");
-        full.width = bitmap.width;
-        full.height = bitmap.height;
-        full.getContext("2d")?.drawImage(bitmap, 0, 0);
-
         const size = discordPreviewSize(bitmap.width, bitmap.height);
-        const canvas = document.createElement("canvas");
-        canvas.width = size.width;
-        canvas.height = size.height;
+        const canvas = new OffscreenCanvas(size.width, size.height);
 
         const ctx = canvas.getContext("2d");
         if (!ctx) throw new Error("Canvas is not available");
 
-        ctx.drawImage(full, 0, 0, bitmap.width, bitmap.height, 0, 0, size.width, size.height);
-        return canvas.toDataURL("image/jpeg");
+        ctx.drawImage(bitmap, 0, 0, size.width, size.height);
+        const blob = await canvas.convertToBlob({ type: "image/jpeg" });
+        return await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(blob);
+        });
     } finally {
         bitmap.close();
     }

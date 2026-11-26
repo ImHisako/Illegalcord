@@ -5,6 +5,7 @@
  */
 
 import {
+    appendStalkerLog,
     getStalkerDataDir,
     getUserStalkerDir,
     openStalkerDataDir,
@@ -13,6 +14,7 @@ import {
 } from "./native";
 
 export default {
+    appendStalkerLog,
     getStalkerDataDir,
     getUserStalkerDir,
     openStalkerDataDir,

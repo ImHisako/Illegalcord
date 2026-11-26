@@ -30,7 +30,7 @@ const LEGACY_KEYS = {
 
 export interface StoredImage {
     readonly id: string;
-    readonly blob: Blob;
+    readonly size: number;
 }
 
 export interface Profile {
@@ -41,12 +41,13 @@ export interface Profile {
 }
 
 interface LibraryMeta {
-    version: 3;
+    version: 3 | 4;
     activeId: string;
     profiles: {
         id: string;
         name: string;
         imageIds: string[];
+        imageSizes?: number[];
         currentIndex: number;
     }[];
 }
@@ -68,6 +69,41 @@ export const libraryChanged = createEmitter();
 let profiles: readonly Profile[] = [];
 let activeId = DEFAULT_PROFILE_ID;
 let storageReady = false;
+let generation = 0;
+const IMAGE_CACHE_BYTES = 8 * 1024 * 1024;
+const imageCache = new Map<string, Blob>();
+const imageJobs = new Map<string, Promise<Blob>>();
+let cachedBytes = 0;
+
+export function loadImage(image: StoredImage): Promise<Blob> {
+    const cached = imageCache.get(image.id);
+    if (cached) {
+        imageCache.delete(image.id);
+        imageCache.set(image.id, cached);
+        return Promise.resolve(cached);
+    }
+    const pending = imageJobs.get(image.id);
+    if (pending) return pending;
+    const run = generation;
+    const job = DataStore.get<Blob>(imageKey(image.id)).then(blob => {
+        if (!(blob instanceof Blob)) throw new Error("The preview image is no longer available.");
+        if (run === generation && findImage(image.id) && blob.size <= IMAGE_CACHE_BYTES) {
+            imageCache.set(image.id, blob);
+            cachedBytes += blob.size;
+            while (cachedBytes > IMAGE_CACHE_BYTES) {
+                const oldest = imageCache.entries().next().value;
+                if (!oldest) break;
+                imageCache.delete(oldest[0]);
+                cachedBytes -= oldest[1].size;
+            }
+        }
+        return blob;
+    }).finally(() => {
+        if (imageJobs.get(image.id) === job) imageJobs.delete(image.id);
+    });
+    imageJobs.set(image.id, job);
+    return job;
+}
 
 const newId = () => crypto.randomUUID();
 
@@ -101,14 +137,15 @@ export function findImage(imageId: string): { profile: Profile; index: number; }
     return null;
 }
 
-function toMeta(): LibraryMeta {
+function toMeta(list = profiles, selectedId = activeId): LibraryMeta {
     return {
-        version: 3,
-        activeId,
-        profiles: profiles.map(p => ({
+        version: 4,
+        activeId: selectedId,
+        profiles: list.map(p => ({
             id: p.id,
             name: p.name,
             imageIds: p.images.map(image => image.id),
+            imageSizes: p.images.map(image => image.size),
             currentIndex: p.currentIndex
         }))
     };
@@ -116,15 +153,20 @@ function toMeta(): LibraryMeta {
 
 let metaWrite: Promise<void> = Promise.resolve();
 let metaWriteQueued = false;
+let pendingMeta: LibraryMeta | undefined;
 
 function saveMeta(): Promise<void> {
-    if (!storageReady || metaWriteQueued) return metaWrite;
+    if (!storageReady) return metaWrite;
+    pendingMeta = toMeta();
+    if (metaWriteQueued) return metaWrite;
     metaWriteQueued = true;
 
     metaWrite = metaWrite.then(async () => {
+        const meta = pendingMeta;
+        pendingMeta = undefined;
         metaWriteQueued = false;
         try {
-            await DataStore.set(LIBRARY_KEY, toMeta());
+            if (meta) await DataStore.set(LIBRARY_KEY, meta);
         } catch (error) {
             logger.error("Failed to save the library", error);
         }
@@ -181,13 +223,15 @@ export async function addImages(profileId: string, blobs: Blob[]): Promise<numbe
     if (!profile || !storageReady) return 0;
 
     const room = MAX_IMAGES_PER_PROFILE - profile.images.length;
-    const added = blobs.slice(0, Math.max(0, room)).map(blob => ({ id: newId(), blob }));
+    const run = generation;
+    const addedBlobs = blobs.slice(0, Math.max(0, room));
+    const added = addedBlobs.map(blob => ({ id: newId(), size: blob.size }));
     if (added.length === 0) return 0;
 
-    await DataStore.setMany(added.map(image => [imageKey(image.id), image.blob]));
+    await DataStore.setMany(added.map((image, index) => [imageKey(image.id), addedBlobs[index]]));
 
     const fresh = profiles.find(p => p.id === profileId);
-    if (!fresh) {
+    if (!fresh || run !== generation) {
         await DataStore.delMany(added.map(image => imageKey(image.id)));
         return 0;
     }
@@ -211,6 +255,11 @@ export async function removeImages(profileId: string, imageIds: ReadonlySet<stri
 
     await commit(updateProfile(profileId, p => ({ ...p, images, currentIndex })));
     dropThumbs(removed.map(image => image.id));
+    for (const image of removed) {
+        const cached = imageCache.get(image.id);
+        if (cached) cachedBytes -= cached.size;
+        imageCache.delete(image.id);
+    }
 
     try {
         await DataStore.delMany(removed.flatMap(image => [imageKey(image.id), thumbKey(image.id)]));
@@ -307,56 +356,73 @@ async function readLegacy(): Promise<{ profiles: LegacyProfile[]; activeId: stri
     return null;
 }
 
-async function migrateLegacy(): Promise<boolean> {
+async function migrateLegacy(run: number): Promise<boolean> {
     const legacy = await readLegacy();
     if (!legacy) return false;
 
-    const migrated: Profile[] = legacy.profiles.slice(0, MAX_PROFILES).map(p => {
+    const migrated = legacy.profiles.slice(0, MAX_PROFILES).map(p => {
         const images = p.blobs.slice(0, MAX_IMAGES_PER_PROFILE).map(blob => ({ id: newId(), blob }));
         return { id: p.id, name: p.name, images, currentIndex: clampIndex(p.currentIndex, images.length) };
     });
 
     await DataStore.setMany(migrated.flatMap(p => p.images.map(image => [imageKey(image.id), image.blob] as [string, Blob])));
-    profiles = withDefaultProfile(migrated);
-    activeId = profiles.some(p => p.id === legacy.activeId) ? legacy.activeId : DEFAULT_PROFILE_ID;
-    await DataStore.set(LIBRARY_KEY, toMeta());
+    const next = withDefaultProfile(migrated.map(p => ({ ...p, images: p.images.map(image => ({ id: image.id, size: image.blob.size })) })));
+    const selected = next.some(p => p.id === legacy.activeId) ? legacy.activeId : DEFAULT_PROFILE_ID;
+    await DataStore.set(LIBRARY_KEY, toMeta(next, selected));
+    if (run !== generation) return true;
+    profiles = next;
+    activeId = selected;
 
     logger.info(`Copied ${migrated.reduce((sum, p) => sum + p.images.length, 0)} images to the new storage`);
     return true;
 }
 
 export async function loadLibrary(): Promise<void> {
+    const run = ++generation;
     try {
+        await metaWrite;
         const meta = await DataStore.get<LibraryMeta>(LIBRARY_KEY);
+        if (run !== generation) return;
 
-        if (meta?.version === 3) {
+        if (meta?.version === 3 || meta?.version === 4) {
             const ids = meta.profiles.flatMap(p => p.imageIds);
-            const blobs = await DataStore.getMany<Blob | undefined>(ids.map(imageKey));
-            const byId = new Map(ids.map((id, i) => [id, blobs[i]]));
+            const sizes = new Map<string, number>();
+            if (meta.version === 3) {
+                for (let offset = 0; offset < ids.length; offset += 16) {
+                    const batch = ids.slice(offset, offset + 16);
+                    const blobs = await DataStore.getMany<Blob | undefined>(batch.map(imageKey));
+                    if (run !== generation) return;
+                    blobs.forEach((blob, index) => { if (blob instanceof Blob) sizes.set(batch[index], blob.size); });
+                }
+            }
 
             profiles = withDefaultProfile(meta.profiles.map(p => {
                 const images = p.imageIds
-                    .map(id => ({ id, blob: byId.get(id) }))
-                    .filter((image): image is StoredImage => image.blob instanceof Blob);
+                    .filter(id => meta.version === 4 || sizes.has(id))
+                    .map((id, index) => ({ id, size: meta.version === 4 ? p.imageSizes?.[index] ?? 0 : sizes.get(id) ?? 0 }));
                 return { id: p.id, name: p.name, images, currentIndex: clampIndex(p.currentIndex, images.length) };
             }));
             activeId = profiles.some(p => p.id === meta.activeId) ? meta.activeId : DEFAULT_PROFILE_ID;
 
-            if (blobs.every(blob => blob instanceof Blob)) {
+            if (meta.version === 3) await DataStore.set(LIBRARY_KEY, toMeta());
+            if (run !== generation) return;
+            if (meta.version === 4 || sizes.size === ids.length) {
                 DataStore.delMany(Object.values(LEGACY_KEYS)).catch(error => logger.error("Failed to remove the old storage", error));
             }
-        } else if (!await migrateLegacy()) {
+        } else if (!await migrateLegacy(run)) {
+            if (run !== generation) return;
             profiles = [emptyProfile(DEFAULT_PROFILE_ID, "Default")];
             activeId = DEFAULT_PROFILE_ID;
         }
-        storageReady = true;
+        if (run === generation) storageReady = true;
     } catch (error) {
+        if (run !== generation) return;
         logger.error("Failed to load the library, changes will not be saved until Discord restarts", error);
         profiles = [emptyProfile(DEFAULT_PROFILE_ID, "Default")];
         activeId = DEFAULT_PROFILE_ID;
     }
 
-    libraryChanged.emit();
+    if (run === generation) libraryChanged.emit();
 }
 
 export function isStorageReady(): boolean {
@@ -364,6 +430,10 @@ export function isStorageReady(): boolean {
 }
 
 export function unloadLibrary() {
+    generation++;
+    imageCache.clear();
+    imageJobs.clear();
+    cachedBytes = 0;
     profiles = [];
     activeId = DEFAULT_PROFILE_ID;
     storageReady = false;

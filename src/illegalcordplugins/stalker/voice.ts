@@ -5,8 +5,8 @@
  */
 
 import { showNotification } from "@api/Notifications";
-import { findByPropsLazy, findStoreLazy } from "@webpack";
-import { ChannelStore, GuildStore, UserStore } from "@webpack/common";
+import { findByPropsLazy } from "@webpack";
+import { ChannelStore, GuildStore, UserStore, VoiceStateStore } from "@webpack/common";
 
 import { logStalkerEvent, settings, targets } from ".";
 
@@ -14,17 +14,10 @@ interface VoiceActions {
     selectVoiceChannel(channelId: string): void;
 }
 
-interface VoiceStateStoreShape {
-    addChangeListener(listener: () => void): void;
-    removeChangeListener(listener: () => void): void;
-    getVoiceStateForUser(userId: string): VoiceStateData | undefined;
-    getVoiceStatesForChannel(channelId: string): Record<string, VoiceStateData> | undefined;
-}
-
 type VoiceStateFlag = "deaf" | "mute" | "selfDeaf" | "selfMute" | "selfStream" | "selfVideo" | "suppress";
 
 interface VoiceStateData {
-    channelId?: string;
+    channelId?: string | null;
     userId: string;
     deaf?: boolean;
     mute?: boolean;
@@ -35,8 +28,7 @@ interface VoiceStateData {
     suppress?: boolean;
 }
 
-const VoiceActions = findByPropsLazy("selectVoiceChannel", "selectChannel") as VoiceActions;
-const VoiceStateStore = findStoreLazy("VoiceStateStore") as VoiceStateStoreShape;
+const VoiceActions: VoiceActions = findByPropsLazy("selectVoiceChannel", "selectChannel");
 const NOTIFICATION_COLOR = "#5865f2";
 const voiceStateLabels: Array<[VoiceStateFlag, string, string]> = [
     ["mute", "Server muted", "Server unmuted"],
@@ -50,7 +42,7 @@ const voiceStateLabels: Array<[VoiceStateFlag, string, string]> = [
 
 let lastVoiceState: Record<string, VoiceStateData> = {};
 
-const getChannelName = (channelId: string | undefined): string => {
+const getChannelName = (channelId: string | null | undefined): string => {
     if (!channelId) return "Unknown channel";
 
     const channel = ChannelStore.getChannel(channelId);
@@ -64,7 +56,7 @@ const getChannelName = (channelId: string | undefined): string => {
     return channel.name ?? "Unknown channel";
 };
 
-const getGuildName = (channelId: string | undefined): string | undefined => {
+const getGuildName = (channelId: string | null | undefined): string | undefined => {
     if (!channelId) return;
 
     const channel = ChannelStore.getChannel(channelId);
@@ -73,7 +65,7 @@ const getGuildName = (channelId: string | undefined): string | undefined => {
     return GuildStore.getGuild(channel.guild_id)?.name;
 };
 
-const getVoiceUsers = (channelId: string | undefined, userId: string): string => {
+const getVoiceUsers = (channelId: string | null | undefined, userId: string): string => {
     if (!channelId) return "No one else";
 
     const users = Object.values(VoiceStateStore.getVoiceStatesForChannel(channelId) ?? {})
@@ -100,7 +92,8 @@ const getVoiceStateChanges = (previousState: VoiceStateData, currentState: Voice
     return changes;
 };
 
-const logVoiceEvent = (userId: string, username: string, action: "voice_join" | "voice_leave" | "voice_update", details: string, channelId: string | undefined) => {
+const logVoiceEvent = (userId: string, username: string, action: "voice_join" | "voice_leave" | "voice_update", details: string, channelId: string | null | undefined) => {
+    if (!settings.store.enableLogging) return;
     const channel = channelId ? ChannelStore.getChannel(channelId) : undefined;
 
     logStalkerEvent({
@@ -137,13 +130,13 @@ export const deinit = () => {
 };
 
 export const voiceStateChange = () => {
-    const newVoiceState: Record<string, VoiceStateData> = {};
-
     for (const id of targets) {
         const voiceState = VoiceStateStore.getVoiceStateForUser(id);
         const lastVoiceStateForUser = lastVoiceState[id];
 
-        if (voiceState) newVoiceState[id] = voiceState;
+        if (voiceState === lastVoiceStateForUser) continue;
+        if (voiceState) lastVoiceState[id] = voiceState;
+        else delete lastVoiceState[id];
 
         const joinedVoice = Boolean(voiceState && !lastVoiceStateForUser);
         const leftVoice = Boolean(!voiceState && lastVoiceStateForUser);
@@ -196,7 +189,7 @@ export const voiceStateChange = () => {
             logVoiceEvent(user.id, user.username, "voice_leave", `Left voice channel: ${channelName}.`, lastVoiceStateForUser.channelId);
         }
 
-        if (voiceState && lastVoiceStateForUser && !switchedChannel && settings.store.logVoiceStateChanges) {
+        if (voiceState && lastVoiceStateForUser && !switchedChannel && settings.store.enableLogging && settings.store.logVoiceStateChanges) {
             const changes = getVoiceStateChanges(lastVoiceStateForUser, voiceState);
             if (!changes.length) continue;
 
@@ -212,6 +205,4 @@ export const voiceStateChange = () => {
             );
         }
     }
-
-    lastVoiceState = newVoiceState;
 };
