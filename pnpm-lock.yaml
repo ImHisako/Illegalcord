@@ -168,11 +168,11 @@ catalogs:
       specifier: ^4.2.0
       version: 4.2.0
     '@ffmpeg/ffmpeg':
-      specifier: ^0.12.10
-      version: 0.12.10
+      specifier: ^0.12.15
+      version: 0.12.15
     '@ffmpeg/util':
-      specifier: ^0.12.1
-      version: 0.12.1
+      specifier: ^0.12.2
+      version: 0.12.2
     '@intrnl/xxhash64':
       specifier: ^0.1.2
       version: 0.1.2
@@ -186,8 +186,8 @@ catalogs:
       specifier: ^5.10.0
       version: 5.10.0
     '@tanstack/virtual-core':
-      specifier: 3.19.11
-      version: 3.19.11
+      specifier: 3.19.13
+      version: 3.19.13
     '@types/chrome':
       specifier: ^0.3.6
       version: 0.3.7
@@ -258,8 +258,8 @@ catalogs:
       specifier: ^2.3.0
       version: 2.3.0
     moment:
-      specifier: 2.30.1
-      version: 2.30.1
+      specifier: 2.31.0
+      version: 2.31.0
     nanoid:
       specifier: ^5.1.16
       version: 5.1.16
@@ -306,8 +306,8 @@ catalogs:
       specifier: ^3.5.6
       version: 3.5.6
     ws:
-      specifier: ^8.21.0
-      version: 8.22.0
+      specifier: ^8.23.0
+      version: 8.23.0
     yaml-js:
       specifier: ^0.3.1
       version: 0.3.1
@@ -321,10 +321,10 @@ importers:
     dependencies:
       '@ffmpeg/ffmpeg':
         specifier: 'catalog:'
-        version: 0.12.10
+        version: 0.12.15
       '@ffmpeg/util':
         specifier: 'catalog:'
-        version: 0.12.1
+        version: 0.12.2
       '@intrnl/xxhash64':
         specifier: 'catalog:'
         version: 0.1.2
@@ -336,7 +336,7 @@ importers:
         version: 0.0.22
       '@tanstack/virtual-core':
         specifier: 'catalog:'
-        version: 3.19.11
+        version: 3.19.13
       '@vap/core':
         specifier: 'catalog:'
         version: 0.0.12
@@ -369,7 +369,7 @@ importers:
         version: 3.0.1
       ws:
         specifier: 'catalog:'
-        version: 8.22.0
+        version: 8.23.0
       yaml-js:
         specifier: 'catalog:'
         version: 0.3.1
@@ -424,7 +424,7 @@ importers:
         version: 2.3.0
       moment:
         specifier: 'catalog:'
-        version: 2.30.1
+        version: 2.31.0
       oxfmt:
         specifier: 'catalog:'
         version: 0.75.0
@@ -475,7 +475,7 @@ importers:
         version: 19.2.3
       moment:
         specifier: 'catalog:'
-        version: 2.30.1
+        version: 2.31.0
       type-fest:
         specifier: 'catalog:'
         version: 5.10.0
@@ -499,7 +499,7 @@ importers:
         version: 4.18.1
       moment:
         specifier: 'catalog:'
-        version: 2.30.1
+        version: 2.31.0
       ts-pattern:
         specifier: 'catalog:'
         version: 5.9.0
@@ -716,16 +716,16 @@ packages:
     resolution: {integrity: sha512-IkO+/KEUvwbVpiURZg+P7zF74z5Jxe0UgJxVni+RtoHQ6IZieXaO02kmadomap/q+l6bc/jdPGGqTjhuZnuz1Q==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
-  '@ffmpeg/ffmpeg@0.12.10':
-    resolution: {integrity: sha512-lVtk8PW8e+NUzGZhPTWj2P1J4/NyuCrbDD3O9IGpSeLYtUZKBqZO8CNj1WYGghep/MXoM8e1qVY1GztTkf8YYQ==}
+  '@ffmpeg/ffmpeg@0.12.15':
+    resolution: {integrity: sha512-1C8Obr4GsN3xw+/1Ww6PFM84wSQAGsdoTuTWPOj2OizsRDLT4CXTaVjPhkw6ARyDus1B9X/L2LiXHqYYsGnRFw==}
     engines: {node: '>=18.x'}
 
-  '@ffmpeg/types@0.12.2':
-    resolution: {integrity: sha512-NJtxwPoLb60/z1Klv0ueshguWQ/7mNm106qdHkB4HL49LXszjhjCCiL+ldHJGQ9ai2Igx0s4F24ghigy//ERdA==}
+  '@ffmpeg/types@0.12.4':
+    resolution: {integrity: sha512-k9vJQNBGTxE5AhYDtOYR5rO5fKsspbg51gbcwtbkw2lCdoIILzklulcjJfIDwrtn7XhDeF2M+THwJ2FGrLeV6A==}
     engines: {node: '>=16.x'}
 
-  '@ffmpeg/util@0.12.1':
-    resolution: {integrity: sha512-10jjfAKWaDyb8+nAkijcsi9wgz/y26LOc1NKJradNMyCIl6usQcBbhkjX5qhALrSBcOy6TOeksunTYa+a03qNQ==}
+  '@ffmpeg/util@0.12.2':
+    resolution: {integrity: sha512-ouyoW+4JB7WxjeZ2y6KpRvB+dLp7Cp4ro8z0HIVpZVCM7AwFlHa0c4R8Y/a4M3wMqATpYKhC7lSFHQ0T11MEDw==}
     engines: {node: '>=18.x'}
 
   '@humanfs/core@0.19.2':
@@ -1082,8 +1082,8 @@ packages:
     peerDependencies:
       eslint: ^9.0.0 || ^10.0.0
 
-  '@tanstack/virtual-core@3.19.11':
-    resolution: {integrity: sha512-/5iHb0RHBvj8Di59FDs4ESNm45jls33aZAi4zccVXZjc/6ZvwQP6nzEYeT6weXjTf9E6/vrp2JhYWRyO+ZP13A==}
+  '@tanstack/virtual-core@3.19.13':
+    resolution: {integrity: sha512-CyCvMm7m5JuvPW6eMPZkZBZk6diySrlUQNNRpQPiEnh2vakyghx82Hw3wW2THFUsl6xJ6uM4lSUaiA2T0oYW8w==}
 
   '@types/chrome@0.3.7':
     resolution: {integrity: sha512-jWZgbHqWbTL1a5+PoyN0OJutNyejWgyZ5MdcvKo6iJE1TNRtXR3FxsC4WzNl52yZWPidfWC8NV/VUNZf+OFKcA==}
@@ -1595,8 +1595,8 @@ packages:
     resolution: {integrity: sha512-LYSks0tNVqbtez/9OB0YFP6qLRSqkdAxJWOQpVaR67lNTbj2zNLyYpowkRMia5lXLCZKzxwoxkxH2MbbBR2aEg==}
     engines: {node: '>=18.0.0'}
 
-  moment@2.30.1:
-    resolution: {integrity: sha512-uEmtNhbDOrWPFS+hdjFCBfy9f2YoyzRpwcl+DqpC6taX21FzsTLQVbMV/W7PzNSX6x/bhC1zA3c2UQ5NzH6how==}
+  moment@2.31.0:
+    resolution: {integrity: sha512-0acOTfMiWOheYS4eoWb80yYMb/JLvVv9SHbs2PehaDzfUG0Bw855SKyk0IKTnPGa5+U2bmi3W68l1+sGLX/pvw==}
 
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
@@ -1885,8 +1885,8 @@ packages:
     resolution: {integrity: sha512-42AtmgqjV+X1VpdOfyTGOYRi0/zsoLqtXQckTmqTeybT+BDIbM/Guxo7x3pE2vtpr1ok6xRqM9OpBe+Jyoqyww==}
     engines: {node: '>=18'}
 
-  ws@8.22.0:
-    resolution: {integrity: sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==}
+  ws@8.23.0:
+    resolution: {integrity: sha512-wCkmX8QMOrKjgO8HW2WyDbTSGeqkocxgDzS9iR79rEAexty6/2qzilx3Ag8Tqf9ykop3irLKle0MtVn5qjVnoQ==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -1923,9 +1923,6 @@ packages:
 
   zip-local@0.3.5:
     resolution: {integrity: sha512-GRV3D5TJY+/PqyeRm5CYBs7xVrKTKzljBoEXvocZu0HJ7tPEcgpSOYa2zFIsCZWgKWMuc4U3yMFgFkERGFIB9w==}
-
-  zod@4.3.6:
-    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
 
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
@@ -2058,13 +2055,13 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@ffmpeg/ffmpeg@0.12.10':
+  '@ffmpeg/ffmpeg@0.12.15':
     dependencies:
-      '@ffmpeg/types': 0.12.2
+      '@ffmpeg/types': 0.12.4
 
-  '@ffmpeg/types@0.12.2': {}
+  '@ffmpeg/types@0.12.4': {}
 
-  '@ffmpeg/util@0.12.1': {}
+  '@ffmpeg/util@0.12.2': {}
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -2255,7 +2252,7 @@ snapshots:
     dependencies:
       typescript: 6.0.3
     optionalDependencies:
-      zod: 4.3.6
+      zod: 4.6.7
 
   '@streamparser/json@0.0.22': {}
 
@@ -2269,7 +2266,7 @@ snapshots:
       estraverse: 5.3.0
       picomatch: 4.0.4
 
-  '@tanstack/virtual-core@3.19.11': {}
+  '@tanstack/virtual-core@3.19.13': {}
 
   '@types/chrome@0.3.7':
     dependencies:
@@ -2796,7 +2793,7 @@ snapshots:
 
   modern-tar@0.8.6: {}
 
-  moment@2.30.1: {}
+  moment@2.31.0: {}
 
   ms@2.1.3: {}
 
@@ -2935,7 +2932,7 @@ snapshots:
       devtools-protocol: 0.0.1704951
       typed-query-selector: 2.12.3
       webdriver-bidi-protocol: 1.0.1
-      ws: 8.22.0
+      ws: 8.23.0
     transitivePeerDependencies:
       - bufferutil
       - proxy-agent
@@ -3091,7 +3088,7 @@ snapshots:
       string-width: 7.2.0
       strip-ansi: 7.1.2
 
-  ws@8.22.0: {}
+  ws@8.23.0: {}
 
   y18n@5.0.8: {}
 
@@ -3118,8 +3115,5 @@ snapshots:
       graceful-fs: 4.2.11
       jszip: 2.7.0
       q: 1.5.1
-
-  zod@4.3.6:
-    optional: true
 
   zod@4.6.7: {}
