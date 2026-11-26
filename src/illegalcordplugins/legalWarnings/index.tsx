@@ -7,7 +7,6 @@
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings } from "@api/Settings";
-import { Button } from "@components/Button";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Margins } from "@components/margins";
 import { Notice } from "@components/Notice";
@@ -18,7 +17,7 @@ import { PluginCard } from "@components/settings/tabs/plugins/PluginCard";
 import SettingsPlugin from "@plugins/_core/settings";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
-import { Alerts, React } from "@webpack/common";
+import { Alerts, closeModal, Modal, openModal, React } from "@webpack/common";
 
 const settings = definePluginSettings({
     showActivationWarnings: {
@@ -129,6 +128,7 @@ export default definePlugin({
     name: "LegalWarnings",
     description: "Displays legal and responsible use warnings for Illegalcord plugins.",
     authors: [EquicordDevs.irritably],
+    required: true,
     enabledByDefault: true,
     requiresRestart: true,
     settings,
@@ -204,32 +204,49 @@ export default definePlugin({
         if (!warning || !settings.store.showActivationWarnings) return true;
 
         const { Component, details, apiAbuse } = warning;
-        return Alerts.confirm({
-            title: `Enable ${pluginName}?`,
-            body: (
-                <>
-                    {Component ? <Component /> : null}
-                    {details ? <Notice.Warning className={Margins.bottom8}>{details}</Notice.Warning> : null}
-                    <p>
-                        <strong>API abuse risk: </strong>
-                        {apiAbuse
-                            ? "This plugin automates Discord API actions, which may put your account at greater risk if used excessively or abusively."
-                            : "This plugin is not flagged for bulk Discord API automation. The safety warning above still applies."}
-                    </p>
-                    <Button type="button" variant="secondary" onClick={async () => {
-                        if (await Alerts.confirm({
-                            title: "Are you sure?",
-                            body: "You will no longer see safety popups when enabling plugins, including warnings about which plugins use Discord's APIs or may pose an API abuse risk. You can turn these popups back on in the LegalWarnings settings.",
-                            confirmText: "Stop showing warnings",
-                            cancelText: "Keep warnings"
-                        })) settings.store.showActivationWarnings = false;
-                    }}>
-                        Do not show these warnings again
-                    </Button>
-                </>
-            ),
-            confirmText: "Enable plugin",
-            cancelText: "Cancel"
+        return new Promise<boolean>(resolve => {
+            const modalKey = openModal(modalProps => (
+                <ErrorBoundary noop onError={() => closeModal(modalKey)}>
+                    <Modal
+                        {...modalProps}
+                        size="lg"
+                        role="alertdialog"
+                        title={`Enable ${pluginName}?`}
+                        actions={[
+                            { text: "Cancel", variant: "secondary", onClick: modalProps.onClose },
+                            {
+                                text: "Enable plugin",
+                                variant: "primary",
+                                onClick: () => {
+                                    resolve(true);
+                                    modalProps.onClose();
+                                }
+                            },
+                            {
+                                text: "Do not show these warnings again",
+                                variant: "secondary",
+                                onClick: async () => {
+                                    if (await Alerts.confirm({
+                                        title: "Are you sure?",
+                                        body: "You will no longer see safety popups when enabling plugins, including warnings about which plugins use Discord's APIs or may pose an API abuse risk. You can turn these popups back on in the LegalWarnings settings.",
+                                        confirmText: "Stop showing warnings",
+                                        cancelText: "Keep warnings"
+                                    })) settings.store.showActivationWarnings = false;
+                                }
+                            }
+                        ]}
+                    >
+                        {Component ? <Component /> : null}
+                        {details ? <Notice.Warning className={Margins.bottom8}>{details}</Notice.Warning> : null}
+                        <p>
+                            <strong>API abuse risk: </strong>
+                            {apiAbuse
+                                ? "This plugin automates Discord API actions, which may put your account at greater risk if used excessively or abusively."
+                                : "This plugin is not flagged for bulk Discord API automation. The safety warning above still applies."}
+                        </p>
+                    </Modal>
+                </ErrorBoundary>
+            ), { onCloseCallback: () => resolve(false) });
         });
     }
 });

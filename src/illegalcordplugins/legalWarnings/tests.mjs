@@ -14,7 +14,6 @@ import { transformSync } from "esbuild";
 const warningSource = transformSync(readFileSync(new URL("index.tsx", import.meta.url), "utf8"), { loader: "tsx", format: "cjs" }).code;
 const cardSource = transformSync(readFileSync(new URL("../../components/settings/tabs/plugins/PluginCard.tsx", import.meta.url), "utf8"), { loader: "tsx", format: "cjs" }).code;
 const contextMenuSource = transformSync(readFileSync(new URL("../../api/ContextMenu.ts", import.meta.url), "utf8"), { loader: "ts", format: "cjs" }).code;
-const buttonSource = transformSync(readFileSync(new URL("../../components/Button.tsx", import.meta.url), "utf8"), { loader: "tsx", format: "cjs" }).code;
 const React = { createElement(type, props, ...children) {
     const { key = null, ...rest } = props ?? {};
     return { type, key, props: { ...rest, ...(children.length ? { children: children.length === 1 ? children[0] : children } : {}) } };
@@ -27,15 +26,7 @@ function textOf(node) {
     return textOf(typeof node.type === "function" ? node.type(node.props) : node.props.children);
 }
 
-function findDisableButton(node) {
-    if (Array.isArray(node)) return node.map(findDisableButton).find(Boolean);
-    if (node == null || typeof node !== "object") return;
-    if (typeof node.type === "function") return findDisableButton(node.type(node.props));
-    if (node.type === "button" && textOf(node) === "Do not show these warnings again") return node;
-    return findDisableButton(node.props.children);
-}
-
-function fixture({ name = "ClanSwitcher", enabled = false, warningsEnabled = true, requiresRestart = false, dependencyRestart = false, showActivationWarnings } = {}) {
+function fixture({ name = "ClanSwitcher", enabled = false, warningsEnabled = true, startWarnings = true, requiresRestart = false, dependencyRestart = false, showActivationWarnings } = {}) {
     const plugin = { name, description: "Test plugin.", started: enabled, requiresRestart };
     const settings = { plugins: { [name]: { enabled }, LegalWarnings: { enabled: warningsEnabled } } };
     if (showActivationWarnings !== undefined) settings.plugins.LegalWarnings.showActivationWarnings = showActivationWarnings;
@@ -46,14 +37,33 @@ function fixture({ name = "ClanSwitcher", enabled = false, warningsEnabled = tru
     const originalBuildEntry = settingsPlugin.buildEntry;
     const sentinel = { type: "div", key: null, ref() {}, props: { style: { height: 32 } } };
     const confirmations = [];
+    const modalClosers = new Map();
+    let nextModalId = 0;
+    function closeModal(key) {
+        const onClose = modalClosers.get(key);
+        modalClosers.delete(key);
+        onClose?.();
+    }
     const dependencies = {
-        "@components/ErrorBoundary": { __esModule: true, default: { wrap: component => component } },
+        "@components/ErrorBoundary": { __esModule: true, default: Object.assign(({ children }) => children, { wrap: component => component }) },
         "@components/margins": { Margins: { bottom8: "bottom8" } },
         "@components/Notice": { Notice: { Warning: "warning" } },
         "@utils/constants": { EquicordDevs: { irritably: { name: "irritably" } } },
         "@utils/types": { __esModule: true, default: value => value, OptionType: {} },
         "@webpack/common": {
             React,
+            Modal: "modal",
+            closeModal,
+            openModal(render, options) {
+                const key = `modal-${++nextModalId}`;
+                const boundary = render({ transitionState: 0, onClose: () => closeModal(key) });
+                const modal = boundary.type(boundary.props);
+                assert.equal(modal.type, "modal");
+                modalClosers.set(key, options.onCloseCallback);
+                dialogs.push({ ...modal.props, body: modal.props.children });
+                confirmations.push(confirmed => confirmed ? modal.props.actions[1].onClick() : modal.props.onClose());
+                return key;
+            },
             Alerts: {
                 confirm(dialog) {
                     dialogs.push(dialog);
@@ -72,7 +82,7 @@ function fixture({ name = "ClanSwitcher", enabled = false, warningsEnabled = tru
         } },
         "@api/PluginManager": {
             hasAnyVisibleSettings: () => false,
-            isPluginEnabled: name => settings.plugins[name].enabled,
+            isPluginEnabled: name => settings.plugins[name].enabled || (name === "LegalWarnings" && warnings.required),
             pluginRequiresRestart: plugin => plugin.requiresRestart,
             startDependenciesRecursive: () => { calls.push("dependencies"); return { restartNeeded: dependencyRestart, failures: [] }; },
             startPlugin: () => { calls.push("start"); plugin.started = true; return true; },
@@ -83,13 +93,9 @@ function fixture({ name = "ClanSwitcher", enabled = false, warningsEnabled = tru
         "@components/settings/tabs/BaseTab": { openSettingsTabModal: Component => openedTabs.push(Component) },
         "@plugins/_core/settings": { __esModule: true, default: settingsPlugin },
         "@utils/css": { classNameFactory: () => () => "" },
-        "@utils/misc": { classes: (...values) => values.filter(Boolean).join(" ") },
         "@utils/Logger": { Logger: class {} },
         "~plugins": { PluginMeta: { [name]: { folderName: `src/illegalcordplugins/${name}` } } },
-        "./PluginModal": { openPluginModal() {} },
-        "./Button.css": {},
-        "./Icons": { OpenExternalIcon: "icon" },
-        "./Link": { Link: "link" }
+        "./PluginModal": { openPluginModal() {} }
     };
     function load(source) {
         const module = { exports: {} };
@@ -106,9 +112,8 @@ function fixture({ name = "ClanSwitcher", enabled = false, warningsEnabled = tru
     dependencies["@components/settings/tabs/plugins"] = { __esModule: true, default: PluginsTab };
     dependencies["@components/settings/tabs/plugins/PluginCard"] = { PluginCard };
     dependencies["@api/ContextMenu"] = load(contextMenuSource);
-    dependencies["@components/Button"] = load(buttonSource);
     const { default: warnings } = load(warningSource);
-    if (warningsEnabled) warnings.start();
+    if (startWarnings) warnings.start();
 
     function findCard(node) {
         if (Array.isArray(node)) return node.map(findCard).find(Boolean);
@@ -131,7 +136,8 @@ function fixture({ name = "ClanSwitcher", enabled = false, warningsEnabled = tru
         plugin, settings, calls, dialogs, openedTabs, warnings, settingsPlugin, originalBuildEntry, originalPluginsTab: PluginsTab, sentinel, renderTab, renderCard,
         toggle: enabled => renderCard().props.setEnabled(enabled),
         confirm: (value, index = confirmations.length - 1) => confirmations[index](value),
-        disableFutureWarnings: () => findDisableButton(dialogs[0].body).props.onClick()
+        disableFutureWarnings: () => dialogs[0].actions[2].onClick(),
+        isWarningsEnabled: () => dependencies["@api/PluginManager"].isPluginEnabled("LegalWarnings")
     };
 }
 
@@ -171,9 +177,9 @@ for (const [name, warning, apiAbuse] of coveredPlugins) {
         const body = textOf(f.dialogs[0].body);
         assert.ok(body.includes(warning));
         assert.ok(body.includes(apiAbuse ? "This plugin automates Discord API actions" : "This plugin is not flagged for bulk Discord API automation"));
-        const button = findDisableButton(f.dialogs[0].body);
-        assert.ok(button, "The warning body must render the opt out button");
-        assert.equal(button.props.type, "button");
+        assert.equal(f.dialogs[0].size, "lg");
+        assert.deepEqual(f.dialogs[0].actions.map(action => action.text), ["Cancel", "Enable plugin", "Do not show these warnings again"]);
+        assert.ok(!body.includes("Do not show these warnings again"));
         assert.equal(f.settings.plugins[name].enabled, false);
         assert.deepEqual(f.calls, []);
         f.confirm(true);
@@ -190,6 +196,15 @@ test("Cancelling leaves the plugin and its dependencies disabled", async () => {
     await pending;
     assert.equal(f.settings.plugins.ClanSwitcher.enabled, false);
     assert.equal(f.plugin.started, false);
+    assert.deepEqual(f.calls, []);
+});
+
+test("Closing the modal without choosing an action cancels activation", async () => {
+    const f = fixture();
+    const pending = f.toggle(true);
+    f.dialogs[0].onClose();
+    await pending;
+    assert.equal(f.settings.plugins.ClanSwitcher.enabled, false);
     assert.deepEqual(f.calls, []);
 });
 
@@ -214,11 +229,15 @@ test("Unlisted plugins activate without a safety popup", async () => {
     assert.deepEqual(f.calls, ["dependencies", "start"]);
 });
 
-test("Disabling LegalWarnings disables its activation confirmations", async () => {
+test("LegalWarnings remains required when its saved enabled setting is false", async () => {
     const f = fixture({ warningsEnabled: false });
-    await f.toggle(true);
-    assert.equal(f.dialogs.length, 0);
-    assert.equal(f.settings.plugins.ClanSwitcher.enabled, true);
+    assert.equal(f.warnings.required, true);
+    assert.equal(f.isWarningsEnabled(), true);
+    const pending = f.toggle(true);
+    assert.equal(f.dialogs.length, 1);
+    f.confirm(false);
+    await pending;
+    assert.equal(f.settings.plugins.ClanSwitcher.enabled, false);
 });
 
 test("Activation warnings are enabled by default", () => {
@@ -291,7 +310,7 @@ test("The original enable action still works after turning off future warnings",
 });
 
 test("Starting and stopping LegalWarnings installs and removes its settings integration", async () => {
-    const f = fixture({ warningsEnabled: false });
+    const f = fixture({ startWarnings: false });
     assert.equal(f.settingsPlugin.buildEntry, f.originalBuildEntry);
     assert.equal(f.warnings.requiresRestart, true);
     f.warnings.start();
