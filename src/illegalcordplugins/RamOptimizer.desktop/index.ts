@@ -5,14 +5,14 @@
  */
 
 import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
-import { definePluginSettings, migratePluginSetting } from "@api/Settings";
+import { definePluginSettings, migratePluginSetting, PlainSettings, Settings } from "@api/Settings";
 import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType, type PluginNative } from "@utils/types";
-import { ApplicationStreamingStore, RTCConnectionStore } from "@webpack/common";
+import { ApplicationStreamingStore, IncomingCallStore, RTCConnectionStore } from "@webpack/common";
 
 import { getMemoryRecommendations } from "../ClientDiagnostics";
-import type { ImageAnimationPolicy, MemorySnapshot, OptimizationResult } from "./native";
+import type { MemorySnapshot, OptimizationResult } from "./native";
 
 const Native = VencordNative.pluginHelpers.RamOptimizer as PluginNative<typeof import("./native")>;
 const CLEANUP_COOLDOWN_MS = 5 * 60_000;
@@ -23,6 +23,11 @@ let lastCleanupAt = 0;
 let started = false;
 
 migratePluginSetting("RamOptimizer", "minimumTotalMemoryMb", "minimumMemoryMb");
+migratePluginSetting("RamOptimizer", "imageAnimationPolicy", "limitAnimatedImages");
+const previousImagePolicy: unknown = PlainSettings.plugins.RamOptimizer?.imageAnimationPolicy;
+if (typeof previousImagePolicy === "boolean") {
+    Settings.plugins.RamOptimizer.imageAnimationPolicy = previousImagePolicy ? "animateOnce" : "animate";
+}
 
 function clearCleanupTimer() {
     if (cleanupTimer === undefined) return;
@@ -32,15 +37,14 @@ function clearCleanupTimer() {
 }
 
 function hasRealtimeActivity() {
-    return settings.store.pauseDuringCalls && (
-        RTCConnectionStore.isConnected() ||
-        ApplicationStreamingStore.getCurrentUserActiveStream() !== null
-    );
+    return RTCConnectionStore.getState() !== "DISCONNECTED"
+        || IncomingCallStore.hasIncomingCalls()
+        || ApplicationStreamingStore.getAllActiveStreams().length !== 0;
 }
 
 function scheduleCleanup(delayMs: number) {
     clearCleanupTimer();
-    if (!started || !document.hidden) return;
+    if (!started || !document.hidden || hasRealtimeActivity()) return;
 
     cleanupTimer = window.setTimeout(runAutomaticCleanup, Math.max(delayMs, lastCleanupAt + CLEANUP_COOLDOWN_MS - Date.now()));
 }
@@ -68,7 +72,7 @@ async function runAutomaticCleanup() {
                 settings.store.minimumTotalMemoryMb,
                 settings.store.minimumSystemFreePercent,
                 false,
-                settings.store.aggressiveCleanup
+                false
             );
             if (result.status === "optimized") lastCleanupAt = Date.now();
             else if (result.status === "error") logger.warn(result.error);
@@ -88,8 +92,7 @@ function handleVisibilityChange() {
 function applySettings() {
     if (!started) return;
 
-    const imagePolicy: ImageAnimationPolicy = settings.store.limitAnimatedImages ? "animateOnce" : "animate";
-    void Native.configure(imagePolicy, settings.store.disableSpellChecker);
+    void Native.configure(settings.store.imageAnimationPolicy ?? "animateOnce", settings.store.disableSpellChecker);
     handleVisibilityChange();
 }
 
@@ -122,6 +125,8 @@ function formatResult(result: OptimizationResult) {
             return `No cleanup was needed.\n${formatSnapshot(result.snapshot)}`;
         case "debuggerBusy":
             return `Memory cleanup was skipped because DevTools or another debugger is active.\n${formatSnapshot(result.snapshot)}`;
+        case "audioActive":
+            return `Memory cleanup was skipped because Discord is playing audio.\n${formatSnapshot(result.snapshot)}`;
         case "error":
             return result.error;
     }
@@ -137,38 +142,42 @@ const settings = definePluginSettings({
     },
     repeatCleanupMinutes: {
         type: OptionType.SLIDER,
-        description: "Repeat adaptive cleanup while Discord remains in the background.",
+        description: "Check for memory pressure while Discord remains in the background.",
         markers: [5, 15, 30, 60],
         default: 15,
         onChange: handleVisibilityChange
     },
     minimumTotalMemoryMb: {
         type: OptionType.SLIDER,
-        description: "Run automatic cleanup when all Discord processes exceed this memory usage.",
+        description: "Only clean up automatically when Discord exceeds this memory usage and system memory is low.",
         markers: [512, 768, 1024, 1536, 2048],
         default: 768
     },
     minimumSystemFreePercent: {
         type: OptionType.SLIDER,
-        description: "Run cleanup when free system memory falls to this percentage.",
+        description: "Only clean up automatically when free system memory falls to this percentage.",
         markers: [5, 10, 15, 20, 25],
         default: 15
     },
     pauseDuringCalls: {
         type: OptionType.BOOLEAN,
-        description: "Pause automatic cleanup during voice calls and screen sharing.",
+        description: "Legacy setting. Cleanup is always paused during calls and screen sharing.",
         default: true,
-        onChange: handleVisibilityChange
+        hidden: true
     },
     aggressiveCleanup: {
         type: OptionType.BOOLEAN,
-        description: "Force V8 garbage collection during cleanup. This can briefly stutter Discord.",
+        description: "Force V8 garbage collection during manual cleanup. This can briefly stutter Discord.",
         default: false
     },
-    limitAnimatedImages: {
-        type: OptionType.BOOLEAN,
-        description: "Play newly loaded animated images once instead of looping them.",
-        default: false,
+    imageAnimationPolicy: {
+        type: OptionType.SELECT,
+        description: "Choose how newly loaded animated images play. Reload Discord to apply this to existing images.",
+        options: [
+            { label: "Play normally", value: "animate" },
+            { label: "Play once", value: "animateOnce", default: true },
+            { label: "Keep still", value: "noAnimation" }
+        ] as const,
         onChange: applySettings
     },
     disableSpellChecker: {
@@ -221,6 +230,9 @@ export default definePlugin({
     start() {
         started = true;
         document.addEventListener("visibilitychange", handleVisibilityChange);
+        for (const store of [RTCConnectionStore, IncomingCallStore, ApplicationStreamingStore]) {
+            store.addChangeListener(handleVisibilityChange);
+        }
         applySettings();
     },
 
@@ -228,6 +240,9 @@ export default definePlugin({
         started = false;
         clearCleanupTimer();
         document.removeEventListener("visibilitychange", handleVisibilityChange);
+        for (const store of [RTCConnectionStore, IncomingCallStore, ApplicationStreamingStore]) {
+            store.removeChangeListener(handleVisibilityChange);
+        }
         void Native.restore();
     }
 });

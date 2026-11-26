@@ -6,7 +6,7 @@
 
 import { app, type IpcMainInvokeEvent } from "electron";
 
-export type ImageAnimationPolicy = "animate" | "animateOnce";
+export type ImageAnimationPolicy = "animate" | "animateOnce" | "noAnimation";
 
 export interface ProcessMemory {
     name: string;
@@ -27,10 +27,10 @@ export type OptimizationResult =
     | { status: "optimized"; snapshot: MemorySnapshot; beforeMb: number; aggressive: boolean; }
     | { status: "belowThreshold"; snapshot: MemorySnapshot; }
     | { status: "debuggerBusy"; snapshot: MemorySnapshot; }
+    | { status: "audioActive"; snapshot: MemorySnapshot; }
     | { status: "error"; error: string; };
 
 interface PreviousSettings {
-    backgroundThrottling: boolean;
     spellChecker: boolean;
 }
 
@@ -69,18 +69,16 @@ export function configure(
     imageAnimationPolicy: ImageAnimationPolicy,
     disableSpellChecker: boolean
 ) {
-    if (imageAnimationPolicy !== "animate" && imageAnimationPolicy !== "animateOnce") return false;
+    if (imageAnimationPolicy !== "animate" && imageAnimationPolicy !== "animateOnce" && imageAnimationPolicy !== "noAnimation") return false;
     if (typeof disableSpellChecker !== "boolean" || event.sender.isDestroyed()) return false;
 
     try {
         if (!previousSettings.has(event.sender.id)) {
             previousSettings.set(event.sender.id, {
-                backgroundThrottling: event.sender.getBackgroundThrottling(),
                 spellChecker: event.sender.session.isSpellCheckerEnabled()
             });
         }
 
-        event.sender.setBackgroundThrottling(true);
         event.sender.setImageAnimationPolicy(imageAnimationPolicy);
         const previous = previousSettings.get(event.sender.id);
         if (previous) event.sender.session.setSpellCheckerEnabled(disableSpellChecker ? false : previous.spellChecker);
@@ -100,7 +98,6 @@ export function restore(event: IpcMainInvokeEvent) {
     }
 
     try {
-        event.sender.setBackgroundThrottling(previous.backgroundThrottling);
         event.sender.setImageAnimationPolicy("animate");
         event.sender.session.setSpellCheckerEnabled(previous.spellChecker);
         previousSettings.delete(event.sender.id);
@@ -131,9 +128,11 @@ export async function optimize(
 
     const snapshot = createMemorySnapshot(event);
     const systemMemoryLow = snapshot.systemFreePercent <= minimumSystemFreePercent;
-    if (!force && snapshot.totalMb < minimumTotalMemoryMb && !systemMemoryLow) {
+    if (!force && (!systemMemoryLow || snapshot.totalMb < minimumTotalMemoryMb)) {
         return { status: "belowThreshold", snapshot };
     }
+
+    if (event.sender.isCurrentlyAudible()) return { status: "audioActive", snapshot };
 
     const chromeDebugger = event.sender.debugger;
     if (event.sender.isDevToolsOpened() || chromeDebugger.isAttached()) {
@@ -146,10 +145,10 @@ export async function optimize(
         chromeDebugger.attach();
         attachedByPlugin = true;
         await chromeDebugger.sendCommand("Memory.simulatePressureNotification", {
-            level: aggressive || systemMemoryLow ? "critical" : "moderate"
+            level: force && aggressive ? "critical" : "moderate"
         });
-        if (aggressive) await chromeDebugger.sendCommand("HeapProfiler.collectGarbage");
-        return { status: "optimized", snapshot: createMemorySnapshot(event), beforeMb: snapshot.totalMb, aggressive };
+        if (force && aggressive && !event.sender.isCurrentlyAudible()) await chromeDebugger.sendCommand("HeapProfiler.collectGarbage");
+        return { status: "optimized", snapshot: createMemorySnapshot(event), beforeMb: snapshot.totalMb, aggressive: force && aggressive };
     } catch {
         return { status: "error", error: "Chromium could not release unused memory." };
     } finally {

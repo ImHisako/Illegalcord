@@ -10,17 +10,18 @@ import { EquicordDevs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import { isObject } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
-import { findAll } from "@webpack";
+import { findAll, moduleListeners } from "@webpack";
 
 interface SpringModule {
     Globals: {
+        skipAnimation: boolean;
         assign(options: { skipAnimation: boolean; }): void;
     };
     Springs: object;
 }
 
 const logger = new Logger("HisakoOptimizations");
-let springModules: SpringModule[] = [];
+const springGlobals = new Map<SpringModule["Globals"], boolean>();
 let started = false;
 
 const settings = definePluginSettings({
@@ -29,11 +30,7 @@ const settings = definePluginSettings({
         description: "Skip Discord spring animations.",
         default: true,
         disabled: () => isPluginEnabled("DisableAnimations"),
-        onChange(value) {
-            if (!started) return;
-            if (value && springModules.length === 0) loadSpringModules();
-            setSpringAnimations(value);
-        }
+        onChange: syncSpringAnimations
     },
     throttleActivityDom: {
         type: OptionType.BOOLEAN,
@@ -58,35 +55,49 @@ const settings = definePluginSettings({
     }
 });
 
-function hasCallableAssign(value: unknown): value is SpringModule["Globals"] {
-    return isObject(value) && "assign" in value && typeof value.assign === "function";
+function isSpringGlobals(value: unknown): value is SpringModule["Globals"] {
+    return isObject(value) && "assign" in value && typeof value.assign === "function"
+        && "skipAnimation" in value && typeof value.skipAnimation === "boolean";
 }
 
 function isSpringModule(value: unknown): value is SpringModule {
     if (!isObject(value)) return false;
 
     const module = value as Partial<Record<keyof SpringModule, unknown>>;
-    return hasCallableAssign(module.Globals) && isObject(module.Springs);
+    return isSpringGlobals(module.Globals) && isObject(module.Springs);
 }
 
-function loadSpringModules() {
-    const modules: SpringModule[] = [];
+function skipSpringAnimations(value: unknown) {
+    const globals = isSpringModule(value) ? value.Globals : value;
+    if (!isSpringGlobals(globals) || springGlobals.has(globals)) return;
 
-    for (const module of findAll(isSpringModule)) {
-        if (isSpringModule(module)) modules.push(module);
+    try {
+        springGlobals.set(globals, globals.skipAnimation);
+        globals.assign({ skipAnimation: true });
+    } catch (error) {
+        logger.warn("Failed to update a Discord animation module.", error);
+    }
+}
+
+function syncSpringAnimations() {
+    const otherPluginEnabled = isPluginEnabled("DisableAnimations");
+    if (started && settings.store.disableSpringAnimations && !otherPluginEnabled) {
+        if (moduleListeners.has(skipSpringAnimations)) return;
+
+        moduleListeners.add(skipSpringAnimations);
+        for (const module of findAll((value: unknown) => isSpringGlobals(value) || isSpringModule(value))) skipSpringAnimations(module);
+        return;
     }
 
-    springModules = modules;
-}
-
-function setSpringAnimations(skipAnimation: boolean) {
-    for (const module of springModules) {
+    moduleListeners.delete(skipSpringAnimations);
+    for (const [globals, skipAnimation] of springGlobals) {
         try {
-            module.Globals.assign({ skipAnimation });
+            if (!otherPluginEnabled) globals.assign({ skipAnimation });
         } catch (error) {
             logger.warn("Failed to update a Discord animation module.", error);
         }
     }
+    springGlobals.clear();
 }
 
 export default definePlugin({
@@ -101,29 +112,27 @@ export default definePlugin({
         {
             find: "dotCycle",
             predicate: () => settings.store.disableTypingDots && !isPluginEnabled("NoTypingAnimation"),
-            replacement: {
-                match: /focused:(\i)/g,
-                replace: (_, focused) => `_focused:${focused}=false`
-            }
+            group: true,
+            replacement: [
+                {
+                    match: /focused:(\i)/g,
+                    replace: (_: string, focused: string) => `_focused:${focused}=false`
+                },
+                {
+                    match: /(?<=to:)async \i=>\{.{0,350}?\}(?=\}\),"animate-always")/,
+                    replace: "()=>{}"
+                }
+            ]
         }
     ],
 
     start() {
         started = true;
-
-        if (settings.store.disableSpringAnimations && !isPluginEnabled("DisableAnimations")) {
-            loadSpringModules();
-            setSpringAnimations(true);
-        }
+        syncSpringAnimations();
     },
 
     stop() {
         started = false;
-
-        if (springModules.length !== 0 && !isPluginEnabled("DisableAnimations")) {
-            setSpringAnimations(false);
-        }
-
-        springModules = [];
+        syncSpringAnimations();
     }
 });
